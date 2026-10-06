@@ -1,22 +1,56 @@
-import fs from 'node:fs';
-import path from 'node:path';
+import fs from "node:fs";
+import path from "node:path";
 
 const root = process.cwd();
-const schema = fs.readFileSync(path.join(root, 'src/infrastructure/db/schema.ts'), 'utf8');
-const migration = fs.readFileSync(path.join(root, 'db/migrations/0000_v0_1_core.sql'), 'utf8');
+const schema = fs.readFileSync(
+  path.join(root, "src/infrastructure/db/schema.ts"),
+  "utf8",
+);
 
-const schemaTables = new Set([...schema.matchAll(/pgTable\("([^"]+)"/g)].map((m) => m[1]));
-const migrationTables = new Set([...migration.matchAll(/CREATE TABLE(?: IF NOT EXISTS)?\s+"?([a-zA-Z0-9_]+)"?/gi)].map((m) => m[1]));
+const migrationsDir = path.join(root, "db/migrations");
+const migrationFiles = fs
+  .readdirSync(migrationsDir)
+  .filter((name) => name.endsWith(".sql"))
+  .sort();
 
-const missingInMigration = [...schemaTables].filter((t) => !migrationTables.has(t));
-const extraInMigration = [...migrationTables].filter((t) => !schemaTables.has(t) && t !== 'schema_migrations');
+const migrations = migrationFiles
+  .map((name) => fs.readFileSync(path.join(migrationsDir, name), "utf8"))
+  .join("\n");
+
+const schemaTables = new Set(
+  [...schema.matchAll(/pgTable\("([^"]+)"/g)].map((match) => match[1]),
+);
+const migrationTables = new Set(
+  [
+    ...migrations.matchAll(
+      /CREATE TABLE(?: IF NOT EXISTS)?\s+"?([a-zA-Z0-9_]+)"?/gi,
+    ),
+  ].map((match) => match[1]),
+);
+
+const missingInMigration = [...schemaTables].filter(
+  (table) => !migrationTables.has(table),
+);
+const extraInMigration = [...migrationTables].filter(
+  (table) => !schemaTables.has(table) && table !== "schema_migrations",
+);
 
 if (missingInMigration.length || extraInMigration.length) {
-  console.error({ missingInMigration, extraInMigration });
+  console.error({
+    migrationFiles,
+    missingInMigration,
+    extraInMigration,
+  });
   process.exit(1);
 }
 
-const packageJson = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
-if (packageJson.name !== 'cafe-epico-ops') throw new Error('Unexpected package name');
+const packageJson = JSON.parse(
+  fs.readFileSync(path.join(root, "package.json"), "utf8"),
+);
+if (packageJson.name !== "cafe-epico-ops") {
+  throw new Error("Unexpected package name");
+}
 
-console.log(`structure validation: PASS (${schemaTables.size} tables)`);
+console.log(
+  `structure validation: PASS (${schemaTables.size} tables across ${migrationFiles.length} migrations)`,
+);
