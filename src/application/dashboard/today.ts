@@ -1,6 +1,7 @@
 import { and, desc, eq, sql } from "drizzle-orm";
 import { getOrCreateChecklistRun } from "@/src/application/checklists/run";
 import { countOpenShortages } from "@/src/application/inventory/shortages";
+import { getUnreadEmployeeMessages } from "@/src/application/messages/read";
 import { getDb } from "@/src/infrastructure/db/client";
 import { espressoQualityChecks, stores } from "@/src/infrastructure/db/schema";
 
@@ -27,10 +28,12 @@ export async function getTodayOperationalSummary(employee: {
     { run: openingRun, tasks: openingTasks },
     { run: handoffRun, tasks: handoffTasks },
     openShortages,
+    messages,
   ] = await Promise.all([
     getOrCreateChecklistRun(store.code, "MORNING", employee.id),
     getOrCreateChecklistRun(store.code, "HANDOFF", employee.id),
     countOpenShortages(employee.organizationId, employee.homeStoreId),
+    getUnreadEmployeeMessages(employee.organizationId, employee.id),
   ]);
 
   const openingCompleted = openingTasks.filter(
@@ -73,5 +76,6 @@ export async function getTodayOperationalSummary(employee: {
       openShortages,
     },
     espresso: latestEspresso ?? null,
+    messages,
   };
 }
