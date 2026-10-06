@@ -1,0 +1,54 @@
+-- V0.1 integrity and high-value foreign-key indexes
+alter table employee_roles add column if not exists id uuid default gen_random_uuid();
+update employee_roles set id = gen_random_uuid() where id is null;
+alter table employee_roles alter column id set not null;
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname='employee_roles_pkey') then
+    alter table employee_roles add constraint employee_roles_pkey primary key (id);
+  end if;
+end $$;
+
+create index if not exists employee_roles_employee_idx on employee_roles(employee_id);
+create index if not exists employee_roles_role_idx on employee_roles(role_id);
+create index if not exists employee_roles_store_idx on employee_roles(store_id);
+create index if not exists stores_org_idx on stores(organization_id);
+create index if not exists inventory_locations_org_idx on inventory_locations(organization_id);
+create index if not exists inventory_locations_store_idx on inventory_locations(store_id);
+create index if not exists roles_org_idx on roles(organization_id);
+create index if not exists role_permissions_permission_idx on role_permissions(permission_id);
+create index if not exists item_purchase_units_item_idx on item_purchase_units(inventory_item_id);
+create index if not exists item_purchase_units_supplier_idx on item_purchase_units(supplier_id);
+create index if not exists products_org_idx on products(organization_id);
+create index if not exists product_variants_product_idx on product_variants(product_id);
+create index if not exists product_variants_org_idx on product_variants(organization_id);
+create index if not exists recipes_org_idx on recipes(organization_id);
+create index if not exists recipes_variant_idx on recipes(product_variant_id);
+create index if not exists recipes_current_version_idx on recipes(current_version_id);
+create index if not exists recipe_versions_recipe_idx on recipe_versions(recipe_id);
+create index if not exists recipe_versions_org_idx on recipe_versions(organization_id);
+create index if not exists recipe_components_recipe_version_idx on recipe_components(recipe_version_id);
+create index if not exists recipe_components_item_idx on recipe_components(inventory_item_id);
+create index if not exists sops_org_idx on sops(organization_id);
+create index if not exists sops_current_version_idx on sops(current_version_id);
+create index if not exists sop_versions_sop_idx on sop_versions(sop_id);
+create index if not exists sop_versions_org_idx on sop_versions(organization_id);
+create index if not exists checklist_templates_store_idx on checklist_templates(store_id);
+create index if not exists checklist_tasks_template_idx on checklist_tasks(checklist_template_id);
+create index if not exists checklist_tasks_sop_idx on checklist_tasks(sop_id);
+create index if not exists checklist_task_schedules_task_idx on checklist_task_schedules(checklist_task_id);
+create index if not exists checklist_runs_template_idx on checklist_runs(checklist_template_id);
+create index if not exists checklist_run_tasks_run_idx on checklist_run_tasks(checklist_run_id);
+create index if not exists checklist_run_tasks_source_idx on checklist_run_tasks(source_task_id);
+create index if not exists espresso_quality_checks_store_idx on espresso_quality_checks(store_id);
+create index if not exists espresso_quality_checks_employee_idx on espresso_quality_checks(employee_id);
+create index if not exists inventory_movements_org_idx on inventory_movements(organization_id);
+create index if not exists inventory_movements_item_idx on inventory_movements(inventory_item_id);
+create index if not exists inventory_movements_employee_idx on inventory_movements(employee_id);
+create index if not exists inventory_counts_store_idx on inventory_counts(store_id);
+create index if not exists inventory_counts_location_idx on inventory_counts(location_id);
+create index if not exists inventory_count_lines_count_idx on inventory_count_lines(inventory_count_id);
+create index if not exists inventory_count_lines_item_idx on inventory_count_lines(inventory_item_id);
+create index if not exists integration_connections_org_idx on integration_connections(organization_id);
+create index if not exists sync_runs_connection_idx on sync_runs(integration_connection_id);
+create index if not exists webhook_events_org_idx on webhook_events(organization_id);
+create index if not exists audit_events_org_idx on audit_events(organization_id);
