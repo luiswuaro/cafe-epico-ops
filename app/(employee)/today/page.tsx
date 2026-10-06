@@ -21,7 +21,7 @@ export default async function TodayPage() {
         <p className="eyebrow">OPERACIÓN · TEPEXI · {summary.businessDate}</p>
         <h1>Hoy en Café Épico</h1>
         <p className="muted">
-          Apertura, control de espresso y entrega de turno conectados a datos reales.
+          Apertura, calidad, faltantes y entrega conectados a datos reales.
         </p>
       </section>
 
@@ -66,8 +66,17 @@ export default async function TodayPage() {
 
         <article className="card">
           <span className="pill">INVENTARIO</span>
-          <div className="metric">—</div>
-          <p>Faltantes, conteos y FIFO se conectarán en el siguiente bloque.</p>
+          <div className="metric">{summary.inventory.openShortages}</div>
+          <p>
+            {summary.inventory.openShortages === 0
+              ? "Sin faltantes abiertos."
+              : `${summary.inventory.openShortages} faltante(s) pendiente(s) de resolver.`}
+          </p>
+          <Link href="/inventory" className="button">
+            {summary.inventory.openShortages === 0
+              ? "Revisar inventario"
+              : "Ver faltantes"}
+          </Link>
         </article>
 
         <article className="card">
