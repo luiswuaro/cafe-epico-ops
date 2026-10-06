@@ -1,6 +1,6 @@
 "use server";
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getTheoreticalBalance } from "@/src/application/inventory/post-movement";
@@ -199,6 +199,7 @@ export async function saveInventoryCountLine(formData: FormData) {
 
 export async function completeInventoryCount(formData: FormData) {
   const countId = String(formData.get("countId") ?? "");
+  const confirmPartial = String(formData.get("confirmPartial") ?? "") === "yes";
   if (!countId) throw new Error("Missing countId");
 
   const { user, employee } = await getCurrentEmployee();
@@ -225,13 +226,33 @@ export async function completeInventoryCount(formData: FormData) {
   if (!count) throw new Error("Conteo no encontrado");
   if (count.status === "COMPLETED") redirect(`/inventory/counts/${count.id}`);
 
-  const [line] = await db
-    .select({ id: inventoryCountLines.id })
-    .from(inventoryCountLines)
-    .where(eq(inventoryCountLines.inventoryCountId, count.id))
-    .limit(1);
+  const [[coverage], [catalog]] = await Promise.all([
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(inventoryCountLines)
+      .where(eq(inventoryCountLines.inventoryCountId, count.id)),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(inventoryItems)
+      .where(
+        and(
+          eq(inventoryItems.organizationId, employee.organizationId),
+          eq(inventoryItems.isActive, true),
+        ),
+      ),
+  ]);
 
-  if (!line) throw new Error("Registra al menos un insumo antes de cerrar");
+  const countedItems = coverage?.count ?? 0;
+  const catalogItems = catalog?.count ?? 0;
+
+  if (countedItems === 0) {
+    throw new Error("Registra al menos un insumo antes de cerrar");
+  }
+
+  const partial = catalogItems > 0 && countedItems < catalogItems;
+  if (partial && !confirmPartial) {
+    throw new Error("Confirma explícitamente que deseas cerrar un conteo parcial");
+  }
 
   const completedAt = new Date();
   await db
@@ -254,6 +275,9 @@ export async function completeInventoryCount(formData: FormData) {
     entityId: count.id,
     afterData: {
       locationId: count.locationId,
+      countedItems,
+      catalogItems,
+      partial,
       note: "No stock adjustment generated automatically",
     },
   });
