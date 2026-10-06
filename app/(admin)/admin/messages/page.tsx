@@ -18,6 +18,10 @@ export default async function AdminMessagesPage({
   const sent = params.sent === "1";
   const error =
     typeof params.error === "string" ? params.error : null;
+  const defaultRecipient =
+    data.employeeOptions.find(
+      (employee) => employee.name.toLocaleLowerCase("es-MX") === "azucena",
+    )?.id ?? "";
 
   return (
     <main className="shell">
@@ -45,7 +49,11 @@ export default async function AdminMessagesPage({
 
           <label>
             Para
-            <select name="recipientEmployeeId" required defaultValue="">
+            <select
+              name="recipientEmployeeId"
+              required
+              defaultValue={defaultRecipient}
+            >
               <option value="" disabled>
                 Selecciona…
               </option>
