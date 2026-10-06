@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import "./globals.css";
 import { ServiceWorkerRegister } from "@/components/service-worker-register";
+import { AppNav } from "@/components/app-nav";
 
 export const metadata: Metadata = {
   title: { default: "Café Épico Ops", template: "%s · Café Épico Ops" },
@@ -17,16 +18,7 @@ export default function RootLayout({
         <ServiceWorkerRegister />
         <header className="topbar">
           <Link className="brand" href="/today">Café Épico Ops</Link>
-          <nav className="nav">
-            <Link href="/today">Hoy</Link>
-            <Link href="/checklists">Checklist</Link>
-            <Link href="/handoff">Entrega</Link>
-            <Link href="/inventory">Inventario</Link>
-            <Link href="/recipes">Recetas</Link>
-            <Link href="/sops">SOPs</Link>
-            <Link href="/quality/espresso">Espresso QC</Link>
-            <Link href="/admin">Admin</Link>
-          </nav>
+          <AppNav />
         </header>
         {children}
       </body>
