@@ -21,6 +21,7 @@ export default function RootLayout({
             <Link href="/today">Hoy</Link>
             <Link href="/checklists">Checklist</Link>
             <Link href="/handoff">Entrega</Link>
+            <Link href="/inventory">Inventario</Link>
             <Link href="/recipes">Recetas</Link>
             <Link href="/sops">SOPs</Link>
             <Link href="/quality/espresso">Espresso QC</Link>
