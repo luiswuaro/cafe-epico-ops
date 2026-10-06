@@ -29,39 +29,63 @@ export async function getLoyverseStatus(organizationId: string) {
     )
     .limit(1);
 
-  const count = async (table: any) => {
-    const [row] = await db
+  const [
+    [storesRow],
+    [itemsRow],
+    [variantsRow],
+    [inventoryRow],
+    [customersRow],
+    [receiptsRow],
+    states,
+  ] = await Promise.all([
+    db
       .select({ count: sql<number>`count(*)::int` })
-      .from(table)
-      .where(eq(table.organizationId, organizationId));
-    return row?.count ?? 0;
-  };
-
-  const [stores, items, variants, inventoryLevels, customers, receipts, states] =
-    await Promise.all([
-      count(loyverseStores),
-      count(loyverseItems),
-      count(loyverseVariants),
-      count(loyverseInventoryLevels),
-      count(loyverseCustomers),
-      count(loyverseReceipts),
-      connection
-        ? db
-            .select({
-              resource: syncStates.resource,
-              status: syncStates.status,
-              lastSuccessfulSyncAt: syncStates.lastSuccessfulSyncAt,
-              lastAttemptAt: syncStates.lastAttemptAt,
-              errorMessage: syncStates.errorMessage,
-            })
-            .from(syncStates)
-            .where(eq(syncStates.integrationConnectionId, connection.id))
-        : Promise.resolve([]),
-    ]);
+      .from(loyverseStores)
+      .where(eq(loyverseStores.organizationId, organizationId)),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(loyverseItems)
+      .where(eq(loyverseItems.organizationId, organizationId)),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(loyverseVariants)
+      .where(eq(loyverseVariants.organizationId, organizationId)),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(loyverseInventoryLevels)
+      .where(eq(loyverseInventoryLevels.organizationId, organizationId)),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(loyverseCustomers)
+      .where(eq(loyverseCustomers.organizationId, organizationId)),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(loyverseReceipts)
+      .where(eq(loyverseReceipts.organizationId, organizationId)),
+    connection
+      ? db
+          .select({
+            resource: syncStates.resource,
+            status: syncStates.status,
+            lastSuccessfulSyncAt: syncStates.lastSuccessfulSyncAt,
+            lastAttemptAt: syncStates.lastAttemptAt,
+            errorMessage: syncStates.errorMessage,
+          })
+          .from(syncStates)
+          .where(eq(syncStates.integrationConnectionId, connection.id))
+      : Promise.resolve([]),
+  ]);
 
   return {
     connection: connection ?? null,
-    counts: { stores, items, variants, inventoryLevels, customers, receipts },
+    counts: {
+      stores: storesRow?.count ?? 0,
+      items: itemsRow?.count ?? 0,
+      variants: variantsRow?.count ?? 0,
+      inventoryLevels: inventoryRow?.count ?? 0,
+      customers: customersRow?.count ?? 0,
+      receipts: receiptsRow?.count ?? 0,
+    },
     states,
   };
 }
