@@ -106,7 +106,15 @@ export default async function InventoryCountDetail({
           <p>
             Cerrar el conteo conserva las desviaciones y <strong>no</strong> modifica stock teórico.
           </p>
-          <button type="submit">Cerrar conteo</button>
+          {detail.countedItems < detail.items.length && (
+            <label className="alert">
+              <input type="checkbox" name="confirmPartial" value="yes" required />{" "}
+              Confirmo que cerraré un conteo parcial de {detail.countedItems} / {detail.items.length} insumos.
+            </label>
+          )}
+          <button type="submit">
+            {detail.countedItems < detail.items.length ? "Cerrar conteo parcial" : "Cerrar conteo"}
+          </button>
         </form>
       )}
 
