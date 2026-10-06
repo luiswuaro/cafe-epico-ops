@@ -185,6 +185,11 @@ export default async function InventoryPage({ searchParams }: PageProps) {
                               row.deviationPct * 100
                             ).toFixed(1)}%`}
                       </div>
+                      <div style={{ marginTop: ".35rem" }}>
+                        <Link href={`/inventory/items/${row.id}`}>
+                          Ver histórico y consumo →
+                        </Link>
+                      </div>
                     </div>
                   </div>
                 );
