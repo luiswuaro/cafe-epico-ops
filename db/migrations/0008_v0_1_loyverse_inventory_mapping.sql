@@ -36,3 +36,5 @@ create index if not exists loyverse_inventory_mapping_item_idx
 
 create index if not exists loyverse_inventory_mapping_location_idx
   on loyverse_inventory_mappings(location_id);
+
+alter table loyverse_inventory_mappings enable row level security;
