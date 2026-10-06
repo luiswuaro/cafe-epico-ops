@@ -14,7 +14,7 @@ export async function POST(request: Request) {
   if (!authorized(request)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   try {
     const mode = new URL(request.url).searchParams.get("mode");
-    if (mode === "initial") return NextResponse.json({ ok: true, mode, ...(await initialSyncLoyverse(31)) });
+    if (mode === "initial") return NextResponse.json({ ok: true, mode, ...(await initialSyncLoyverse(30)) });
     const webhookResult = await processPendingLoyverseWebhooks();
     return NextResponse.json({ ok: true, mode: "reconcile", webhooks: webhookResult, ...(await reconcileLoyverse()) });
   }
