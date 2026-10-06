@@ -1,6 +1,7 @@
 import { and, desc, eq, sql } from "drizzle-orm";
 import { getOrCreateChecklistRun } from "@/src/application/checklists/run";
 import { countOpenShortages } from "@/src/application/inventory/shortages";
+import { countOpenShortages } from "@/src/application/inventory/shortages";
 import { getDb } from "@/src/infrastructure/db/client";
 import { espressoQualityChecks, stores } from "@/src/infrastructure/db/schema";
 
@@ -57,6 +58,11 @@ export async function getTodayOperationalSummary(employee: {
     .orderBy(desc(espressoQualityChecks.createdAt))
     .limit(1);
 
+  const openShortages = await countOpenShortages(
+    employee.organizationId,
+    employee.homeStoreId,
+  );
+
   return {
     businessDate: openingRun.businessDate,
     opening: {
@@ -73,5 +79,8 @@ export async function getTodayOperationalSummary(employee: {
       openShortages,
     },
     espresso: latestEspresso ?? null,
+    inventory: {
+      openShortages,
+    },
   };
 }
