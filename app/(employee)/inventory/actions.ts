@@ -6,7 +6,7 @@ import { z } from "zod";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
 import { assertEmployeePermission } from "@/src/infrastructure/auth/permissions";
 import { getDb } from "@/src/infrastructure/db/client";
-import { auditEvents, shortageReports } from "@/src/infrastructure/db/schema";
+import { auditEvents, inventoryItems, shortageReports } from "@/src/infrastructure/db/schema";
 
 const reportSchema = z.object({
   itemName: z.string().trim().min(1).max(150),
@@ -136,4 +136,77 @@ export async function resolveShortage(formData: FormData) {
 
   revalidatePath("/inventory");
   revalidatePath("/today");
+}
+
+
+const inventoryItemSchema = z.object({
+  name: z.string().trim().min(1).max(150),
+  sku: z.string().trim().max(100).optional(),
+  category: z.string().trim().min(1).max(80),
+  canonicalUnit: z.enum(["g", "ml", "pz"]),
+  minimumStock: z.string().trim().optional(),
+});
+
+export async function createInventoryItem(formData: FormData) {
+  const { user, employee } = await getCurrentEmployee();
+  if (!employee.homeStoreId) throw new Error("Employee has no home store");
+
+  await assertEmployeePermission(
+    employee.id,
+    "inventory.item.manage",
+    employee.homeStoreId,
+  );
+
+  const parsed = inventoryItemSchema.safeParse({
+    name: String(formData.get("name") ?? ""),
+    sku: String(formData.get("sku") ?? "").trim() || undefined,
+    category: String(formData.get("category") ?? ""),
+    canonicalUnit: String(formData.get("canonicalUnit") ?? ""),
+    minimumStock: String(formData.get("minimumStock") ?? "").trim() || undefined,
+  });
+
+  if (!parsed.success) throw new Error("Datos de insumo inválidos");
+
+  let minimumStock: string | null = null;
+  if (parsed.data.minimumStock) {
+    const value = Number(parsed.data.minimumStock);
+    if (!Number.isFinite(value) || value < 0) {
+      throw new Error("El stock mínimo no puede ser negativo");
+    }
+    minimumStock = String(value);
+  }
+
+  const db = getDb();
+  const [created] = await db
+    .insert(inventoryItems)
+    .values({
+      organizationId: employee.organizationId,
+      name: parsed.data.name,
+      sku: parsed.data.sku ?? null,
+      category: parsed.data.category,
+      canonicalUnit: parsed.data.canonicalUnit,
+      minimumStock,
+      trackingType: "QUANTITY",
+      isActive: true,
+    })
+    .returning({ id: inventoryItems.id });
+
+  await db.insert(auditEvents).values({
+    organizationId: employee.organizationId,
+    storeId: employee.homeStoreId,
+    actorUserId: user.id,
+    actorEmployeeId: employee.id,
+    action: "INVENTORY_ITEM_CREATED",
+    entityType: "inventory_item",
+    entityId: created.id,
+    afterData: {
+      name: parsed.data.name,
+      sku: parsed.data.sku ?? null,
+      category: parsed.data.category,
+      canonicalUnit: parsed.data.canonicalUnit,
+      minimumStock,
+    },
+  });
+
+  revalidatePath("/inventory");
 }
