@@ -14,7 +14,7 @@ const labels: Record<string, string> = {
   items: "Artículos + variantes",
   inventory: "Inventario POS",
   customers: "Clientes",
-  receipts90: "Recibos · 90 días",
+  receipts31: "Recibos · 31 días",
 };
 
 export default async function LoyverseAdminPage({ searchParams }: PageProps) {
