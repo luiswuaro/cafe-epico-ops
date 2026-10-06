@@ -63,8 +63,15 @@ export default async function TodayPage() {
 
         <article className="card">
           <span className="pill">INVENTARIO</span>
-          <div className="metric">—</div>
-          <p>Faltantes, conteos y FIFO se conectarán en el siguiente bloque.</p>
+          <div className="metric">{summary.inventory.openShortages}</div>
+          <p>
+            {summary.inventory.openShortages === 0
+              ? "Sin faltantes abiertos."
+              : summary.inventory.openShortages === 1
+                ? "1 faltante abierto requiere seguimiento."
+                : `${summary.inventory.openShortages} faltantes abiertos requieren seguimiento.`}
+          </p>
+          <Link href="/inventory">Abrir inventario →</Link>
         </article>
 
         <article className="card">
