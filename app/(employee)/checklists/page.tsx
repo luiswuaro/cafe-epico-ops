@@ -5,6 +5,13 @@ import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
 
 export const dynamic = "force-dynamic";
 
+function validationLabel(status: string | null) {
+  if (!status || status === "OK") return "Completada";
+  if (status.startsWith("BELOW_MIN:")) return `Completada · Debajo del mínimo (${status.split(":")[1]})`;
+  if (status.startsWith("ABOVE_MAX:")) return `Completada · Arriba del máximo (${status.split(":")[1]})`;
+  return `Completada · ${status}`;
+}
+
 export default async function ChecklistsPage() {
   const { employee } = await getCurrentEmployee();
   const { run, tasks } = await getOrCreateChecklistRun(process.env.DEFAULT_STORE_CODE ?? "TEPEXI", "MORNING", employee.id);
@@ -15,6 +22,6 @@ export default async function ChecklistsPage() {
       <div style={{flex:1}}><strong>{task.titleSnapshot}</strong>{task.descriptionSnapshot && <div className="muted">{task.descriptionSnapshot}</div>}{task.sopVersionId && <div style={{marginTop:".4rem"}}><Link href={`/sops/version/${task.sopVersionId}`} className="pill">¿Cómo hacerlo?</Link></div>}
       {task.status !== "COMPLETED" ? <form action={completeChecklistTask} className="stack" style={{marginTop:'.7rem'}}><input type="hidden" name="taskId" value={task.id}/>
         {task.inputTypeSnapshot !== "BOOLEAN" && <input name="value" required={task.requiredSnapshot} inputMode={["NUMBER","TEMPERATURE","WEIGHT","TIME"].includes(task.inputTypeSnapshot)?"decimal":undefined} placeholder="Valor"/>}
-        <input name="comment" placeholder="Comentario opcional"/><button type="submit">Completar</button></form> : <div className="status-ok">Completada</div>}
+        <input name="comment" placeholder="Comentario opcional"/><button type="submit">Completar</button></form> : <div className={task.validationStatus === "OK" || !task.validationStatus ? "status-ok" : "status-warn"}>{validationLabel(task.validationStatus)}</div>}
       </div></div>)}</article></main>;
 }
