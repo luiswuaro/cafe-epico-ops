@@ -412,6 +412,29 @@ export const inventoryCountLines = pgTable("inventory_count_lines", {
   countedAt: timestamp("counted_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [uniqueIndex("inventory_count_item_uidx").on(t.inventoryCountId, t.inventoryItemId)]);
 
+export const shortageReports = pgTable("shortage_reports", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  storeId: uuid("store_id").notNull().references(() => stores.id, { onDelete: "cascade" }),
+  inventoryItemId: uuid("inventory_item_id").references(() => inventoryItems.id, { onDelete: "set null" }),
+  reportedBy: uuid("reported_by").references(() => employees.id, { onDelete: "set null" }),
+  itemName: text("item_name").notNull(),
+  quantityNeeded: numeric("quantity_needed", { precision: 18, scale: 3 }),
+  unit: varchar("unit", { length: 20 }),
+  priority: varchar("priority", { length: 20 }).notNull().default("NORMAL"),
+  status: varchar("status", { length: 20 }).notNull().default("OPEN"),
+  note: text("note"),
+  resolvedBy: uuid("resolved_by").references(() => employees.id, { onDelete: "set null" }),
+  resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+  ...timestamps,
+}, (t) => [
+  index("shortage_reports_store_status_idx").on(t.storeId, t.status, t.createdAt),
+  index("shortage_reports_org_idx").on(t.organizationId),
+  index("shortage_reports_item_idx").on(t.inventoryItemId),
+  index("shortage_reports_reported_by_idx").on(t.reportedBy),
+  index("shortage_reports_resolved_by_idx").on(t.resolvedBy),
+]);
+
 export const integrationConnections = pgTable("integration_connections", {
   id: uuid("id").primaryKey().defaultRandom(),
   organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
