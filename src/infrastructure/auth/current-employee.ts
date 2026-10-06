@@ -4,6 +4,7 @@ import { getDb } from "@/src/infrastructure/db/client";
 import { employees, organizations } from "@/src/infrastructure/db/schema";
 import { createSupabaseServerClient } from "./server";
 import { ensureBootstrapOwnerLink } from "./bootstrap-owner";
+import { ensureBootstrapBaristaLink } from "./bootstrap-barista";
 
 export async function getCurrentEmployee() {
   const supabase = await createSupabaseServerClient();
@@ -29,8 +30,15 @@ export async function getCurrentEmployee() {
   let employee = await findEmployee();
 
   if (!employee) {
-    const bootstrap = await ensureBootstrapOwnerLink(user.id);
-    if (bootstrap.status !== "not-eligible") {
+    const ownerBootstrap = await ensureBootstrapOwnerLink(user.id);
+    if (ownerBootstrap.status !== "not-eligible") {
+      employee = await findEmployee();
+    }
+  }
+
+  if (!employee) {
+    const baristaBootstrap = await ensureBootstrapBaristaLink(user.id);
+    if (baristaBootstrap.status !== "not-eligible") {
       employee = await findEmployee();
     }
   }
