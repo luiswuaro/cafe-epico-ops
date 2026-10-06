@@ -71,6 +71,7 @@ export async function getShiftReports(
       booleanValue: checklistRunTasks.booleanValue,
       comment: checklistRunTasks.comment,
       validationStatus: checklistRunTasks.validationStatus,
+      targetDurationSeconds: checklistRunTasks.targetDurationSecondsSnapshot,
     })
     .from(checklistRunTasks)
     .where(inArray(checklistRunTasks.checklistRunId, runIds))
