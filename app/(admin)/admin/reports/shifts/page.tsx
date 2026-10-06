@@ -4,6 +4,7 @@ import {
   type ShiftReportFilter,
 } from "@/src/application/reports/shifts";
 import { requirePermission } from "@/src/infrastructure/auth/permissions";
+import { timingMetrics } from "@/src/domain/checklists/timing";
 
 export const dynamic = "force-dynamic";
 
@@ -130,6 +131,11 @@ export default async function ShiftReportsPage({
               <div className="stack" style={{ marginTop: "1rem" }}>
                 {report.tasks.map((task) => {
                   const value = taskValue(task);
+                  const timing = timingMetrics(
+                    task.targetDurationSeconds,
+                    task.startedAt,
+                    task.completedAt,
+                  );
                   return (
                     <div className="task" key={task.id}>
                       <div style={{ flex: 1 }}>
@@ -153,6 +159,21 @@ export default async function ShiftReportsPage({
                           {" · "}
                           {formatDuration(task.durationSeconds)}
                         </div>
+
+                        {task.targetDurationSeconds && (
+                          <div
+                            className={
+                              timing.onTarget === false
+                                ? "status-warn"
+                                : "muted"
+                            }
+                          >
+                            Objetivo {formatDuration(task.targetDurationSeconds)}
+                            {timing.variancePercent != null
+                              ? ` · desviación ${timing.variancePercent > 0 ? "+" : ""}${timing.variancePercent.toFixed(0)}%`
+                              : ""}
+                          </div>
+                        )}
 
                         {(task.startedByName || task.completedByName) && (
                           <div className="muted">
