@@ -556,6 +556,35 @@ export const externalEntityMappings = pgTable("external_entity_mappings", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [uniqueIndex("external_mapping_uidx").on(t.organizationId, t.provider, t.entityType, t.externalId)]);
 
+export const loyverseInventoryMappings = pgTable("loyverse_inventory_mappings", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  storeId: uuid("store_id").notNull().references(() => stores.id, { onDelete: "cascade" }),
+  locationId: uuid("location_id").notNull().references(() => inventoryLocations.id, { onDelete: "restrict" }),
+  inventoryItemId: uuid("inventory_item_id").notNull().references(() => inventoryItems.id, { onDelete: "cascade" }),
+  loyverseStoreExternalId: text("loyverse_store_external_id").notNull(),
+  loyverseVariantExternalId: text("loyverse_variant_external_id").notNull(),
+  sourceMode: varchar("source_mode", { length: 20 }).notNull().default("UNIT"),
+  sourceUnit: varchar("source_unit", { length: 20 }).notNull().default("pz"),
+  factorToCanonical: numeric("factor_to_canonical", { precision: 18, scale: 6 }).notNull().default("1"),
+  isActive: boolean("is_active").notNull().default(true),
+  ...timestamps,
+}, (t) => [
+  uniqueIndex("loyverse_inventory_mapping_variant_uidx").on(
+    t.organizationId,
+    t.storeId,
+    t.loyverseStoreExternalId,
+    t.loyverseVariantExternalId,
+  ),
+  uniqueIndex("loyverse_inventory_mapping_balance_uidx").on(
+    t.storeId,
+    t.locationId,
+    t.inventoryItemId,
+  ),
+  index("loyverse_inventory_mapping_item_idx").on(t.inventoryItemId),
+  index("loyverse_inventory_mapping_location_idx").on(t.locationId),
+]);
+
 export const webhookEvents = pgTable("webhook_events", {
   id: uuid("id").primaryKey().defaultRandom(),
   organizationId: uuid("organization_id").references(() => organizations.id, { onDelete: "cascade" }),
