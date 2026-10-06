@@ -22,13 +22,18 @@ export async function getTodayOperationalSummary(employee: {
 
   if (!store) throw new Error("Store not found");
 
-  const { run, tasks } = await getOrCreateChecklistRun(
-    store.code,
-    "MORNING",
-    employee.id,
-  );
+  const [{ run: openingRun, tasks: openingTasks }, { run: handoffRun, tasks: handoffTasks }] =
+    await Promise.all([
+      getOrCreateChecklistRun(store.code, "MORNING", employee.id),
+      getOrCreateChecklistRun(store.code, "HANDOFF", employee.id),
+    ]);
 
-  const completed = tasks.filter((task) => task.status === "COMPLETED").length;
+  const openingCompleted = openingTasks.filter(
+    (task) => task.status === "COMPLETED",
+  ).length;
+  const handoffCompleted = handoffTasks.filter(
+    (task) => task.status === "COMPLETED",
+  ).length;
 
   const [latestEspresso] = await db
     .select({
@@ -42,17 +47,22 @@ export async function getTodayOperationalSummary(employee: {
     .where(and(
       eq(espressoQualityChecks.organizationId, employee.organizationId),
       eq(espressoQualityChecks.storeId, employee.homeStoreId),
-      sql`to_char(${espressoQualityChecks.createdAt} at time zone ${store.timezone}, 'YYYY-MM-DD') = ${run.businessDate}`,
+      sql`to_char(${espressoQualityChecks.createdAt} at time zone ${store.timezone}, 'YYYY-MM-DD') = ${openingRun.businessDate}`,
     ))
     .orderBy(desc(espressoQualityChecks.createdAt))
     .limit(1);
 
   return {
-    businessDate: run.businessDate,
+    businessDate: openingRun.businessDate,
     opening: {
-      completed,
-      total: tasks.length,
-      status: run.status,
+      completed: openingCompleted,
+      total: openingTasks.length,
+      status: openingRun.status,
+    },
+    handoff: {
+      completed: handoffCompleted,
+      total: handoffTasks.length,
+      status: handoffRun.status,
     },
     espresso: latestEspresso ?? null,
   };
