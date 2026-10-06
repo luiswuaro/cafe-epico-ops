@@ -23,6 +23,18 @@ function optionalNumber(formData: FormData, name: string) {
   return String(value);
 }
 
+function optionalTargetSeconds(formData: FormData) {
+  const raw = String(formData.get("targetMinutes") ?? "").trim();
+  if (!raw) return null;
+
+  const minutes = Number(raw);
+  if (!Number.isFinite(minutes) || minutes <= 0 || minutes > 480) {
+    throw new Error("El tiempo objetivo debe ser mayor a 0 y máximo 480 min");
+  }
+
+  return Math.max(1, Math.round(minutes * 60));
+}
+
 function buildRrule(formData: FormData) {
   const frequency = String(formData.get("frequency") ?? "ALWAYS");
 
@@ -66,6 +78,7 @@ export async function createChecklistTask(formData: FormData) {
   const sopId = String(formData.get("sopId") ?? "").trim() || null;
   const minValue = optionalNumber(formData, "minValue");
   const maxValue = optionalNumber(formData, "maxValue");
+  const targetDurationSeconds = optionalTargetSeconds(formData);
 
   if (!templateId || !title) {
     throw new Error("Checklist y tarea son obligatorios");
@@ -106,6 +119,7 @@ export async function createChecklistTask(formData: FormData) {
       sopId,
       minValue,
       maxValue,
+      targetDurationSeconds,
     })
     .returning();
 
@@ -136,6 +150,7 @@ export async function createChecklistTask(formData: FormData) {
       sopId,
       minValue,
       maxValue,
+      targetDurationSeconds,
     },
   });
 
@@ -143,6 +158,53 @@ export async function createChecklistTask(formData: FormData) {
   revalidatePath("/checklists");
   revalidatePath("/handoff");
   revalidatePath("/today");
+}
+
+export async function updateChecklistTaskTarget(formData: FormData) {
+  const { employeeId, user, organizationId } =
+    await requirePermission("checklist.manage");
+
+  const taskId = String(formData.get("taskId") ?? "");
+  const targetDurationSeconds = optionalTargetSeconds(formData);
+  const db = getDb();
+
+  const [before] = await db
+    .select({
+      id: checklistTasks.id,
+      organizationId: checklistTasks.organizationId,
+      targetDurationSeconds: checklistTasks.targetDurationSeconds,
+    })
+    .from(checklistTasks)
+    .where(eq(checklistTasks.id, taskId))
+    .limit(1);
+
+  if (!before || before.organizationId !== organizationId) {
+    throw new Error("Task not found");
+  }
+
+  await db
+    .update(checklistTasks)
+    .set({
+      targetDurationSeconds,
+      updatedAt: new Date(),
+    })
+    .where(eq(checklistTasks.id, taskId));
+
+  await db.insert(auditEvents).values({
+    organizationId,
+    actorUserId: user.id,
+    actorEmployeeId: employeeId,
+    action: "CHECKLIST_TASK_TARGET_UPDATED",
+    entityType: "checklist_task",
+    entityId: taskId,
+    beforeData: { targetDurationSeconds: before.targetDurationSeconds },
+    afterData: { targetDurationSeconds },
+  });
+
+  revalidatePath("/admin/checklists");
+  revalidatePath("/admin/reports/productivity");
+  revalidatePath("/checklists");
+  revalidatePath("/handoff");
 }
 
 export async function toggleChecklistTask(formData: FormData) {
