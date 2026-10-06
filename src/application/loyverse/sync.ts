@@ -92,7 +92,7 @@ export async function syncLoyverseReceipts(updatedAtMin?: string) {
   return count;
 }
 
-export async function initialSyncLoyverse(receiptBackfillDays = 31) {
+export async function initialSyncLoyverse(receiptBackfillDays = 30) {
   const receiptSince = new Date(Date.now() - receiptBackfillDays * 86_400_000).toISOString();
   const stores = await syncLoyverseStores();
   const items = await syncLoyverseItems();
