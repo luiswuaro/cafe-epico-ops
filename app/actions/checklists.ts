@@ -5,10 +5,12 @@ import { revalidatePath } from "next/cache";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
 import { getDb } from "@/src/infrastructure/db/client";
 import { assertEmployeePermission } from "@/src/infrastructure/auth/permissions";
+import { validateNumeric } from "@/src/application/checklists/validation";
 import {
   auditEvents,
   checklistRuns,
   checklistRunTasks,
+  checklistTasks,
 } from "@/src/infrastructure/db/schema";
 
 export async function completeChecklistTask(formData: FormData) {
@@ -19,9 +21,15 @@ export async function completeChecklistTask(formData: FormData) {
   const db = getDb();
 
   const [task] = await db
-    .select({ task: checklistRunTasks, run: checklistRuns })
+    .select({
+      task: checklistRunTasks,
+      run: checklistRuns,
+      minValue: checklistTasks.minValue,
+      maxValue: checklistTasks.maxValue,
+    })
     .from(checklistRunTasks)
     .innerJoin(checklistRuns, eq(checklistRuns.id, checklistRunTasks.checklistRunId))
+    .leftJoin(checklistTasks, eq(checklistTasks.id, checklistRunTasks.sourceTaskId))
     .where(
       and(
         eq(checklistRunTasks.id, taskId),
@@ -62,6 +70,11 @@ export async function completeChecklistTask(formData: FormData) {
     const value = Number(rawValue);
     if (!Number.isFinite(value)) throw new Error("A numeric value is required");
     update.numericValue = String(value);
+    const validation = validateNumeric(value, {
+      min: task.minValue == null ? null : Number(task.minValue),
+      max: task.maxValue == null ? null : Number(task.maxValue),
+    });
+    update.validationStatus = validation.ok ? "OK" : validation.reason;
   } else if (
     task.task.inputTypeSnapshot === "TEXT" ||
     task.task.inputTypeSnapshot === "SELECT"
