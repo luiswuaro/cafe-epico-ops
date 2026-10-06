@@ -16,7 +16,7 @@ Tablas `loyverse_*` preservan payload externo y campos indexables. No se usan di
 4. customers
 5. receipts + line_items
 
-En el plan actual de Loyverse, la API permite recuperar recibos de los últimos 31 días. Café Épico Ops limita el backfill inicial a esa ventana para evitar respuestas PAYMENT_REQUIRED.
+En el plan actual de Loyverse, la API permite recuperar recibos de los últimos 30 días. Café Épico Ops limita el backfill inicial a esa ventana para evitar respuestas PAYMENT_REQUIRED.
 
 ## Webhooks
 
@@ -37,7 +37,7 @@ No se hace trabajo pesado antes del ACK.
 
 ## Reconciliación
 
-`POST /api/internal/loyverse/reconcile?mode=initial` hace el backfill inicial de 31 días de receipts. Después, `POST /api/internal/loyverse/reconcile` está protegido por `CRON_SECRET` y procesa el inbox pendiente antes de ejecutar el pull con overlap. Hace pull con una ventana de overlap. Esto cubre pérdida/retraso de webhooks, reintentos y carreras de timestamp.
+`POST /api/internal/loyverse/reconcile?mode=initial` hace el backfill inicial de 30 días de receipts. Después, `POST /api/internal/loyverse/reconcile` está protegido por `CRON_SECRET` y procesa el inbox pendiente antes de ejecutar el pull con overlap. Hace pull con una ventana de overlap. Esto cubre pérdida/retraso de webhooks, reintentos y carreras de timestamp.
 
 En producción el scheduler debe ejecutar reconciliación frecuente y una comprobación más amplia nocturna. La cadencia exacta se decide al observar volumen y límites reales del account.
 
