@@ -6,7 +6,8 @@ import { z } from "zod";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
 import { assertEmployeePermission } from "@/src/infrastructure/auth/permissions";
 import { getDb } from "@/src/infrastructure/db/client";
-import { auditEvents, inventoryItems, shortageReports } from "@/src/infrastructure/db/schema";
+import { auditEvents, inventoryItems, inventoryLocations, inventoryMovements, shortageReports } from "@/src/infrastructure/db/schema";
+import { postInventoryMovement } from "@/src/application/inventory/post-movement";
 
 const reportSchema = z.object({
   itemName: z.string().trim().min(1).max(150),
@@ -209,4 +210,116 @@ export async function createInventoryItem(formData: FormData) {
   });
 
   revalidatePath("/inventory");
+}
+
+
+const openingBalanceSchema = z.object({
+  locationId: z.string().uuid(),
+  inventoryItemId: z.string().uuid(),
+  quantity: z.coerce.number().min(0).max(1_000_000_000),
+  note: z.string().trim().max(500).optional(),
+});
+
+export async function setOpeningInventoryBalance(formData: FormData) {
+  const { user, employee } = await getCurrentEmployee();
+  if (!employee.homeStoreId) throw new Error("Employee has no home store");
+
+  await assertEmployeePermission(
+    employee.id,
+    "inventory.adjust",
+    employee.homeStoreId,
+  );
+
+  const parsed = openingBalanceSchema.safeParse({
+    locationId: String(formData.get("locationId") ?? ""),
+    inventoryItemId: String(formData.get("inventoryItemId") ?? ""),
+    quantity: formData.get("quantity"),
+    note: String(formData.get("note") ?? "") || undefined,
+  });
+
+  if (!parsed.success) throw new Error("Inventario inicial inválido");
+
+  const db = getDb();
+
+  const [[location], [item], [existingMovement]] = await Promise.all([
+    db
+      .select({ id: inventoryLocations.id })
+      .from(inventoryLocations)
+      .where(
+        and(
+          eq(inventoryLocations.id, parsed.data.locationId),
+          eq(inventoryLocations.organizationId, employee.organizationId),
+          eq(inventoryLocations.storeId, employee.homeStoreId),
+          eq(inventoryLocations.isActive, true),
+        ),
+      )
+      .limit(1),
+    db
+      .select({
+        id: inventoryItems.id,
+        name: inventoryItems.name,
+        canonicalUnit: inventoryItems.canonicalUnit,
+      })
+      .from(inventoryItems)
+      .where(
+        and(
+          eq(inventoryItems.id, parsed.data.inventoryItemId),
+          eq(inventoryItems.organizationId, employee.organizationId),
+          eq(inventoryItems.isActive, true),
+        ),
+      )
+      .limit(1),
+    db
+      .select({ id: inventoryMovements.id })
+      .from(inventoryMovements)
+      .where(
+        and(
+          eq(inventoryMovements.storeId, employee.homeStoreId),
+          eq(inventoryMovements.locationId, parsed.data.locationId),
+          eq(inventoryMovements.inventoryItemId, parsed.data.inventoryItemId),
+        ),
+      )
+      .limit(1),
+  ]);
+
+  if (!location || !item) throw new Error("Insumo o ubicación inválida");
+
+  if (existingMovement) {
+    throw new Error(
+      "Este insumo ya tiene movimientos en esa ubicación. Usa un ajuste controlado, no otro saldo inicial.",
+    );
+  }
+
+  const movement = await postInventoryMovement({
+    organizationId: employee.organizationId,
+    storeId: employee.homeStoreId,
+    locationId: parsed.data.locationId,
+    inventoryItemId: parsed.data.inventoryItemId,
+    movementType: "OPENING_BALANCE",
+    quantityDelta: String(parsed.data.quantity),
+    sourceType: "MANUAL_OPENING_BALANCE",
+    occurredAt: new Date(),
+    employeeId: employee.id,
+    note: parsed.data.note ?? "Inventario inicial",
+  });
+
+  await db.insert(auditEvents).values({
+    organizationId: employee.organizationId,
+    storeId: employee.homeStoreId,
+    actorUserId: user.id,
+    actorEmployeeId: employee.id,
+    action: "INVENTORY_OPENING_BALANCE_SET",
+    entityType: "inventory_movement",
+    entityId: movement.id,
+    afterData: {
+      inventoryItemId: item.id,
+      itemName: item.name,
+      locationId: location.id,
+      quantity: parsed.data.quantity,
+      unit: item.canonicalUnit,
+    },
+  });
+
+  revalidatePath("/inventory");
+  revalidatePath("/inventory/counts");
 }
