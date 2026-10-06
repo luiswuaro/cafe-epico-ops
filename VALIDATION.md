@@ -13,24 +13,40 @@ Fecha de corte: 2026-10-06.
   - espresso de 28 s dentro de 22–35 s y 38 s fuera de especificación.
   - recurrencia semanal en viernes.
   - recurrencia cada 3 días.
-- Escaneo TypeScript sin resolución de dependencias: sin errores sintácticos inesperados; los únicos errores observados correspondieron a módulos/tipos externos no instalados.
+- Proyecto Supabase real creado: `cafe-epico-ops` en `us-east-1`.
+- Migración base V0.1 aplicada correctamente sobre Supabase.
+- Seed operativo aplicado: Café Épico, Tepexi, ubicaciones, roles, permisos, Azucena, propietario, checklist, espresso base y SOPs.
+- RLS habilitado en las 43 tablas.
+- Integridad de `employee_roles` corregida con PK UUID.
+- Índices FK revisados: 71 avisos iniciales → 0 FK sin índice.
+- Duplicados de índices eliminados.
 
-## Validaciones que NO se pudieron ejecutar en este entorno
+## Validación automatizada
 
-- `npm install` no completó dentro del límite del entorno, por lo que no existe `node_modules` ni `package-lock.json` generado aquí.
-- Por lo anterior, no se pudo ejecutar de forma verificable `npm run build`, `npm run lint` ni el `npm run typecheck` completo con dependencias.
-- No hay una instancia PostgreSQL/Supabase disponible en este entorno, por lo que la migración no ha sido aplicada a una base real todavía.
-- No hay credenciales reales de Loyverse ni Supabase en este paquete; no se hizo una sincronización contra la cuenta de Café Épico.
-
-## Criterio antes de despliegue
-
-En una estación con Node y acceso de red:
+GitHub Actions ejecuta:
 
 ```bash
-npm install
+npm install --no-audit --no-fund
+npm run validate:structure
 npm run typecheck
 npm run lint
 npm run build
 ```
 
-Después, en un proyecto Supabase de desarrollo, aplicar `db/migrations/0000_v0_1_core.sql` y `db/seed.sql` y hacer una sincronización Loyverse primero con permisos de solo lectura.
+El merge de V0.1 queda condicionado a que ese pipeline pase.
+
+## Pendiente antes de uso operativo
+
+- Crear usuarios en Supabase Auth y vincularlos a los empleados internos:
+  - propietario → OWNER
+  - Azucena → BARISTA
+- Configurar `DATABASE_URL` y variables públicas de Supabase en el proveedor de despliegue.
+- Configurar `LOYVERSE_ACCESS_TOKEN` exclusivamente como secreto de servidor.
+- Ejecutar primera sincronización Loyverse en modo solo lectura.
+- Validar en PC y móvil: login, apertura, espresso QC, recetas, SOPs y entrega de turno.
+
+## Seguridad
+
+- El token de Loyverse y cualquier clave secreta permanecen fuera del repositorio.
+- El Data API de Supabase permanece deny-by-default en las tablas sin policy explícita.
+- La V0.1 no escribe a Loyverse.
