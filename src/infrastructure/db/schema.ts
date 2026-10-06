@@ -329,6 +329,8 @@ export const checklistRunTasks = pgTable("checklist_run_tasks", {
   inputTypeSnapshot: checklistInputTypeEnum("input_type_snapshot").notNull(),
   sopVersionId: uuid("sop_version_id").references(() => sopVersions.id, { onDelete: "set null" }),
   status: checklistTaskStatusEnum("status").notNull().default("PENDING"),
+  startedByEmployeeId: uuid("started_by_employee_id").references(() => employees.id, { onDelete: "set null" }),
+  startedAt: timestamp("started_at", { withTimezone: true }),
   completedByEmployeeId: uuid("completed_by_employee_id").references(() => employees.id, { onDelete: "set null" }),
   completedAt: timestamp("completed_at", { withTimezone: true }),
   numericValue: numeric("numeric_value", { precision: 18, scale: 3 }),
