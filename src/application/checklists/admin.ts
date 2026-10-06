@@ -9,7 +9,7 @@ export async function getChecklistAdminData(organizationId: string, storeCode: s
   const tasks = templates.length ? await db.select({
     id: checklistTasks.id, templateId: checklistTasks.checklistTemplateId, title: checklistTasks.title, area: checklistTasks.area,
     priority: checklistTasks.priority, inputType: checklistTasks.inputType, required: checklistTasks.isRequired, active: checklistTasks.isActive,
-    sortOrder: checklistTasks.sortOrder, rrule: checklistTaskSchedules.rrule, sopId: checklistTasks.sopId,
+    sortOrder: checklistTasks.sortOrder, targetDurationSeconds: checklistTasks.targetDurationSeconds, rrule: checklistTaskSchedules.rrule, sopId: checklistTasks.sopId,
   }).from(checklistTasks).leftJoin(checklistTaskSchedules, eq(checklistTaskSchedules.checklistTaskId, checklistTasks.id))
     .where(and(eq(checklistTasks.organizationId, organizationId), inArray(checklistTasks.checklistTemplateId, templates.map(t => t.id))))
     .orderBy(asc(checklistTasks.sortOrder)) : [];
