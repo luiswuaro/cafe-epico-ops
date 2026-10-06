@@ -10,14 +10,6 @@ import {
   loyverseVariants,
 } from "@/src/infrastructure/db/schema";
 
-async function countRows(table: typeof loyverseStores, organizationId: string) {
-  const [row] = await getDb()
-    .select({ count: sql<number>`count(*)::int` })
-    .from(table)
-    .where(eq(table.organizationId, organizationId));
-  return row?.count ?? 0;
-}
-
 export async function getLoyverseIntegrationStatus(organizationId: string) {
   const db = getDb();
 
@@ -37,19 +29,37 @@ export async function getLoyverseIntegrationStatus(organizationId: string) {
     .limit(1);
 
   const [
-    stores,
-    items,
-    variants,
-    inventoryLevels,
-    customers,
-    receipts,
+    [storesRow],
+    [itemsRow],
+    [variantsRow],
+    [inventoryRow],
+    [customersRow],
+    [receiptsRow],
   ] = await Promise.all([
-    countRows(loyverseStores, organizationId),
-    countRows(loyverseItems, organizationId),
-    countRows(loyverseVariants, organizationId),
-    countRows(loyverseInventoryLevels, organizationId),
-    countRows(loyverseCustomers, organizationId),
-    countRows(loyverseReceipts, organizationId),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(loyverseStores)
+      .where(eq(loyverseStores.organizationId, organizationId)),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(loyverseItems)
+      .where(eq(loyverseItems.organizationId, organizationId)),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(loyverseVariants)
+      .where(eq(loyverseVariants.organizationId, organizationId)),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(loyverseInventoryLevels)
+      .where(eq(loyverseInventoryLevels.organizationId, organizationId)),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(loyverseCustomers)
+      .where(eq(loyverseCustomers.organizationId, organizationId)),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(loyverseReceipts)
+      .where(eq(loyverseReceipts.organizationId, organizationId)),
   ]);
 
   return {
@@ -57,12 +67,12 @@ export async function getLoyverseIntegrationStatus(organizationId: string) {
     connectionStatus: connection?.status ?? "DISCONNECTED",
     connectionUpdatedAt: connection?.updatedAt ?? null,
     counts: {
-      stores,
-      items,
-      variants,
-      inventoryLevels,
-      customers,
-      receipts,
+      stores: storesRow?.count ?? 0,
+      items: itemsRow?.count ?? 0,
+      variants: variantsRow?.count ?? 0,
+      inventoryLevels: inventoryRow?.count ?? 0,
+      customers: customersRow?.count ?? 0,
+      receipts: receiptsRow?.count ?? 0,
     },
   };
 }
