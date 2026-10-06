@@ -126,6 +126,7 @@ export async function getInventoryOverview(
     return {
       ...item,
       theoretical,
+      hasTheoreticalBalance: Boolean(balance),
       theoreticalUpdatedAt: balance?.updatedAt ?? null,
       physical,
       countedAt: latestPhysical?.countedAt ?? null,
