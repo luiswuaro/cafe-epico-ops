@@ -534,17 +534,24 @@ export default async function LoyverseInventoryMappingPage({
         style={{ marginTop: "1rem" }}
       >
         <p className="eyebrow">3 · IMPORTAR EXISTENCIAS</p>
-        <h2>Tomar Loyverse como teórico actual</h2>
+        <h2>Sincronizar e importar teórico</h2>
         <p>
-          Primero refresca las existencias desde Loyverse y luego lleva cada
-          insumo mapeado al valor convertido mostrado arriba.
+          Un solo clic consulta las existencias actuales de Loyverse y luego
+          lleva cada insumo mapeado al valor convertido mostrado arriba.
         </p>
         <p className="muted">
           No cambia conteos físicos. No borra movimientos anteriores. La
           diferencia se registra como saldo inicial o ajuste manual auditable.
         </p>
+        {data.preview.length === 0 && (
+          <p className="status-warn">
+            Primero vincula al menos un insumo. Loyverse ya puede tener
+            existencias sincronizadas, pero sin mapeo no sabemos si deben
+            convertirse a g, ml o pz.
+          </p>
+        )}
         <button type="submit" disabled={data.preview.length === 0}>
-          Importar existencias desde Loyverse
+          Sincronizar + importar inventario ahora
         </button>
       </form>
 
