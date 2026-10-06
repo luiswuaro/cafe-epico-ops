@@ -1,3 +1,4 @@
+import Link from "next/link";
 import {
   createInventoryItem,
   reportShortage,
@@ -42,7 +43,10 @@ export default async function InventoryPage() {
         <p className="eyebrow">INVENTARIO OPERATIVO</p>
         <h1>Inventario</h1>
         <p className="muted">
-          Catálogo y faltantes. Reportar un faltante no modifica stock.
+          Catálogo, faltantes y conteos. Reportar un faltante o cerrar un conteo no modifica stock teórico.
+        </p>
+        <p style={{ marginTop: "1rem" }}>
+          <Link href="/inventory/counts" className="button">Conteos físicos</Link>
         </p>
       </section>
 
