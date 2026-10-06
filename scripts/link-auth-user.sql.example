@@ -1,0 +1,14 @@
+-- Ejecutar después de crear los usuarios en Supabase Auth.
+-- Sustituir los UUID de Auth. No guardar contraseñas aquí.
+
+-- Propietario principal
+insert into user_profiles(id, display_name)
+values ('<OWNER_AUTH_USER_UUID>', 'Propietario principal')
+on conflict(id) do update set display_name=excluded.display_name;
+update employees set user_id='<OWNER_AUTH_USER_UUID>' where id='00000000-0000-4000-8000-000000000041';
+
+-- Azucena
+insert into user_profiles(id, display_name)
+values ('<AZUCENA_AUTH_USER_UUID>', 'Azucena')
+on conflict(id) do update set display_name=excluded.display_name;
+update employees set user_id='<AZUCENA_AUTH_USER_UUID>' where id='00000000-0000-4000-8000-000000000040';
