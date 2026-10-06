@@ -18,7 +18,7 @@ export default async function TodayPage() {
         <p className="eyebrow">OPERACIÓN · TEPEXI · {summary.businessDate}</p>
         <h1>Hoy en Café Épico</h1>
         <p className="muted">
-          Apertura y control de espresso conectados a datos reales.
+          Apertura, espresso, inventario y entrega conectados a datos reales.
         </p>
       </section>
 
@@ -63,14 +63,34 @@ export default async function TodayPage() {
 
         <article className="card">
           <span className="pill">INVENTARIO</span>
-          <div className="metric">—</div>
-          <p>Faltantes, conteos y FIFO se conectarán en el siguiente bloque.</p>
+          <div className="metric">{summary.inventory.openShortages}</div>
+          <p>
+            {summary.inventory.openShortages === 0
+              ? "Sin faltantes abiertos."
+              : summary.inventory.openShortages === 1
+                ? "1 faltante abierto requiere seguimiento."
+                : `${summary.inventory.openShortages} faltantes abiertos requieren seguimiento.`}
+          </p>
+          <Link href="/inventory">Abrir inventario →</Link>
         </article>
 
         <article className="card">
           <span className="pill">ENTREGA</span>
-          <div className="metric">16:00</div>
-          <p>Barra abastecida, limpia, incidencias, faltantes y corte de turno.</p>
+          <div className="metric">
+            {summary.handoff.completed} / {summary.handoff.total}
+          </div>
+          <p>
+            {summary.handoff.total > 0 &&
+            summary.handoff.completed === summary.handoff.total
+              ? "Entrega de turno completada."
+              : "Barra abastecida, limpieza, incidencias, faltantes y corte de caja."}
+          </p>
+          <Link href="/handoff">
+            {summary.handoff.total > 0 &&
+            summary.handoff.completed === summary.handoff.total
+              ? "Ver entrega →"
+              : "Continuar entrega →"}
+          </Link>
         </article>
       </section>
     </main>
