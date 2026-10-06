@@ -11,6 +11,9 @@ export default async function TodayPage() {
   const openingDone =
     summary.opening.total > 0 &&
     summary.opening.completed === summary.opening.total;
+  const handoffDone =
+    summary.handoff.total > 0 &&
+    summary.handoff.completed === summary.handoff.total;
 
   return (
     <main className="shell">
@@ -18,7 +21,7 @@ export default async function TodayPage() {
         <p className="eyebrow">OPERACIÓN · TEPEXI · {summary.businessDate}</p>
         <h1>Hoy en Café Épico</h1>
         <p className="muted">
-          Apertura y control de espresso conectados a datos reales.
+          Apertura, control de espresso y entrega de turno conectados a datos reales.
         </p>
       </section>
 
@@ -69,8 +72,17 @@ export default async function TodayPage() {
 
         <article className="card">
           <span className="pill">ENTREGA</span>
-          <div className="metric">16:00</div>
-          <p>Barra abastecida, limpia, incidencias, faltantes y corte de turno.</p>
+          <div className="metric">
+            {summary.handoff.completed} / {summary.handoff.total}
+          </div>
+          <p>
+            {handoffDone
+              ? "Entrega de turno completada."
+              : "Barra abastecida, limpia, incidencias, faltantes y corte de turno."}
+          </p>
+          <Link href="/handoff" className="button">
+            {handoffDone ? "Ver entrega" : "Completar entrega"}
+          </Link>
         </article>
       </section>
     </main>
