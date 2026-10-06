@@ -24,7 +24,7 @@ const resourceSchema = z.enum([
   "items",
   "inventory",
   "customers",
-  "receipts90",
+  "receipts31",
 ]);
 
 export async function runLoyverseSync(formData: FormData) {
@@ -89,8 +89,8 @@ export async function runLoyverseSync(formData: FormData) {
     if (resource === "items") count = await syncLoyverseItems();
     if (resource === "inventory") count = await syncLoyverseInventory();
     if (resource === "customers") count = await syncLoyverseCustomers();
-    if (resource === "receipts90") {
-      const since = new Date(Date.now() - 90 * 86_400_000).toISOString();
+    if (resource === "receipts31") {
+      const since = new Date(Date.now() - 31 * 86_400_000).toISOString();
       count = await syncLoyverseReceipts(since);
     }
   } catch (error) {
