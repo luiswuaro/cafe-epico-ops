@@ -8,7 +8,7 @@ export async function getDueChecklistTasks(organizationId: string, storeCode: st
   const rows = await db.select({
     taskId: checklistTasks.id, title: checklistTasks.title, description: checklistTasks.description,
     area: checklistTasks.area, priority: checklistTasks.priority, required: checklistTasks.isRequired,
-    sortOrder: checklistTasks.sortOrder, inputType: checklistTasks.inputType, config: checklistTasks.config, sopVersionId: sops.currentVersionId,
+    sortOrder: checklistTasks.sortOrder, inputType: checklistTasks.inputType, targetDurationSeconds: checklistTasks.targetDurationSeconds, config: checklistTasks.config, sopVersionId: sops.currentVersionId,
     rrule: checklistTaskSchedules.rrule, startDate: checklistTaskSchedules.startDate, timezone: checklistTaskSchedules.timezone,
   }).from(checklistTasks)
     .innerJoin(checklistTemplates, eq(checklistTemplates.id, checklistTasks.checklistTemplateId))
