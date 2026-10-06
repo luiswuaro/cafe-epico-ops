@@ -37,6 +37,7 @@ export async function getOrCreateChecklistRun(storeCode: string, shiftType: stri
         descriptionSnapshot: task.description,
         requiredSnapshot: task.required,
         inputTypeSnapshot: task.inputType,
+        targetDurationSecondsSnapshot: task.targetDurationSeconds,
         sopVersionId: task.sopVersionId,
       })));
     }
