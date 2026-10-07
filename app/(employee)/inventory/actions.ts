@@ -7,7 +7,14 @@ import { z } from "zod";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
 import { assertEmployeePermission } from "@/src/infrastructure/auth/permissions";
 import { getDb } from "@/src/infrastructure/db/client";
-import { auditEvents, inventoryItems, inventoryLocations, inventoryMovements, shortageReports } from "@/src/infrastructure/db/schema";
+import {
+  auditEvents,
+  inventoryItems,
+  inventoryLocations,
+  inventoryMovements,
+  loyverseInventoryMappings,
+  shortageReports,
+} from "@/src/infrastructure/db/schema";
 import {
   getTheoreticalBalance,
   postInventoryMovement,
@@ -274,6 +281,24 @@ export async function adjustInventoryBalance(formData: FormData) {
         ),
       )
       .limit(1),
+    db
+      .select({ id: loyverseInventoryMappings.id })
+      .from(loyverseInventoryMappings)
+      .where(
+        and(
+          eq(
+            loyverseInventoryMappings.organizationId,
+            employee.organizationId,
+          ),
+          eq(loyverseInventoryMappings.storeId, employee.homeStoreId),
+          eq(
+            loyverseInventoryMappings.inventoryItemId,
+            parsed.data.inventoryItemId,
+          ),
+          eq(loyverseInventoryMappings.isActive, true),
+        ),
+      )
+      .limit(1),
   ]);
 
   if (!location || !item) {
@@ -370,7 +395,8 @@ export async function setOpeningInventoryBalance(formData: FormData) {
 
   const db = getDb();
 
-  const [[location], [item], [existingMovement]] = await Promise.all([
+  const [[location], [item], [existingMovement], [activeMapping]] =
+    await Promise.all([
     db
       .select({ id: inventoryLocations.id })
       .from(inventoryLocations)
@@ -412,6 +438,12 @@ export async function setOpeningInventoryBalance(formData: FormData) {
   ]);
 
   if (!location || !item) throw new Error("Insumo o ubicación inválida");
+
+  if (activeMapping) {
+    redirect(
+      `/inventory?location=${parsed.data.locationId}&error=loyverse-mapped-opening`,
+    );
+  }
 
   if (existingMovement) {
     throw new Error(
