@@ -2,6 +2,7 @@ import { eq, isNull, and } from "drizzle-orm";
 import { getDb } from "@/src/infrastructure/db/client";
 import {
   loyverseCategories,
+  loyverseItemSettings,
   loyverseItems,
   loyverseVariants,
 } from "@/src/infrastructure/db/schema";
@@ -90,7 +91,7 @@ function availableForSale(variant: VariantRecord) {
 export async function getLoyverseRecipeSource(organizationId: string) {
   const db = getDb();
 
-  const [items, variants, categories] = await Promise.all([
+  const [items, variants, categories, settings] = await Promise.all([
     db
       .select({
         externalId: loyverseItems.externalId,
@@ -121,6 +122,15 @@ export async function getLoyverseRecipeSource(organizationId: string) {
       })
       .from(loyverseCategories)
       .where(eq(loyverseCategories.organizationId, organizationId)),
+    db
+      .select({
+        variantExternalId: loyverseItemSettings.variantExternalId,
+        displayUnit: loyverseItemSettings.displayUnit,
+        displayFactor: loyverseItemSettings.displayFactor,
+        unitCostOverride: loyverseItemSettings.unitCostOverride,
+      })
+      .from(loyverseItemSettings)
+      .where(eq(loyverseItemSettings.organizationId, organizationId)),
   ]);
 
   const itemById = new Map(
@@ -135,6 +145,46 @@ export async function getLoyverseRecipeSource(organizationId: string) {
   const categoryById = new Map(
     categories.map((category) => [category.externalId, category.name]),
   );
+  const settingByVariant = new Map(
+    settings.map((setting) => [setting.variantExternalId, setting]),
+  );
+
+  const disposablePattern =
+    /(VASO|TAPA|POPOTE|MANGA|FAJILLA|SERVILLETA|BOLSA|CUBIERTO|CHAROLA)/i;
+  const dryPattern =
+    /(CAFE|CAFÉ|MATCHA|TARO|CACAO|POLVO|AZUCAR|AZÚCAR|CANELA|HIELO)/i;
+
+  const presentation = (
+    item: ItemRecord,
+    variant: VariantRecord,
+    quantity: number,
+  ) => {
+    if (asBool(item.payload.is_composite)) {
+      return {
+        displayQuantity: quantity,
+        displayUnit: "receta",
+      };
+    }
+
+    const setting = settingByVariant.get(variant.externalId);
+    const soldByWeight = asBool(item.payload.sold_by_weight);
+    const automaticUnit = soldByWeight
+      ? dryPattern.test(item.itemName)
+        ? "g"
+        : "ml"
+      : "pz";
+    const factor =
+      setting?.displayFactor != null
+        ? Number(setting.displayFactor)
+        : soldByWeight
+          ? 1000
+          : 1;
+
+    return {
+      displayQuantity: quantity * (Number.isFinite(factor) ? factor : 1),
+      displayUnit: setting?.displayUnit ?? automaticUnit,
+    };
+  };
 
   const variantForItem = new Map<string, VariantRecord>();
   for (const variant of variants as VariantRecord[]) {
@@ -158,27 +208,38 @@ export async function getLoyverseRecipeSource(organizationId: string) {
         itemExternalId: null,
         sourceName: ref.variantExternalId,
         quantity: ref.quantity,
+        displayQuantity: ref.quantity,
+        displayUnit: "u.",
         unitLabel: "unidad desconocida",
         category: "Sin resolver",
         isComposite: false,
+        isDisposable: false,
         sku: null,
         unitCost: null,
       };
     }
 
     const categoryId = itemCategoryId(item);
+    const sourceName = variant.variantName || item.itemName;
+    const display = presentation(item, variant, ref.quantity);
+    const setting = settingByVariant.get(variant.externalId);
     return {
       variantExternalId: ref.variantExternalId,
       itemExternalId: item.externalId,
-      sourceName: variant.variantName || item.itemName,
+      sourceName,
       quantity: ref.quantity,
+      displayQuantity: display.displayQuantity,
+      displayUnit: display.displayUnit,
       unitLabel: displayUnit(item),
       category:
         categoryById.get(categoryId) ??
         (categoryId ? "Categoría pendiente de sincronizar" : "Sin categoría"),
       isComposite: asBool(item.payload.is_composite),
+      isDisposable: disposablePattern.test(sourceName),
       sku: variant.sku,
-      unitCost: nullableNumber(variant.payload.cost),
+      unitCost:
+        nullableNumber(setting?.unitCostOverride) ??
+        nullableNumber(variant.payload.cost),
     };
   }
 
@@ -238,7 +299,10 @@ export async function getLoyverseRecipeSource(organizationId: string) {
             ? "Categoría pendiente de sincronizar"
             : "Sin categoría"),
         sku: variant.sku,
-        unitCost: nullableNumber(variant.payload.cost),
+        unitCost:
+          nullableNumber(
+            settingByVariant.get(variant.externalId)?.unitCostOverride,
+          ) ?? nullableNumber(variant.payload.cost),
       });
       return;
     }
