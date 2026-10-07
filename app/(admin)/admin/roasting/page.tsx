@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { startHiBeanRoastImport } from "./import-actions";
 import {
   assignRoastBatchToBar,
   recordRoastBatch,
@@ -368,7 +369,34 @@ export default async function RoastingPage({
       </section>
 
       <section className="card" style={{ marginTop: "1rem" }}>
-        <h2>Registrar batch</h2>
+        <p className="eyebrow">MÉTODO RECOMENDADO · HIBEAN</p>
+        <h2>Importar tueste y confirmar inventario</h2>
+        <p className="muted">
+          Sube el JSON de HiBean/Skywalker. Ops lee café, fecha, peso verde,
+          eventos y curva; también toma la existencia de café verde reportada
+          por HiBean. Antes de guardar, te obliga a confirmar o corregir esa
+          existencia.
+        </p>
+        <form
+          action={startHiBeanRoastImport}
+          encType="multipart/form-data"
+          className="stack"
+        >
+          <label>
+            JSON de HiBean
+            <input
+              name="roastFile"
+              type="file"
+              accept=".json,application/json"
+              required
+            />
+          </label>
+          <button type="submit">Leer JSON y revisar antes de registrar</button>
+        </form>
+      </section>
+
+      <section className="card" style={{ marginTop: "1rem" }}>
+        <h2>Registrar batch manual / otro formato</h2>
         <form
           action={recordRoastBatch}
           className="stack"
@@ -522,9 +550,9 @@ export default async function RoastingPage({
             <p className="eyebrow">CURVA DEL TUESTE</p>
             <h3>Archivo JSON, ALOG o CSV</h3>
             <p className="muted">
-              Recomendado: JSON/ALOG porque conserva mejor la estructura del
-              roast. CSV sigue soportado. Ops normaliza todo internamente a un
-              mismo formato JSON con tiempo, BT, ET, RoR, potencia y aire.
+              Para HiBean usa el importador inteligente de arriba. Este bloque
+              queda para CSV, ALOG o JSON genérico cuando quieras registrar el
+              batch manualmente.
             </p>
             <label>
               Archivo
@@ -572,7 +600,7 @@ export default async function RoastingPage({
               <tr>
                 <th style={{ textAlign: "left" }}>Café</th>
                 <th>Uso</th>
-                <th>Verde interno</th>
+                <th>Café verde</th>
                 <th>Tostado POS</th>
                 <th>Consumo/día</th>
                 <th>Cobertura</th>
@@ -593,9 +621,31 @@ export default async function RoastingPage({
                   </td>
                   <td style={{ textAlign: "right" }}>{lot.targetUse}</td>
                   <td style={{ textAlign: "right" }}>
-                    {lot.greenStockG == null
-                      ? "sin mapear"
-                      : number.format(lot.greenStockG) + " g"}
+                    {lot.greenStockG == null ? (
+                      "sin mapear"
+                    ) : (
+                      <>
+                        {number.format(lot.greenStockG)} g
+                        <div className="muted">
+                          {lot.greenStockSource === "HIBEAN_CONFIRMED"
+                            ? "HiBean · confirmado en Ops"
+                            : "Inventario interno"}
+                        </div>
+                        {lot.greenStockSource === "HIBEAN_CONFIRMED" &&
+                          lot.hibeanInventoryConfirmedAt && (
+                            <div className="muted">
+                              {lot.hibeanInventoryConfirmedAt.toLocaleString(
+                                "es-MX",
+                                {
+                                  timeZone: "America/Mexico_City",
+                                  dateStyle: "short",
+                                  timeStyle: "short",
+                                },
+                              )}
+                            </div>
+                          )}
+                      </>
+                    )}
                   </td>
                   <td style={{ textAlign: "right" }}>
                     {lot.loyverseStockG == null
