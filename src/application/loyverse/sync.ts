@@ -15,6 +15,13 @@ const record = (value: unknown) =>
   value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
+export function loyverseReceiptWindowStart(daysIncludingToday = 30) {
+  const safeDays = Math.min(30, Math.max(1, daysIncludingToday));
+  return new Date(
+    Date.now() - (safeDays - 1) * 86_400_000,
+  ).toISOString();
+}
+
 const variantInventoryMeta = (
   payload: Record<string, unknown> | undefined,
   storeExternalId: string,
@@ -270,7 +277,7 @@ export async function syncLoyverseReceipts(updatedAtMin?: string) {
 }
 
 export async function initialSyncLoyverse(receiptBackfillDays = 30) {
-  const receiptSince = new Date(Date.now() - receiptBackfillDays * 86_400_000).toISOString();
+  const receiptSince = loyverseReceiptWindowStart(receiptBackfillDays);
   const stores = await syncLoyverseStores();
   const categories = await syncLoyverseCategories();
   const items = await syncLoyverseItems();
