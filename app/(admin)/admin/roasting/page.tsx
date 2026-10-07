@@ -148,6 +148,73 @@ export default async function RoastingPage({
 
       <section className="grid" style={{ marginTop: "1rem" }}>
         <article className="card">
+          <h2>Aprendizaje por reposo</h2>
+          <p className="muted">
+            Cruza la edad real del batch con los controles de Espresso QC.
+            No usa una ventana genérica: aprende de tus propios registros.
+          </p>
+          <div className="stack">
+            {data.restPerformance.map((row) => (
+              <div className="task" key={row.key}>
+                <strong>{row.key} días</strong>
+                <span>
+                  {row.samples} QC
+                  {row.passRate == null
+                    ? ""
+                    : " · técnico " + row.passRate.toFixed(0) + "%"}
+                  {row.sensoryCorrectRate == null
+                    ? ""
+                    : " · sensorial " +
+                      row.sensoryCorrectRate.toFixed(0) +
+                      "%"}
+                </span>
+              </div>
+            ))}
+          </div>
+          {data.empiricalRest && (
+            <p className="status-ok" style={{ marginTop: ".7rem" }}>
+              Mejor ventana observada: {data.empiricalRest.key} días · n=
+              {data.empiricalRest.samples}
+            </p>
+          )}
+        </article>
+
+        <article className="card">
+          <h2>Repetibilidad por perfil</h2>
+          <div className="stack">
+            {data.profilePerformance.map((row) => (
+              <div className="task" key={row.id}>
+                <div>
+                  <strong>{row.name}</strong>
+                  <div className="muted">
+                    {row.samples} batch(es)
+                  </div>
+                </div>
+                <div style={{ textAlign: "right" }}>
+                  {row.fullComplianceRate == null
+                    ? "—"
+                    : row.fullComplianceRate.toFixed(0) + "% perfil"}
+                  <div className="muted">
+                    {row.meanAbsDtrDeviation == null
+                      ? ""
+                      : "ΔDTR " +
+                        row.meanAbsDtrDeviation.toFixed(2) +
+                        " pp"}
+                    {row.meanAbsLossDeviation == null
+                      ? ""
+                      : " · Δmerma " +
+                        row.meanAbsLossDeviation.toFixed(2) +
+                        " pp"}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </article>
+      </section>
+
+      <section className="grid" style={{ marginTop: "1rem" }}>
+        <article className="card">
           <h2>Café actualmente en barra</h2>
           {data.assignments.length === 0 ? (
             <p className="muted">No hay batches asignados.</p>
