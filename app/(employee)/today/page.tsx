@@ -257,7 +257,17 @@ export default async function TodayPage({
               pendiente(s) de conciliación cuando aplique.
             </p>
           )}
-          <Link href="/inventory">Abrir inventario →</Link>
+          <Link
+            href={
+              cockpit.inventoryCorrectionCount > 0
+                ? "/today#conteo-rapido"
+                : "/inventory"
+            }
+          >
+            {cockpit.inventoryCorrectionCount > 0
+              ? "Contar existencias →"
+              : "Abrir inventario →"}
+          </Link>
         </article>
       </section>
 
@@ -512,11 +522,11 @@ export default async function TodayPage({
             {cockpit.lossSummary.remakeRate == null
               ? "Sin base de ventas sincronizada para calcular tasa."
               : cockpit.lossSummary.remakeRate.toFixed(1) +
-                "% de las unidades vendidas sincronizadas hoy."}
+                "% de las bebidas vendidas sincronizadas hoy."}
           </p>
           <p className="muted">
-            Base sincronizada:{" "}
-            {number.format(cockpit.lossSummary.soldUnitsToday)} unidad(es) ·
+            Base de bebidas sincronizada:{" "}
+            {number.format(cockpit.lossSummary.soldUnitsToday)} bebida(s) ·
             costo de insumo asociado ≈{" "}
             {money.format(cockpit.lossSummary.estimatedRemakeCost)}.
           </p>
