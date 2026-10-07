@@ -1,7 +1,10 @@
+import { and, desc, eq, isNull } from "drizzle-orm";
 import { getBusinessAnalytics } from "@/src/application/analytics/business";
 import { getInventoryIntelligence } from "@/src/application/loyverse/inventory-intelligence";
 import { getProductivityReport } from "@/src/application/reports/productivity";
 import { getRoastingDashboard } from "@/src/application/roasting/dashboard";
+import { getDb } from "@/src/infrastructure/db/client";
+import { operationalEvents } from "@/src/infrastructure/db/schema";
 
 type Decision = {
   level: "ACTION" | "WATCH" | "INFO";
@@ -21,12 +24,30 @@ function median(values: number[]) {
 }
 
 export async function getDecisionCenter(organizationId: string) {
-  const [analytics, inventory, roasting, productivity] =
+  const [analytics, inventory, roasting, productivity, openEvents] =
     await Promise.all([
       getBusinessAnalytics(organizationId),
       getInventoryIntelligence(organizationId),
       getRoastingDashboard(organizationId),
       getProductivityReport(organizationId, 14),
+      getDb()
+        .select({
+          id: operationalEvents.id,
+          eventType: operationalEvents.eventType,
+          severity: operationalEvents.severity,
+          itemNameSnapshot: operationalEvents.itemNameSnapshot,
+          note: operationalEvents.note,
+          occurredAt: operationalEvents.occurredAt,
+        })
+        .from(operationalEvents)
+        .where(
+          and(
+            eq(operationalEvents.organizationId, organizationId),
+            isNull(operationalEvents.resolvedAt),
+          ),
+        )
+        .orderBy(desc(operationalEvents.occurredAt))
+        .limit(50),
     ]);
 
   const today = analytics.periods.find((period) => period.key === "today")!;
@@ -184,6 +205,31 @@ export async function getDecisionCenter(organizationId: string) {
     });
   }
 
+  const actionableEvents = openEvents.filter((event) =>
+    ["EQUIPMENT", "STOCK", "SERVICE", "OTHER"].includes(event.eventType),
+  );
+  if (actionableEvents.length > 0) {
+    const first = actionableEvents[0];
+    decisions.push({
+      level:
+        first.severity === "CRITICAL"
+          ? "ACTION"
+          : first.severity === "IMPORTANT"
+            ? "WATCH"
+            : "INFO",
+      area: "PERSONAL",
+      title:
+        actionableEvents.length +
+        " incidencia(s) operativa(s) abiertas",
+      detail:
+        (first.itemNameSnapshot
+          ? first.itemNameSnapshot + " · "
+          : "") +
+        (first.note ?? first.eventType),
+      href: "/admin/operations/events",
+    });
+  }
+
   const productivityWatch = productivity.employeeSummaries
     .filter(
       (employee) =>
@@ -295,6 +341,7 @@ export async function getDecisionCenter(organizationId: string) {
       avgRoastLoss30: roasting.summary.avgLoss30,
       activeRoastAssignments: roasting.summary.activeAssignments,
       measuredTasks14: productivity.measuredTasks,
+      openOperationalEvents: actionableEvents.length,
     },
     decisions: orderedDecisions,
     menuEngineering,
