@@ -272,9 +272,19 @@ export default async function DecisionCenterPage() {
               <div className="task" key={event.id}>
                 <div style={{ flex: 1 }}>
                   <strong>{event.itemNameSnapshot ?? event.eventType}</strong>{" "}
+                  {event.eventType === "STOCK_COUNT" && (
+                    <span className="pill">CONTEO FÍSICO</span>
+                  )}
                   {event.severity !== "NORMAL" && (
                     <span className="status-warn">{event.severity}</span>
                   )}
+                  {event.eventType === "STOCK_COUNT" &&
+                    event.displayQuantity != null && (
+                      <div>
+                        Conteo: <strong>{Number(event.displayQuantity).toFixed(2)}{" "}
+                        {event.displayUnit ?? "u."}</strong>
+                      </div>
+                    )}
                   <div>{event.note ?? "Sin nota"}</div>
                   <div className="muted">
                     {event.occurredAt.toLocaleString("es-MX", {
@@ -284,10 +294,15 @@ export default async function DecisionCenterPage() {
                     })}
                   </div>
                 </div>
-                {event.eventType === "BAR_INCIDENT" && (
+                {(event.eventType === "BAR_INCIDENT" ||
+                  event.eventType === "STOCK_COUNT") && (
                   <form action={resolveOperationalIncident}>
                     <input type="hidden" name="eventId" value={event.id} />
-                    <button type="submit">Resolver</button>
+                    <button type="submit">
+                      {event.eventType === "STOCK_COUNT"
+                        ? "Marcar conciliado"
+                        : "Resolver"}
+                    </button>
                   </form>
                 )}
               </div>
