@@ -78,6 +78,7 @@ export default async function TodayPage({
     activeRoast: cockpit.activeRoast,
     incidents: cockpit.incidents,
     inventoryCorrectionCount: cockpit.inventoryCorrectionCount,
+    lossSummary: cockpit.lossSummary,
   });
 
   return (
@@ -679,7 +680,11 @@ export default async function TodayPage({
           )}
         </form>
 
-        <form action={reportBarWaste} className="card stack">
+        <form
+          id="registro-merma"
+          action={reportBarWaste}
+          className="card stack"
+        >
           <p className="eyebrow">REGISTRO RÁPIDO</p>
           <h2>Merma / derrame / bebida rehecha</h2>
           <p className="muted">
