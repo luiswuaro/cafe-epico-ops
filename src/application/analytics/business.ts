@@ -3,6 +3,7 @@ import { getDb } from "@/src/infrastructure/db/client";
 import {
   loyverseCategories,
   loyverseCustomers,
+  loyverseItemSettings,
   loyverseItems,
   loyverseReceiptLines,
   loyverseReceipts,
@@ -59,6 +60,16 @@ function num(value: unknown) {
   return Number.isFinite(n) ? n : 0;
 }
 
+function nullableNum(value: unknown) {
+  if (value == null || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function bool(value: unknown) {
+  return value === true || value === "true";
+}
+
 function rec(value: unknown) {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -107,7 +118,7 @@ export async function getBusinessAnalytics(organizationId: string) {
   const db = getDb();
   const since = new Date(Date.now() - 30 * 86_400_000);
 
-  const [receipts, lines, customers, items, variants, categories] =
+  const [receipts, lines, customers, items, variants, categories, settings] =
     await Promise.all([
       db
         .select({
@@ -150,6 +161,7 @@ export async function getBusinessAnalytics(organizationId: string) {
         .select({
           externalId: loyverseVariants.externalId,
           itemExternalId: loyverseVariants.loyverseItemExternalId,
+          payload: loyverseVariants.payload,
         })
         .from(loyverseVariants)
         .where(eq(loyverseVariants.organizationId, organizationId)),
@@ -160,6 +172,15 @@ export async function getBusinessAnalytics(organizationId: string) {
         })
         .from(loyverseCategories)
         .where(eq(loyverseCategories.organizationId, organizationId)),
+      db
+        .select({
+          variantExternalId: loyverseItemSettings.variantExternalId,
+          unitCostOverride: loyverseItemSettings.unitCostOverride,
+          packageQuantityNative: loyverseItemSettings.packageQuantityNative,
+          packagePrice: loyverseItemSettings.packagePrice,
+        })
+        .from(loyverseItemSettings)
+        .where(eq(loyverseItemSettings.organizationId, organizationId)),
     ]);
 
   const receiptById = new Map(
@@ -172,11 +193,87 @@ export async function getBusinessAnalytics(organizationId: string) {
   const categoryById = new Map(
     categories.map((category) => [category.externalId, category.name]),
   );
+  const settingByVariant = new Map(
+    settings.map((setting) => [setting.variantExternalId, setting]),
+  );
+
+  function components(payload: Record<string, unknown>) {
+    const raw = payload.components;
+    if (!Array.isArray(raw)) {
+      return [] as Array<{ variantId: string; quantity: number }>;
+    }
+    return raw.flatMap((value) => {
+      const row = rec(value);
+      const variantId =
+        typeof row.variant_id === "string" ? row.variant_id : "";
+      const quantity = Number(row.quantity);
+      if (!variantId || !Number.isFinite(quantity)) return [];
+      return [{ variantId, quantity }];
+    });
+  }
+
+  const unitCostMemo = new Map<string, number | null>();
+  function currentUnitCost(
+    variantId: string,
+    path = new Set<string>(),
+  ): number | null {
+    if (unitCostMemo.has(variantId)) {
+      return unitCostMemo.get(variantId) ?? null;
+    }
+    if (path.has(variantId)) return null;
+
+    const variant = variantById.get(variantId);
+    const item = variant?.itemExternalId
+      ? itemById.get(variant.itemExternalId)
+      : null;
+    if (!variant || !item) return null;
+
+    const children = components(item.payload);
+    if (bool(item.payload.is_composite) && children.length > 0) {
+      const next = new Set(path);
+      next.add(variantId);
+      let total = 0;
+      for (const child of children) {
+        const childCost = currentUnitCost(child.variantId, next);
+        if (childCost == null) {
+          unitCostMemo.set(variantId, null);
+          return null;
+        }
+        total += childCost * child.quantity;
+      }
+      unitCostMemo.set(variantId, total);
+      return total;
+    }
+
+    const setting = settingByVariant.get(variantId);
+    const override = nullableNum(setting?.unitCostOverride);
+    const packagePrice = nullableNum(setting?.packagePrice);
+    const packageQty = nullableNum(setting?.packageQuantityNative);
+    const packageUnitCost =
+      packagePrice != null && packageQty != null && packageQty > 0
+        ? packagePrice / packageQty
+        : null;
+    const variantPayload = variant.payload;
+    const loyverseCost =
+      nullableNum(variantPayload.cost) ??
+      nullableNum(variantPayload.purchase_cost);
+    const resolved = override ?? packageUnitCost ?? loyverseCost;
+    unitCostMemo.set(variantId, resolved);
+    return resolved;
+  }
 
   const lineByReceipt = new Map<string, LineRollup>();
   const product30 = new Map<
     string,
-    { qty: number; sales: number; cogs: number; discounts: number }
+    {
+      qty: number;
+      sales: number;
+      cogs: number;
+      discounts: number;
+      configuredCogs: number;
+      configuredSales: number;
+      configuredQty: number;
+    }
   >();
   const category30 = new Map<
     string,
@@ -216,11 +313,22 @@ export async function getBusinessAnalytics(organizationId: string) {
       sales: 0,
       cogs: 0,
       discounts: 0,
+      configuredCogs: 0,
+      configuredSales: 0,
+      configuredQty: 0,
     };
     product.qty += qty;
     product.sales += net;
     product.cogs += cogs;
     product.discounts += discounts;
+    if (line.variantExternalId) {
+      const configuredUnitCost = currentUnitCost(line.variantExternalId);
+      if (configuredUnitCost != null) {
+        product.configuredCogs += configuredUnitCost * qty;
+        product.configuredSales += net;
+        product.configuredQty += qty;
+      }
+    }
     product30.set(name, product);
 
     const variant = line.variantExternalId
@@ -396,15 +504,42 @@ export async function getBusinessAnalytics(organizationId: string) {
   }
 
   const topProducts = [...product30.entries()]
-    .map(([name, values]) => ({
-      name,
-      ...values,
-      contribution: values.sales - values.cogs,
-      contributionPct:
-        values.sales > 0
-          ? ((values.sales - values.cogs) / values.sales) * 100
-          : 0,
-    }))
+    .map(([name, values]) => {
+      const configuredCoveragePct =
+        values.qty > 0
+          ? Math.min(100, (values.configuredQty / values.qty) * 100)
+          : 0;
+      const configuredContribution =
+        values.configuredSales - values.configuredCogs;
+      const configuredContributionPct =
+        values.configuredSales > 0
+          ? (configuredContribution / values.configuredSales) * 100
+          : null;
+
+      return {
+        name,
+        ...values,
+        contribution: values.sales - values.cogs,
+        contributionPct:
+          values.sales > 0
+            ? ((values.sales - values.cogs) / values.sales) * 100
+            : 0,
+        configuredCoveragePct,
+        configuredContribution,
+        configuredContributionPct,
+        effectiveContributionPct:
+          configuredCoveragePct >= 80 &&
+          configuredContributionPct != null
+            ? configuredContributionPct
+            : values.sales > 0
+              ? ((values.sales - values.cogs) / values.sales) * 100
+              : 0,
+        costBasis:
+          configuredCoveragePct >= 80
+            ? ("CONFIGURED" as const)
+            : ("LOYVERSE" as const),
+      };
+    })
     .sort((a, b) => b.sales - a.sales)
     .slice(0, 15);
 
