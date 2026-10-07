@@ -3,7 +3,7 @@ alter table public.suppliers
   add column if not exists contact text,
   add column if not exists notes text;
 
-create table if not exists public.loyverse_item_settings (
+create table if not exists loyverse_item_settings (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references public.organizations(id) on delete cascade,
   variant_external_id text not null,
@@ -26,7 +26,7 @@ create unique index if not exists loyverse_item_settings_variant_uidx
 create index if not exists loyverse_item_settings_supplier_idx
   on public.loyverse_item_settings(supplier_id);
 
-create table if not exists public.purchase_plans (
+create table if not exists purchase_plans (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references public.organizations(id) on delete cascade,
   store_id uuid references public.stores(id) on delete set null,
@@ -47,7 +47,7 @@ create index if not exists purchase_plans_org_status_idx
 create index if not exists purchase_plans_date_idx
   on public.purchase_plans(organization_id,planned_for);
 
-create table if not exists public.purchase_plan_lines (
+create table if not exists purchase_plan_lines (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references public.organizations(id) on delete cascade,
   purchase_plan_id uuid not null references public.purchase_plans(id) on delete cascade,
