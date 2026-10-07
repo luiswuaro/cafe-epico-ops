@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { getDb } from "@/src/infrastructure/db/client";
 import { loyverseCategories, loyverseCustomers, loyverseInventoryLevels, loyverseInventorySnapshots, loyverseItems, loyverseReceiptLines, loyverseReceipts, loyverseStores, loyverseVariants, organizations } from "@/src/infrastructure/db/schema";
 import { LoyverseClient } from "@/src/infrastructure/loyverse/client";
@@ -122,7 +122,7 @@ export async function syncLoyverseInventory(updatedAtMin?: string) {
       const inStock = asNumber(level.in_stock);
       const externalUpdatedAt = asDate(level.updated_at);
 
-      const [[previous], [variant]] = await Promise.all([
+      const [[previous], [variant], [latestSnapshot]] = await Promise.all([
         db
           .select({
             inStock: loyverseInventoryLevels.inStock,
@@ -152,15 +152,46 @@ export async function syncLoyverseInventory(updatedAtMin?: string) {
             ),
           )
           .limit(1),
+        db
+          .select({
+            inStock: loyverseInventorySnapshots.inStock,
+            unitCost: loyverseInventorySnapshots.unitCost,
+            lowStock: loyverseInventorySnapshots.lowStock,
+            optimalStock: loyverseInventorySnapshots.optimalStock,
+          })
+          .from(loyverseInventorySnapshots)
+          .where(
+            and(
+              eq(loyverseInventorySnapshots.organizationId, orgId),
+              eq(
+                loyverseInventorySnapshots.variantExternalId,
+                variantExternalId,
+              ),
+              eq(
+                loyverseInventorySnapshots.storeExternalId,
+                storeExternalId,
+              ),
+            ),
+          )
+          .orderBy(desc(loyverseInventorySnapshots.capturedAt))
+          .limit(1),
       ]);
 
       const meta = variantInventoryMeta(
         variant?.payload,
         storeExternalId,
       );
+      const sameNullable = (a: unknown, b: number | null) => {
+        if (a == null && b == null) return true;
+        if (a == null || b == null) return false;
+        return Math.abs(Number(a) - b) < 0.0005;
+      };
       const changed =
-        !previous ||
-        Math.abs(Number(previous.inStock) - inStock) > 0.0005;
+        !latestSnapshot ||
+        Math.abs(Number(latestSnapshot.inStock) - inStock) > 0.0005 ||
+        !sameNullable(latestSnapshot.unitCost, meta.unitCost) ||
+        !sameNullable(latestSnapshot.lowStock, meta.lowStock) ||
+        !sameNullable(latestSnapshot.optimalStock, meta.optimalStock);
 
       await db
         .insert(loyverseInventoryLevels)
