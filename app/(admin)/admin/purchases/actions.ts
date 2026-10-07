@@ -296,12 +296,18 @@ export async function generateSuggestedPurchasePlan(formData: FormData) {
 
 export async function updatePurchasePlan(formData: FormData) {
   const planId = String(formData.get("planId") ?? "");
+  const title = String(formData.get("title") ?? "").trim();
+  const destination =
+    String(formData.get("destination") ?? "").trim() || null;
+  const plannedForRaw =
+    String(formData.get("plannedFor") ?? "").trim() || null;
   const status = String(formData.get("status") ?? "");
   const actualSpendRaw = String(formData.get("actualSpend") ?? "").trim();
   const notes = String(formData.get("notes") ?? "").trim() || null;
 
   if (
     !planId ||
+    !title ||
     !["DRAFT", "PLANNED", "PURCHASED", "CANCELLED"].includes(status)
   ) {
     redirect("/admin/purchases?error=plan");
@@ -315,6 +321,10 @@ export async function updatePurchasePlan(formData: FormData) {
     redirect("/admin/purchases?error=plan");
   }
 
+  const plannedFor = plannedForRaw
+    ? new Date(plannedForRaw + "T12:00:00-06:00")
+    : null;
+
   const { user, employeeId, organizationId } =
     await requirePermission("purchase.manage");
   const db = getDb();
@@ -322,6 +332,9 @@ export async function updatePurchasePlan(formData: FormData) {
   await db
     .update(purchasePlans)
     .set({
+      title,
+      destination,
+      plannedFor,
       status,
       actualSpend: actualSpend == null ? null : String(actualSpend),
       notes,
@@ -341,7 +354,259 @@ export async function updatePurchasePlan(formData: FormData) {
     action: "PURCHASE_PLAN_UPDATED",
     entityType: "purchase_plan",
     entityId: planId,
-    afterData: { status, actualSpend, notes },
+    afterData: {
+      title,
+      destination,
+      plannedFor: plannedFor?.toISOString() ?? null,
+      status,
+      actualSpend,
+      notes,
+    },
+  });
+
+  revalidatePath("/admin/purchases");
+}
+
+export async function updatePurchaseLine(formData: FormData) {
+  const lineId = String(formData.get("lineId") ?? "");
+  const rawSupplier = String(formData.get("supplierId") ?? "").trim();
+  const status = String(formData.get("status") ?? "");
+  const requestedRaw =
+    String(formData.get("requestedNativeQuantity") ?? "").trim();
+  const packageCountRaw =
+    String(formData.get("packageCount") ?? "").trim();
+  const packageName =
+    String(formData.get("packageName") ?? "").trim() || null;
+  const packageQtyRaw =
+    String(formData.get("packageQuantity") ?? "").trim();
+  const unitCostRaw = String(formData.get("unitCost") ?? "").trim();
+  const packagePriceRaw =
+    String(formData.get("packagePrice") ?? "").trim();
+  const actualTotalRaw =
+    String(formData.get("actualTotal") ?? "").trim();
+  const note = String(formData.get("note") ?? "").trim() || null;
+
+  if (
+    !lineId ||
+    !["PENDING", "BOUGHT", "SKIPPED"].includes(status)
+  ) {
+    redirect("/admin/purchases?error=line");
+  }
+
+  const parseOptional = (raw: string) => {
+    if (!raw) return null;
+    const value = Number(raw);
+    return Number.isFinite(value) && value >= 0 ? value : Number.NaN;
+  };
+
+  const requested = parseOptional(requestedRaw);
+  const packageCount = parseOptional(packageCountRaw);
+  const packageQty = parseOptional(packageQtyRaw);
+  const unitCost = parseOptional(unitCostRaw);
+  const packagePrice = parseOptional(packagePriceRaw);
+  const actualTotal = parseOptional(actualTotalRaw);
+
+  if (
+    [requested, packageCount, packageQty, unitCost, packagePrice, actualTotal]
+      .some((value) => value != null && !Number.isFinite(value))
+  ) {
+    redirect("/admin/purchases?error=line");
+  }
+
+  const estimatedTotal =
+    packageCount != null && packagePrice != null
+      ? packageCount * packagePrice
+      : requested != null && unitCost != null
+        ? requested * unitCost
+        : null;
+
+  const { user, employeeId, organizationId } =
+    await requirePermission("purchase.manage");
+  const db = getDb();
+
+  const [line] = await db
+    .select({
+      id: purchasePlanLines.id,
+      purchasePlanId: purchasePlanLines.purchasePlanId,
+    })
+    .from(purchasePlanLines)
+    .where(
+      and(
+        eq(purchasePlanLines.id, lineId),
+        eq(purchasePlanLines.organizationId, organizationId),
+      ),
+    )
+    .limit(1);
+
+  if (!line) redirect("/admin/purchases?error=line");
+
+  await db
+    .update(purchasePlanLines)
+    .set({
+      supplierId: rawSupplier || null,
+      requestedNativeQuantity:
+        requested == null ? null : String(requested),
+      packageCount:
+        packageCount == null ? null : String(packageCount),
+      packageNameSnapshot: packageName,
+      packageQuantitySnapshot:
+        packageQty == null ? null : String(packageQty),
+      unitCostSnapshot:
+        unitCost == null ? null : String(unitCost),
+      packagePriceSnapshot:
+        packagePrice == null ? null : String(packagePrice),
+      estimatedTotal:
+        estimatedTotal == null ? null : String(estimatedTotal),
+      actualTotal:
+        actualTotal == null ? null : String(actualTotal),
+      status,
+      note,
+      updatedAt: new Date(),
+    })
+    .where(eq(purchasePlanLines.id, lineId));
+
+  const budgetRows = await db
+    .select({ total: purchasePlanLines.estimatedTotal })
+    .from(purchasePlanLines)
+    .where(
+      and(
+        eq(purchasePlanLines.purchasePlanId, line.purchasePlanId),
+        eq(purchasePlanLines.organizationId, organizationId),
+      ),
+    );
+  const estimatedBudget = budgetRows.reduce(
+    (sum, row) => sum + Number(row.total ?? 0),
+    0,
+  );
+
+  await db
+    .update(purchasePlans)
+    .set({
+      estimatedBudget: String(estimatedBudget),
+      updatedAt: new Date(),
+    })
+    .where(eq(purchasePlans.id, line.purchasePlanId));
+
+  await db.insert(auditEvents).values({
+    organizationId,
+    actorUserId: user.id,
+    actorEmployeeId: employeeId,
+    action: "PURCHASE_PLAN_LINE_UPDATED",
+    entityType: "purchase_plan_line",
+    entityId: lineId,
+    afterData: {
+      supplierId: rawSupplier || null,
+      requested,
+      packageCount,
+      packageName,
+      packageQty,
+      unitCost,
+      packagePrice,
+      estimatedTotal,
+      actualTotal,
+      status,
+      note,
+    },
+  });
+
+  revalidatePath("/admin/purchases");
+}
+
+export async function addManualPurchaseLine(formData: FormData) {
+  const planId = String(formData.get("planId") ?? "");
+  const itemName = String(formData.get("itemName") ?? "").trim();
+  const rawSupplier = String(formData.get("supplierId") ?? "").trim();
+  const requestedRaw =
+    String(formData.get("requestedNativeQuantity") ?? "").trim();
+  const unitCostRaw = String(formData.get("unitCost") ?? "").trim();
+  const note = String(formData.get("note") ?? "").trim() || null;
+
+  const requested = requestedRaw ? Number(requestedRaw) : null;
+  const unitCost = unitCostRaw ? Number(unitCostRaw) : null;
+
+  if (
+    !planId ||
+    !itemName ||
+    (requested != null && (!Number.isFinite(requested) || requested <= 0)) ||
+    (unitCost != null && (!Number.isFinite(unitCost) || unitCost < 0))
+  ) {
+    redirect("/admin/purchases?error=line");
+  }
+
+  const { user, employeeId, organizationId } =
+    await requirePermission("purchase.manage");
+  const db = getDb();
+
+  const [plan] = await db
+    .select({ id: purchasePlans.id })
+    .from(purchasePlans)
+    .where(
+      and(
+        eq(purchasePlans.id, planId),
+        eq(purchasePlans.organizationId, organizationId),
+      ),
+    )
+    .limit(1);
+
+  if (!plan) redirect("/admin/purchases?error=plan");
+
+  const estimatedTotal =
+    requested != null && unitCost != null ? requested * unitCost : null;
+
+  const [created] = await db
+    .insert(purchasePlanLines)
+    .values({
+      organizationId,
+      purchasePlanId: planId,
+      itemNameSnapshot: itemName,
+      supplierId: rawSupplier || null,
+      requestedNativeQuantity:
+        requested == null ? null : String(requested),
+      unitCostSnapshot: unitCost == null ? null : String(unitCost),
+      estimatedTotal:
+        estimatedTotal == null ? null : String(estimatedTotal),
+      status: "PENDING",
+      note,
+    })
+    .returning({ id: purchasePlanLines.id });
+
+  const budgetRows = await db
+    .select({ total: purchasePlanLines.estimatedTotal })
+    .from(purchasePlanLines)
+    .where(
+      and(
+        eq(purchasePlanLines.purchasePlanId, planId),
+        eq(purchasePlanLines.organizationId, organizationId),
+      ),
+    );
+  const estimatedBudget = budgetRows.reduce(
+    (sum, row) => sum + Number(row.total ?? 0),
+    0,
+  );
+  await db
+    .update(purchasePlans)
+    .set({
+      estimatedBudget: String(estimatedBudget),
+      updatedAt: new Date(),
+    })
+    .where(eq(purchasePlans.id, planId));
+
+  await db.insert(auditEvents).values({
+    organizationId,
+    actorUserId: user.id,
+    actorEmployeeId: employeeId,
+    action: "PURCHASE_PLAN_LINE_ADDED",
+    entityType: "purchase_plan_line",
+    entityId: created.id,
+    afterData: {
+      planId,
+      itemName,
+      supplierId: rawSupplier || null,
+      requested,
+      unitCost,
+      estimatedTotal,
+      note,
+    },
   });
 
   revalidatePath("/admin/purchases");
