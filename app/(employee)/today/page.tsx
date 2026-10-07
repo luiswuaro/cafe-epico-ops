@@ -139,6 +139,13 @@ export default async function TodayPage({
                 {cockpit.latestQc.doseG} g → {cockpit.latestQc.yieldG} g ·{" "}
                 {cockpit.latestQc.sensoryRating} · {time(cockpit.latestQc.createdAt)}
               </p>
+              <p className="muted">
+                Hoy: {cockpit.calibration.attemptsToday} intento(s) ·{" "}
+                {cockpit.calibration.passedToday} aprobado(s)
+                {cockpit.calibration.passRate == null
+                  ? ""
+                  : " · " + cockpit.calibration.passRate.toFixed(0) + "%"}
+              </p>
             </>
           ) : (
             <p className="status-warn">
@@ -172,6 +179,48 @@ export default async function TodayPage({
           </p>
           <Link href="/inventory">Abrir inventario →</Link>
         </article>
+      </section>
+
+      <section className="card" style={{ marginTop: "1rem" }}>
+        <p className="eyebrow">ANTES DEL RUSH</p>
+        <h2>Acciones sugeridas</h2>
+        <p className="muted">
+          Son recomendaciones operativas basadas en QC, stock y demanda
+          histórica comparable.
+        </p>
+        {cockpit.prepActions.length === 0 ? (
+          <p className="status-ok">
+            No hay acciones adicionales sugeridas con los datos actuales.
+          </p>
+        ) : (
+          <div className="stack">
+            {cockpit.prepActions.map((action, index) => (
+              <div className="task" key={action.title + index}>
+                <div style={{ flex: 1 }}>
+                  <strong>{action.title}</strong>
+                  <div
+                    className={
+                      action.priority === "ACTION"
+                        ? "status-warn"
+                        : "muted"
+                    }
+                  >
+                    {action.detail}
+                  </div>
+                </div>
+                {action.href && (
+                  <Link href={action.href}>
+                    <button>
+                      {action.priority === "ACTION"
+                        ? "Resolver"
+                        : "Revisar"}
+                    </button>
+                  </Link>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
       <section className="grid" style={{ marginTop: "1rem" }}>
