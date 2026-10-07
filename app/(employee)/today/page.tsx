@@ -22,6 +22,13 @@ function time(date: Date) {
   });
 }
 
+function expectedRange(value: number) {
+  if (!Number.isFinite(value) || value <= 0) return "—";
+  const low = Math.max(1, Math.floor(value));
+  const high = Math.max(low, Math.ceil(value));
+  return low === high ? String(low) : low + "–" + high;
+}
+
 export default async function TodayPage({
   searchParams,
 }: {
@@ -246,18 +253,22 @@ export default async function TodayPage({
 
       <section className="grid" style={{ marginTop: "1rem" }}>
         <article className="card">
-          <p className="eyebrow">MISE EN PLACE · TURNO {shiftLabel}</p>
-          <h2>Qué probablemente se va a mover</h2>
+          <p className="eyebrow">DEMANDA PROBABLE · TURNO {shiftLabel}</p>
+          <h2>Qué es más probable que pidan</h2>
+          <p className="muted">
+            Rango operativo a partir del promedio de días comparables; no es
+            una cantidad exacta de venta.
+          </p>
           {cockpit.topProducts.length === 0 ? (
             <p className="muted">
               Todavía no hay muestra suficiente del mismo día de la semana.
             </p>
           ) : (
             <div className="stack">
-              {cockpit.topProducts.slice(0, 8).map((row) => (
+              {cockpit.topProducts.slice(0, 7).map((row) => (
                 <div className="task" key={row.name}>
                   <strong>{row.name}</strong>
-                  <span>≈ {number.format(row.expected)}</span>
+                  <span>≈ {expectedRange(row.expected)} bebida(s)</span>
                 </div>
               ))}
             </div>
@@ -265,32 +276,64 @@ export default async function TodayPage({
         </article>
 
         <article className="card">
-          <p className="eyebrow">INSUMOS DEL TURNO</p>
-          <h2>Cobertura contra consumo esperado</h2>
-          <div className="stack">
-            {cockpit.shiftIngredients.slice(0, 8).map((row) => (
-              <div className="task" key={row.variantExternalId}>
-                <div style={{ flex: 1 }}>
-                  <strong>{row.itemName}</strong>
-                  <div className="muted">
-                    Esperado {number.format(row.expected)} {row.unitLabel}
+          <p className="eyebrow">PREPARACIÓN DE ESTACIÓN</p>
+          <h2>Qué dejar listo</h2>
+
+          <p className="eyebrow" style={{ marginTop: ".8rem" }}>
+            DESECHABLES / CONSUMIBLES
+          </p>
+          {cockpit.prepConsumables.length === 0 ? (
+            <p className="muted">Sin consumo calculable.</p>
+          ) : (
+            <div className="stack">
+              {cockpit.prepConsumables.slice(0, 6).map((row) => (
+                <div className="task" key={row.variantExternalId}>
+                  <div style={{ flex: 1 }}>
+                    <strong>{row.itemName}</strong>
+                    <div className="muted">
+                      mínimo sugerido por demanda del turno
+                    </div>
+                  </div>
+                  <strong>
+                    {number.format(row.prepQuantity)} {row.unitLabel}
+                  </strong>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <p className="eyebrow" style={{ marginTop: "1rem" }}>
+            INGREDIENTES
+          </p>
+          {cockpit.prepIngredients.length === 0 ? (
+            <p className="muted">Sin consumo calculable.</p>
+          ) : (
+            <div className="stack">
+              {cockpit.prepIngredients.slice(0, 5).map((row) => (
+                <div className="task" key={row.variantExternalId}>
+                  <div style={{ flex: 1 }}>
+                    <strong>{row.itemName}</strong>
+                    <div className="muted">
+                      Consumo estimado {number.format(row.expected)}{" "}
+                      {row.unitLabel}
+                    </div>
+                  </div>
+                  <div
+                    className={
+                      row.remainingAfterForecast < 0 ||
+                      row.inventoryNeedsCorrection
+                        ? "status-warn"
+                        : "status-ok"
+                    }
+                  >
+                    {row.inventoryNeedsCorrection
+                      ? "conteo"
+                      : number.format(row.inStock) + " " + row.unitLabel}
                   </div>
                 </div>
-                <div
-                  className={
-                    row.remainingAfterForecast < 0 ||
-                    row.inventoryNeedsCorrection
-                      ? "status-warn"
-                      : "status-ok"
-                  }
-                >
-                  {row.inventoryNeedsCorrection
-                    ? "revisar Loyverse"
-                    : number.format(row.inStock) + " " + row.unitLabel}
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </article>
       </section>
 
@@ -299,8 +342,12 @@ export default async function TodayPage({
         <section className="grid" style={{ marginTop: "1rem" }}>
           {cockpit.unavailableProducts.length > 0 && (
             <article className="card">
-              <p className="eyebrow">NO PROMETER EN BARRA</p>
-              <h2>Productos bloqueados por stock</h2>
+              <p className="eyebrow">NO PROMETER HOY</p>
+              <h2>Productos con demanda reciente bloqueados por stock</h2>
+              <p className="muted">
+                Prioriza productos vendidos recientemente; recetas internas y
+                productos sin movimiento reciente no aparecen aquí.
+              </p>
               <div className="stack">
                 {cockpit.unavailableProducts.slice(0, 8).map((row) => (
                   <div className="task" key={row.variantExternalId}>
@@ -417,15 +464,20 @@ export default async function TodayPage({
             </select>
           </label>
           <label>
-            Cantidad en unidad de Loyverse
+            Cantidad
             <input
               name="quantity"
               type="number"
               step="0.001"
               min="0.001"
               required
+              placeholder="Usa la unidad mostrada junto al insumo"
             />
           </label>
+          <p className="muted">
+            Cada insumo muestra su unidad operativa. Si aparece “u. Loyverse”,
+            todavía falta configurar su unidad legible en Inventario.
+          </p>
           <label>
             Motivo
             <select name="reason" defaultValue="DERRAME">
