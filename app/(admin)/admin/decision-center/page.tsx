@@ -124,6 +124,20 @@ export default async function DecisionCenterPage() {
         </article>
 
         <article className="card">
+          <span className="pill">MERMA · 30 DÍAS</span>
+          <div className="metric">{money.format(snapshot.wasteCost30)}</div>
+          <p>costo de mermas registradas con costo conocido.</p>
+          <p className="muted">
+            {snapshot.wasteCostedEvents30} evento(s) costados ·{" "}
+            {snapshot.wasteUncostedEvents30} sin costo ·{" "}
+            {snapshot.remakes30} bebida(s) rehecha(s)
+          </p>
+          <Link href="/admin/operations/events">
+            Ver mermas e incidencias →
+          </Link>
+        </article>
+
+        <article className="card">
           <span className="pill">PRODUCTIVIDAD · 14 DÍAS</span>
           <div className="metric">{snapshot.measuredTasks14}</div>
           <p>tareas con tiempo medible</p>
