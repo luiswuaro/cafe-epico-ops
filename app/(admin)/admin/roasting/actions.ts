@@ -4,7 +4,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { parseRoastCurveCsv } from "@/src/domain/roasting/curve";
+import { parseRoastCurveInput } from "@/src/domain/roasting/curve";
 import { requirePermission } from "@/src/infrastructure/auth/permissions";
 import { getDb } from "@/src/infrastructure/db/client";
 import {
@@ -55,6 +55,25 @@ function finiteOrNull(value: number | null) {
 
 function validTargetUse(value: string) {
   return ["ESPRESSO", "FILTER", "OMNI"].includes(value);
+}
+
+async function readCurveSource(formData: FormData) {
+  const fileEntry = formData.get("curveFile");
+  if (fileEntry instanceof File && fileEntry.size > 0) {
+    if (fileEntry.size > 5_000_000) {
+      throw new Error("ROAST_CURVE_FILE_TOO_LARGE");
+    }
+    return {
+      raw: await fileEntry.text(),
+      sourceName: fileEntry.name,
+    };
+  }
+
+  const pasted = String(formData.get("curveRaw") ?? "").trim();
+  return {
+    raw: pasted,
+    sourceName: pasted ? "texto pegado" : null,
+  };
 }
 
 export async function saveRoastSettings(formData: FormData) {
@@ -370,7 +389,44 @@ export async function recordRoastBatch(formData: FormData) {
   );
   const dropTimeS = parseSeconds(formData.get("dropTimeS"));
   const dropTempC = optionalNumber(formData.get("dropTempC"));
-  const curveCsv = String(formData.get("curveCsv") ?? "").trim();
+  let curveImport: ReturnType<typeof parseRoastCurveInput> = {
+    points: [],
+    format: "CSV",
+    warnings: [],
+  };
+  let curveSourceName: string | null = null;
+
+  try {
+    const source = await readCurveSource(formData);
+    curveSourceName = source.sourceName;
+    if (source.raw) {
+      const parsed = parseRoastCurveInput(source.raw);
+      curveImport = parsed;
+    }
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message === "ROAST_CURVE_FILE_TOO_LARGE"
+    ) {
+      redirect("/admin/roasting?error=curve-too-large");
+    }
+    throw error;
+  }
+
+  const resolvedChargeTempC =
+    chargeTempC ?? curveImport.events?.charge?.btC ?? null;
+  const resolvedYellowingTimeS =
+    yellowingTimeS ?? curveImport.events?.yellowing?.tS ?? null;
+  const resolvedYellowingTempC =
+    yellowingTempC ?? curveImport.events?.yellowing?.btC ?? null;
+  const resolvedFirstCrackTimeS =
+    firstCrackTimeS ?? curveImport.events?.firstCrack?.tS ?? null;
+  const resolvedFirstCrackTempC =
+    firstCrackTempC ?? curveImport.events?.firstCrack?.btC ?? null;
+  const resolvedDropTimeS =
+    dropTimeS ?? curveImport.events?.drop?.tS ?? null;
+  const resolvedDropTempC =
+    dropTempC ?? curveImport.events?.drop?.btC ?? null;
 
   if (
     !coffeeLotId ||
@@ -383,15 +439,15 @@ export async function recordRoastBatch(formData: FormData) {
     roastedWeightG > greenWeightG ||
     !roastedAtRaw ||
     ![
-      chargeTempC,
+      resolvedChargeTempC,
       turningPointTimeS,
       turningPointTempC,
-      yellowingTimeS,
-      yellowingTempC,
-      firstCrackTimeS,
-      firstCrackTempC,
-      dropTimeS,
-      dropTempC,
+      resolvedYellowingTimeS,
+      resolvedYellowingTempC,
+      resolvedFirstCrackTimeS,
+      resolvedFirstCrackTempC,
+      resolvedDropTimeS,
+      resolvedDropTempC,
     ].every(finiteOrNull)
   ) {
     redirect("/admin/roasting?error=batch");
@@ -405,14 +461,19 @@ export async function recordRoastBatch(formData: FormData) {
   const weightLossPct =
     ((greenWeightG - roastedWeightG) / greenWeightG) * 100;
   const developmentTimeS =
-    firstCrackTimeS != null && dropTimeS != null
-      ? Math.max(0, dropTimeS - firstCrackTimeS)
+    resolvedFirstCrackTimeS != null && resolvedDropTimeS != null
+      ? Math.max(0, resolvedDropTimeS - resolvedFirstCrackTimeS)
       : null;
   const dtrPct =
-    developmentTimeS != null && dropTimeS != null && dropTimeS > 0
-      ? (developmentTimeS / dropTimeS) * 100
+    developmentTimeS != null &&
+    resolvedDropTimeS != null &&
+    resolvedDropTimeS > 0
+      ? (developmentTimeS / resolvedDropTimeS) * 100
       : null;
-  const curveData = curveCsv ? parseRoastCurveCsv(curveCsv) : [];
+  const curveData = curveImport.points;
+  if (curveSourceName && curveData.length === 0) {
+    redirect("/admin/roasting?error=curve-format");
+  }
 
   const { user, employeeId, organizationId } =
     await requirePermission("roast.manage");
@@ -476,21 +537,29 @@ export async function recordRoastBatch(formData: FormData) {
           roastedWeightG: String(roastedWeightG),
           weightLossPct: weightLossPct.toFixed(3),
           chargeTempC:
-            chargeTempC == null ? null : String(chargeTempC),
+            resolvedChargeTempC == null
+              ? null
+              : String(resolvedChargeTempC),
           turningPointTimeS,
           turningPointTempC:
             turningPointTempC == null
               ? null
               : String(turningPointTempC),
-          yellowingTimeS,
+          yellowingTimeS: resolvedYellowingTimeS,
           yellowingTempC:
-            yellowingTempC == null ? null : String(yellowingTempC),
-          firstCrackTimeS,
+            resolvedYellowingTempC == null
+              ? null
+              : String(resolvedYellowingTempC),
+          firstCrackTimeS: resolvedFirstCrackTimeS,
           firstCrackTempC:
-            firstCrackTempC == null ? null : String(firstCrackTempC),
-          dropTimeS,
+            resolvedFirstCrackTempC == null
+              ? null
+              : String(resolvedFirstCrackTempC),
+          dropTimeS: resolvedDropTimeS,
           dropTempC:
-            dropTempC == null ? null : String(dropTempC),
+            resolvedDropTempC == null
+              ? null
+              : String(resolvedDropTempC),
           developmentTimeS,
           dtrPct: dtrPct == null ? null : dtrPct.toFixed(3),
           curveData,
@@ -583,11 +652,16 @@ export async function recordRoastBatch(formData: FormData) {
           greenWeightG,
           roastedWeightG,
           weightLossPct,
-          firstCrackTimeS,
-          dropTimeS,
+          firstCrackTimeS: resolvedFirstCrackTimeS,
+          dropTimeS: resolvedDropTimeS,
           developmentTimeS,
           dtrPct,
           curvePoints: curveData.length,
+          curveFormat: curveImport.format,
+          curveSourceName,
+          curveWarnings: curveImport.warnings,
+          curveMetadata: curveImport.metadata ?? null,
+          curveEvents: curveImport.events ?? null,
           inventoryPosted: posted,
         },
       });

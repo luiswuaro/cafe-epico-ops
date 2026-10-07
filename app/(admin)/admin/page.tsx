@@ -1,6 +1,7 @@
 import { requirePermission } from "@/src/infrastructure/auth/permissions";
 import Link from "next/link";
 const modules = [
+  ["Centro de decisiones", "Prioridades de ventas, inventario, compras, tueste y personal", "/admin/decision-center"],
   ["Checklist", "Plantillas, tareas, frecuencias, roles y SOPs", "/admin/checklists"],
   ["Recetas Loyverse", "Recetas madre, componentes y consumo real expandido", "/admin/loyverse/recipes"],
   ["Recetas técnicas QC", "Parámetros de extracción y control técnico", "/admin/recipes"],
@@ -14,6 +15,7 @@ const modules = [
   ["Notas a colaboradores", "Enviar instrucciones visibles en la pantalla principal", "/admin/messages"],
   ["Reportes de turno", "Apertura, entrega, notas, horas y duración de tareas", "/admin/reports/shifts"],
   ["Productividad", "Objetivo vs tiempo real y eficiencia por colaborador", "/admin/reports/productivity"],
+  ["Mermas e incidencias", "Eventos de barra, retrabajos, fallas y seguimiento", "/admin/operations/events"],
   ["Auditoría", "Historial de cambios administrativos", "#"],
 ];
 export default async function AdminPage() { await requirePermission("admin.access"); return <main className="shell"><section className="hero"><p className="eyebrow">ADMINISTRACIÓN</p><h1>Sistema operativo</h1><p className="muted">Pantalla inicial para dueños. RBAC está modelado en base de datos.</p></section><section className="grid">{modules.map(([name,desc,href])=><article className="card" key={name}><h2>{name}</h2><p>{desc}</p><Link href={href}><button>Administrar</button></Link></article>)}</section></main>; }

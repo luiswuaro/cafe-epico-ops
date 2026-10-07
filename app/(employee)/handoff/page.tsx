@@ -3,6 +3,7 @@ import {
   completeChecklistTask,
   startChecklistTask,
 } from "@/app/actions/checklists";
+import { getBaristaCockpit } from "@/src/application/barista/cockpit";
 import { getOrCreateChecklistRun } from "@/src/application/checklists/run";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
 import {
@@ -59,11 +60,14 @@ function timingLabel(
 
 export default async function HandoffPage() {
   const { employee } = await getCurrentEmployee();
-  const { run, tasks } = await getOrCreateChecklistRun(
-    process.env.DEFAULT_STORE_CODE ?? "TEPEXI",
-    "HANDOFF",
-    employee.id,
-  );
+  const [{ run, tasks }, cockpit] = await Promise.all([
+    getOrCreateChecklistRun(
+      process.env.DEFAULT_STORE_CODE ?? "TEPEXI",
+      "HANDOFF",
+      employee.id,
+    ),
+    getBaristaCockpit(employee),
+  ]);
 
   const completed = tasks.filter((task) => task.status === "COMPLETED").length;
   const done = tasks.length > 0 && completed === tasks.length;
@@ -78,6 +82,84 @@ export default async function HandoffPage() {
         </p>
         {done && <p className="status-ok">Entrega completada.</p>}
       </section>
+
+      <section className="grid" style={{ marginBottom: "1rem" }}>
+        <article className="card">
+          <p className="eyebrow">CAFÉ QUE RECIBE EL SIGUIENTE TURNO</p>
+          {cockpit.activeRoast ? (
+            <>
+              <h2>{cockpit.activeRoast.lotName}</h2>
+              <p>
+                Batch <strong>{cockpit.activeRoast.batchCode}</strong> ·{" "}
+                {cockpit.activeRoast.ageDays.toFixed(1)} d post-tueste
+              </p>
+              <p className="muted">
+                QC hoy: {cockpit.calibration.attemptsToday} intento(s) ·{" "}
+                {cockpit.calibration.passedToday} aprobado(s)
+                {cockpit.calibration.passRate == null
+                  ? ""
+                  : " · " + cockpit.calibration.passRate.toFixed(0) + "%"}
+              </p>
+            </>
+          ) : (
+            <p className="status-warn">
+              No hay batch de espresso asignado.
+            </p>
+          )}
+        </article>
+
+        <article className="card">
+          <p className="eyebrow">RIESGOS QUE DEBEN QUEDAR DICHOS</p>
+          <h2>
+            {cockpit.shiftRisks.length + cockpit.incidents.length} pendiente(s)
+          </h2>
+          {cockpit.shiftRisks.length === 0 &&
+          cockpit.incidents.length === 0 ? (
+            <p className="status-ok">
+              Sin riesgos de stock ni incidencias abiertas.
+            </p>
+          ) : (
+            <div className="stack">
+              {cockpit.shiftRisks.slice(0, 4).map((risk) => (
+                <div className="task" key={risk.variantExternalId}>
+                  <div>
+                    <strong>{risk.itemName}</strong>
+                    <div className="status-warn">
+                      Stock {risk.inStock.toFixed(2)} {risk.unitLabel} ·
+                      esperado {risk.expectedShift.toFixed(2)}
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {cockpit.incidents.slice(0, 4).map((incident) => (
+                <div className="task" key={incident.id}>
+                  <div>
+                    <strong>{incident.area ?? "Barra"}</strong>
+                    <div>{incident.note}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </article>
+      </section>
+
+      {cockpit.unavailableProducts.length > 0 && (
+        <section className="card" style={{ marginBottom: "1rem" }}>
+          <p className="eyebrow">PRODUCTOS NO DISPONIBLES</p>
+          <h2>No dejar que el siguiente turno los prometa</h2>
+          <div className="stack">
+            {cockpit.unavailableProducts.slice(0, 8).map((row) => (
+              <div className="task" key={row.variantExternalId}>
+                <strong>{row.itemName}</strong>
+                <span className="status-warn">
+                  Falta: {row.blockers.join(", ")}
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       <article className="card">
         {tasks.map((task) => (

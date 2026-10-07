@@ -52,7 +52,9 @@ export default async function AnalyticsPage({
         <p className="muted">
           Ventana gratuita de Loyverse: hasta 30 días contando el día corriente.
           COGS POS conserva el costo grabado en cada ticket al momento de la
-          venta.
+          venta. En productos con cobertura suficiente de costos configurados,
+          la tabla también calcula un margen efectivo reconstruido desde receta
+          e insumos actuales.
         </p>
       </section>
 
@@ -181,8 +183,14 @@ export default async function AnalyticsPage({
           </div>
           <p>de la venta ocurre desde las 16:00.</p>
           <p className="muted">
-            Mañana {money0.format(period30.morningSales)} · tarde{" "}
-            {money0.format(period30.afternoonSales)}.
+            Mañana {money0.format(period30.morningSales)} ·{" "}
+            {number.format(period30.morningBeverageUnits)} bebidas ·{" "}
+            {period30.morningTickets} tickets.
+          </p>
+          <p className="muted">
+            Tarde {money0.format(period30.afternoonSales)} ·{" "}
+            {number.format(period30.afternoonBeverageUnits)} bebidas ·{" "}
+            {period30.afternoonTickets} tickets.
           </p>
         </article>
 
@@ -209,6 +217,21 @@ export default async function AnalyticsPage({
           <p className="muted">
             {data.loyalty.new7} altas 7d · {data.loyalty.new15} altas 15d ·{" "}
             {data.loyalty.new30} altas 30d.
+          </p>
+          <p className="muted">
+            Ritmo 7d {data.loyalty.newPerDay7.toFixed(2)}/día · proyección a
+            30 días {data.loyalty.projected30At7dPace.toFixed(0)} altas ·
+            tendencia{" "}
+            {data.loyalty.trendPct == null
+              ? "sin base previa comparable"
+              : (data.loyalty.trendPct > 0 ? "+" : "") +
+                data.loyalty.trendPct.toFixed(1) +
+                "% vs ritmo 30d"}
+          </p>
+          <p className="muted">
+            {data.loyalty.anonymousTickets30} tickets de 30 días no tienen
+            cliente identificado; son oportunidades de captura, no personas
+            únicas.
           </p>
         </article>
       </section>
@@ -394,8 +417,9 @@ export default async function AnalyticsPage({
                 <th>Venta</th>
                 <th>Descuento</th>
                 <th>COGS POS</th>
-                <th>Contribución</th>
-                <th>Margen</th>
+                <th>Contribución POS</th>
+                <th>Margen efectivo</th>
+                <th>Base costo</th>
               </tr>
             </thead>
             <tbody>
@@ -418,7 +442,15 @@ export default async function AnalyticsPage({
                     {money0.format(item.contribution)}
                   </td>
                   <td style={{ textAlign: "right" }}>
-                    {item.contributionPct.toFixed(1)}%
+                    {item.effectiveContributionPct.toFixed(1)}%
+                  </td>
+                  <td style={{ textAlign: "right" }}>
+                    {item.costBasis === "CONFIGURED"
+                      ? "Receta/config."
+                      : "Loyverse"}
+                    <div className="muted">
+                      cobertura {item.configuredCoveragePct.toFixed(0)}%
+                    </div>
                   </td>
                 </tr>
               ))}

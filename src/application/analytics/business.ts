@@ -3,6 +3,7 @@ import { getDb } from "@/src/infrastructure/db/client";
 import {
   loyverseCategories,
   loyverseCustomers,
+  loyverseItemSettings,
   loyverseItems,
   loyverseReceiptLines,
   loyverseReceipts,
@@ -11,6 +12,7 @@ import {
 
 type LineRollup = {
   units: number;
+  beverageUnits: number;
   gross: number;
   net: number;
   cogs: number;
@@ -38,6 +40,10 @@ type PeriodMetrics = {
   captureRate: number;
   morningSales: number;
   afternoonSales: number;
+  morningTickets: number;
+  afternoonTickets: number;
+  morningBeverageUnits: number;
+  afternoonBeverageUnits: number;
   previousSales: number | null;
   previousTickets: number | null;
   salesChangePct: number | null;
@@ -57,6 +63,16 @@ const FOOD_NAMES = new Set([
 function num(value: unknown) {
   const n = Number(value ?? 0);
   return Number.isFinite(n) ? n : 0;
+}
+
+function nullableNum(value: unknown) {
+  if (value == null || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function bool(value: unknown) {
+  return value === true || value === "true";
 }
 
 function rec(value: unknown) {
@@ -107,7 +123,7 @@ export async function getBusinessAnalytics(organizationId: string) {
   const db = getDb();
   const since = new Date(Date.now() - 30 * 86_400_000);
 
-  const [receipts, lines, customers, items, variants, categories] =
+  const [receipts, lines, customers, items, variants, categories, settings] =
     await Promise.all([
       db
         .select({
@@ -150,6 +166,7 @@ export async function getBusinessAnalytics(organizationId: string) {
         .select({
           externalId: loyverseVariants.externalId,
           itemExternalId: loyverseVariants.loyverseItemExternalId,
+          payload: loyverseVariants.payload,
         })
         .from(loyverseVariants)
         .where(eq(loyverseVariants.organizationId, organizationId)),
@@ -160,6 +177,15 @@ export async function getBusinessAnalytics(organizationId: string) {
         })
         .from(loyverseCategories)
         .where(eq(loyverseCategories.organizationId, organizationId)),
+      db
+        .select({
+          variantExternalId: loyverseItemSettings.variantExternalId,
+          unitCostOverride: loyverseItemSettings.unitCostOverride,
+          packageQuantityNative: loyverseItemSettings.packageQuantityNative,
+          packagePrice: loyverseItemSettings.packagePrice,
+        })
+        .from(loyverseItemSettings)
+        .where(eq(loyverseItemSettings.organizationId, organizationId)),
     ]);
 
   const receiptById = new Map(
@@ -172,11 +198,87 @@ export async function getBusinessAnalytics(organizationId: string) {
   const categoryById = new Map(
     categories.map((category) => [category.externalId, category.name]),
   );
+  const settingByVariant = new Map(
+    settings.map((setting) => [setting.variantExternalId, setting]),
+  );
+
+  function components(payload: Record<string, unknown>) {
+    const raw = payload.components;
+    if (!Array.isArray(raw)) {
+      return [] as Array<{ variantId: string; quantity: number }>;
+    }
+    return raw.flatMap((value) => {
+      const row = rec(value);
+      const variantId =
+        typeof row.variant_id === "string" ? row.variant_id : "";
+      const quantity = Number(row.quantity);
+      if (!variantId || !Number.isFinite(quantity)) return [];
+      return [{ variantId, quantity }];
+    });
+  }
+
+  const unitCostMemo = new Map<string, number | null>();
+  function currentUnitCost(
+    variantId: string,
+    path = new Set<string>(),
+  ): number | null {
+    if (unitCostMemo.has(variantId)) {
+      return unitCostMemo.get(variantId) ?? null;
+    }
+    if (path.has(variantId)) return null;
+
+    const variant = variantById.get(variantId);
+    const item = variant?.itemExternalId
+      ? itemById.get(variant.itemExternalId)
+      : null;
+    if (!variant || !item) return null;
+
+    const children = components(item.payload);
+    if (bool(item.payload.is_composite) && children.length > 0) {
+      const next = new Set(path);
+      next.add(variantId);
+      let total = 0;
+      for (const child of children) {
+        const childCost = currentUnitCost(child.variantId, next);
+        if (childCost == null) {
+          unitCostMemo.set(variantId, null);
+          return null;
+        }
+        total += childCost * child.quantity;
+      }
+      unitCostMemo.set(variantId, total);
+      return total;
+    }
+
+    const setting = settingByVariant.get(variantId);
+    const override = nullableNum(setting?.unitCostOverride);
+    const packagePrice = nullableNum(setting?.packagePrice);
+    const packageQty = nullableNum(setting?.packageQuantityNative);
+    const packageUnitCost =
+      packagePrice != null && packageQty != null && packageQty > 0
+        ? packagePrice / packageQty
+        : null;
+    const variantPayload = variant.payload;
+    const loyverseCost =
+      nullableNum(variantPayload.cost) ??
+      nullableNum(variantPayload.purchase_cost);
+    const resolved = override ?? packageUnitCost ?? loyverseCost;
+    unitCostMemo.set(variantId, resolved);
+    return resolved;
+  }
 
   const lineByReceipt = new Map<string, LineRollup>();
   const product30 = new Map<
     string,
-    { qty: number; sales: number; cogs: number; discounts: number }
+    {
+      qty: number;
+      sales: number;
+      cogs: number;
+      discounts: number;
+      configuredCogs: number;
+      configuredSales: number;
+      configuredQty: number;
+    }
   >();
   const category30 = new Map<
     string,
@@ -193,36 +295,10 @@ export async function getBusinessAnalytics(organizationId: string) {
     const net = num(payload.total_money ?? line.grossTotalMoney);
     const cogs = num(payload.cost_total ?? num(payload.cost) * qty);
     const discounts = num(payload.total_discount);
-    const current = lineByReceipt.get(line.receiptExternalId) ?? {
-      units: 0,
-      gross: 0,
-      net: 0,
-      cogs: 0,
-      discounts: 0,
-    };
-    current.units += qty;
-    current.gross += gross;
-    current.net += net;
-    current.cogs += cogs;
-    current.discounts += discounts;
-    lineByReceipt.set(line.receiptExternalId, current);
-
     const name =
       typeof payload.item_name === "string"
         ? payload.item_name
         : "Sin nombre";
-    const product = product30.get(name) ?? {
-      qty: 0,
-      sales: 0,
-      cogs: 0,
-      discounts: 0,
-    };
-    product.qty += qty;
-    product.sales += net;
-    product.cogs += cogs;
-    product.discounts += discounts;
-    product30.set(name, product);
-
     const variant = line.variantExternalId
       ? variantById.get(line.variantExternalId)
       : null;
@@ -233,9 +309,52 @@ export async function getBusinessAnalytics(organizationId: string) {
       typeof item?.payload.category_id === "string"
         ? item.payload.category_id
         : "";
+    const categoryName = categoryById.get(categoryId) ?? "";
+    const lineIsFood =
+      isFood(name) ||
+      categoryName.toUpperCase().includes("ALIMENTO");
+
+    const current = lineByReceipt.get(line.receiptExternalId) ?? {
+      units: 0,
+      beverageUnits: 0,
+      gross: 0,
+      net: 0,
+      cogs: 0,
+      discounts: 0,
+    };
+    current.units += qty;
+    if (!lineIsFood) current.beverageUnits += qty;
+    current.gross += gross;
+    current.net += net;
+    current.cogs += cogs;
+    current.discounts += discounts;
+    lineByReceipt.set(line.receiptExternalId, current);
+    const product = product30.get(name) ?? {
+      qty: 0,
+      sales: 0,
+      cogs: 0,
+      discounts: 0,
+      configuredCogs: 0,
+      configuredSales: 0,
+      configuredQty: 0,
+    };
+    product.qty += qty;
+    product.sales += net;
+    product.cogs += cogs;
+    product.discounts += discounts;
+    if (line.variantExternalId) {
+      const configuredUnitCost = currentUnitCost(line.variantExternalId);
+      if (configuredUnitCost != null) {
+        product.configuredCogs += configuredUnitCost * qty;
+        product.configuredSales += net;
+        product.configuredQty += qty;
+      }
+    }
+    product30.set(name, product);
+
     const category =
-      categoryById.get(categoryId) ??
-      (isFood(name) ? "ALIMENTOS" : "SIN CATEGORÍA");
+      categoryName ||
+      (lineIsFood ? "ALIMENTOS" : "SIN CATEGORÍA");
     const cat = category30.get(category) ?? {
       qty: 0,
       sales: 0,
@@ -259,6 +378,10 @@ export async function getBusinessAnalytics(organizationId: string) {
     let identifiedTickets = 0;
     let morningSales = 0;
     let afternoonSales = 0;
+    let morningTickets = 0;
+    let afternoonTickets = 0;
+    let morningBeverageUnits = 0;
+    let afternoonBeverageUnits = 0;
 
     for (const receipt of receipts) {
       if (!receipt.receiptDate) continue;
@@ -283,8 +406,15 @@ export async function getBusinessAnalytics(organizationId: string) {
       ) {
         identifiedTickets += 1;
       }
-      if (local.hour < 16) morningSales += receiptSales;
-      else afternoonSales += receiptSales;
+      if (local.hour < 16) {
+        morningSales += receiptSales;
+        morningTickets += 1;
+        morningBeverageUnits += lineRollup?.beverageUnits ?? 0;
+      } else {
+        afternoonSales += receiptSales;
+        afternoonTickets += 1;
+        afternoonBeverageUnits += lineRollup?.beverageUnits ?? 0;
+      }
     }
 
     const contribution = sales - cogs;
@@ -309,6 +439,10 @@ export async function getBusinessAnalytics(organizationId: string) {
         tickets > 0 ? (identifiedTickets / tickets) * 100 : 0,
       morningSales,
       afternoonSales,
+      morningTickets,
+      afternoonTickets,
+      morningBeverageUnits,
+      afternoonBeverageUnits,
     };
   }
 
@@ -396,15 +530,42 @@ export async function getBusinessAnalytics(organizationId: string) {
   }
 
   const topProducts = [...product30.entries()]
-    .map(([name, values]) => ({
-      name,
-      ...values,
-      contribution: values.sales - values.cogs,
-      contributionPct:
-        values.sales > 0
-          ? ((values.sales - values.cogs) / values.sales) * 100
-          : 0,
-    }))
+    .map(([name, values]) => {
+      const configuredCoveragePct =
+        values.qty > 0
+          ? Math.min(100, (values.configuredQty / values.qty) * 100)
+          : 0;
+      const configuredContribution =
+        values.configuredSales - values.configuredCogs;
+      const configuredContributionPct =
+        values.configuredSales > 0
+          ? (configuredContribution / values.configuredSales) * 100
+          : null;
+
+      return {
+        name,
+        ...values,
+        contribution: values.sales - values.cogs,
+        contributionPct:
+          values.sales > 0
+            ? ((values.sales - values.cogs) / values.sales) * 100
+            : 0,
+        configuredCoveragePct,
+        configuredContribution,
+        configuredContributionPct,
+        effectiveContributionPct:
+          configuredCoveragePct >= 80 &&
+          configuredContributionPct != null
+            ? configuredContributionPct
+            : values.sales > 0
+              ? ((values.sales - values.cogs) / values.sales) * 100
+              : 0,
+        costBasis:
+          configuredCoveragePct >= 80
+            ? ("CONFIGURED" as const)
+            : ("LOYVERSE" as const),
+      };
+    })
     .sort((a, b) => b.sales - a.sales)
     .slice(0, 15);
 
@@ -466,6 +627,21 @@ export async function getBusinessAnalytics(organizationId: string) {
   };
 
   const period30 = periods.find((period) => period.key === "30d")!;
+  const loyaltyNewPerDay7 = loyalty.new7 / 7;
+  const loyaltyNewPerDay30 = loyalty.new30 / 30;
+  const loyaltyTrendPct =
+    loyaltyNewPerDay30 > 0
+      ? ((loyaltyNewPerDay7 - loyaltyNewPerDay30) /
+          loyaltyNewPerDay30) *
+        100
+      : loyaltyNewPerDay7 > 0
+        ? null
+        : 0;
+  const loyaltyProjection30 = loyaltyNewPerDay7 * 30;
+  const anonymousTickets30 = Math.max(
+    0,
+    period30.tickets - period30.identifiedTickets,
+  );
   const peakHour = hourly
     .filter((row) => row.tickets > 0)
     .sort((a, b) => b.sales - a.sales)[0] ?? null;
@@ -528,7 +704,14 @@ export async function getBusinessAnalytics(organizationId: string) {
       .sort((a, b) => b.sales - a.sales),
     topProducts,
     categories30,
-    loyalty,
+    loyalty: {
+      ...loyalty,
+      newPerDay7: loyaltyNewPerDay7,
+      newPerDay30: loyaltyNewPerDay30,
+      trendPct: loyaltyTrendPct,
+      projected30At7dPace: loyaltyProjection30,
+      anonymousTickets30,
+    },
     peakHour,
     suggestions,
   };

@@ -1,9 +1,10 @@
-import { and, eq, gte } from "drizzle-orm";
+import { and, eq, gte, inArray } from "drizzle-orm";
 import { getLoyverseInventoryView } from "@/src/application/loyverse/inventory-view";
 import { getDb } from "@/src/infrastructure/db/client";
 import {
   loyverseInventorySnapshots,
   loyverseItems,
+  operationalEvents,
   loyverseReceiptLines,
   loyverseReceipts,
   loyverseVariants,
@@ -57,6 +58,10 @@ function tomorrowWeekday() {
   return localParts(tomorrow).weekday;
 }
 
+function currentLocalDay() {
+  return localParts(new Date());
+}
+
 function addUsage(
   map: Map<string, UsageBucket>,
   variantId: string,
@@ -89,11 +94,27 @@ export async function getInventoryIntelligence(
       ...inventory,
       smartRows: [],
       recentChanges: [],
+      anomalies: [],
+      unavailableProducts: [],
+      shift: {
+        current: "MORNING" as const,
+        sampleDays: 0,
+        risks: [],
+        traffic: {
+          currentHour: null,
+          nextPeak: null,
+        },
+        topProducts: [],
+      },
       summary: {
         atRisk: 0,
         suggestedPurchases: 0,
         estimatedReplenishmentCost: 0,
         tomorrowSampleDays: 0,
+        todaySampleDays: 0,
+        anomalies: 0,
+        unavailableProducts: 0,
+        shiftRisks: 0,
       },
     };
   }
@@ -101,7 +122,7 @@ export async function getInventoryIntelligence(
   const since35 = new Date(Date.now() - 35 * 86_400_000);
   const since14 = new Date(Date.now() - 14 * 86_400_000);
 
-  const [items, variants, receipts, lines, snapshots] =
+  const [items, variants, receipts, lines, snapshots, wasteEvents] =
     await Promise.all([
       db
         .select({
@@ -124,6 +145,7 @@ export async function getInventoryIntelligence(
         .select({
           externalId: loyverseReceipts.externalId,
           receiptDate: loyverseReceipts.receiptDate,
+          totalMoney: loyverseReceipts.totalMoney,
         })
         .from(loyverseReceipts)
         .where(
@@ -160,6 +182,20 @@ export async function getInventoryIntelligence(
               selectedStore.externalId,
             ),
             gte(loyverseInventorySnapshots.capturedAt, since35),
+          ),
+        ),
+      db
+        .select({
+          variantExternalId: operationalEvents.variantExternalId,
+          quantity: operationalEvents.quantity,
+          occurredAt: operationalEvents.occurredAt,
+        })
+        .from(operationalEvents)
+        .where(
+          and(
+            eq(operationalEvents.organizationId, organizationId),
+            inArray(operationalEvents.eventType, ["WASTE", "REMAKE"]),
+            gte(operationalEvents.occurredAt, since35),
           ),
         ),
     ]);
@@ -227,8 +263,18 @@ export async function getInventoryIntelligence(
 
   const usage14 = new Map<string, UsageBucket>();
   const usageByDate = new Map<string, Map<string, UsageBucket>>();
+  const productUsageByDate = new Map<
+    string,
+    Map<string, UsageBucket>
+  >();
+  const usageEvents = new Map<
+    string,
+    Array<{ at: Date; quantity: number }>
+  >();
+  const currentDay = currentLocalDay();
   const tomorrowDay = tomorrowWeekday();
   const matchingDates = new Set<string>();
+  const todayMatchingDates = new Set<string>();
 
   for (const line of lines) {
     if (!line.variantExternalId) continue;
@@ -238,6 +284,28 @@ export async function getInventoryIntelligence(
     const local = localParts(receipt.receiptDate);
     const shift =
       local.hour < 16 ? ("morning" as const) : ("afternoon" as const);
+
+    const soldVariant = variantById.get(line.variantExternalId);
+    const soldItem = soldVariant?.loyverseItemExternalId
+      ? itemById.get(soldVariant.loyverseItemExternalId)
+      : null;
+    if (soldItem) {
+      const dayProducts =
+        productUsageByDate.get(local.date) ?? new Map<string, UsageBucket>();
+      const bucket = dayProducts.get(soldItem.itemName) ?? {
+        total: 0,
+        morning: 0,
+        afternoon: 0,
+      };
+      const soldQty = Number(line.quantity);
+      if (Number.isFinite(soldQty)) {
+        bucket.total += soldQty;
+        bucket[shift] += soldQty;
+        dayProducts.set(soldItem.itemName, bucket);
+        productUsageByDate.set(local.date, dayProducts);
+      }
+    }
+
     const expanded = new Map<string, number>();
     expand(
       line.variantExternalId,
@@ -255,39 +323,55 @@ export async function getInventoryIntelligence(
     const dayMap = usageByDate.get(local.date) ?? new Map();
     for (const [variantId, quantity] of expanded) {
       addUsage(dayMap, variantId, quantity, shift);
+      const events = usageEvents.get(variantId) ?? [];
+      events.push({ at: receipt.receiptDate, quantity });
+      usageEvents.set(variantId, events);
     }
     usageByDate.set(local.date, dayMap);
 
     if (local.weekday === tomorrowDay) {
       matchingDates.add(local.date);
     }
-  }
-
-  const tomorrowUsage = new Map<string, UsageBucket>();
-  for (const date of matchingDates) {
-    const day = usageByDate.get(date);
-    if (!day) continue;
-    for (const [variantId, usage] of day) {
-      const current = tomorrowUsage.get(variantId) ?? {
-        total: 0,
-        morning: 0,
-        afternoon: 0,
-      };
-      current.total += usage.total;
-      current.morning += usage.morning;
-      current.afternoon += usage.afternoon;
-      tomorrowUsage.set(variantId, current);
+    if (
+      local.weekday === currentDay.weekday &&
+      local.date !== currentDay.date
+    ) {
+      todayMatchingDates.add(local.date);
     }
   }
 
+  function averageUsageForDates(dates: Set<string>) {
+    const result = new Map<string, UsageBucket>();
+    for (const date of dates) {
+      const day = usageByDate.get(date);
+      if (!day) continue;
+      for (const [variantId, usage] of day) {
+        const current = result.get(variantId) ?? {
+          total: 0,
+          morning: 0,
+          afternoon: 0,
+        };
+        current.total += usage.total;
+        current.morning += usage.morning;
+        current.afternoon += usage.afternoon;
+        result.set(variantId, current);
+      }
+    }
+
+    if (dates.size > 0) {
+      for (const usage of result.values()) {
+        usage.total /= dates.size;
+        usage.morning /= dates.size;
+        usage.afternoon /= dates.size;
+      }
+    }
+    return result;
+  }
+
+  const tomorrowUsage = averageUsageForDates(matchingDates);
+  const todayUsage = averageUsageForDates(todayMatchingDates);
   const tomorrowSamples = matchingDates.size;
-  if (tomorrowSamples > 0) {
-    for (const usage of tomorrowUsage.values()) {
-      usage.total /= tomorrowSamples;
-      usage.morning /= tomorrowSamples;
-      usage.afternoon /= tomorrowSamples;
-    }
-  }
+  const todaySamples = todayMatchingDates.size;
 
   const inventoryByVariant = new Map(
     inventory.rows.map((row) => [row.variantExternalId, row]),
@@ -301,15 +385,19 @@ export async function getInventoryIntelligence(
         afternoon: 0,
       };
       const avgDaily = recent.total / 14;
+      const fallbackForecast = {
+        total: avgDaily,
+        morning: recent.morning / 14,
+        afternoon: recent.afternoon / 14,
+      };
       const tomorrow = tomorrowUsage.get(row.variantExternalId);
       const forecast =
         tomorrowSamples >= 2 && tomorrow
           ? tomorrow
-          : {
-              total: avgDaily,
-              morning: recent.morning / 14,
-              afternoon: recent.afternoon / 14,
-            };
+          : fallbackForecast;
+      const today = todayUsage.get(row.variantExternalId);
+      const todayForecast =
+        todaySamples >= 2 && today ? today : fallbackForecast;
 
       const daysCover =
         avgDaily > 0 ? Math.max(0, row.inStock) / avgDaily : null;
@@ -375,6 +463,9 @@ export async function getInventoryIntelligence(
         expectedTomorrow: forecast.total,
         expectedTomorrowMorning: forecast.morning,
         expectedTomorrowAfternoon: forecast.afternoon,
+        expectedToday: todayForecast.total,
+        expectedTodayMorning: todayForecast.morning,
+        expectedTodayAfternoon: todayForecast.afternoon,
         planningDays,
         suggestedPurchase,
         suggestedPackages,
@@ -443,6 +534,276 @@ export async function getInventoryIntelligence(
     (a, b) => b.capturedAt.getTime() - a.capturedAt.getTime(),
   );
 
+  const anomalyRows: Array<{
+    variantExternalId: string;
+    itemName: string;
+    unitLabel: string;
+    before: number;
+    after: number;
+    actualConsumption: number;
+    salesConsumption: number;
+    loggedWaste: number;
+    expectedConsumption: number;
+    variance: number;
+    variancePct: number | null;
+    from: Date;
+    to: Date;
+    severity: "WATCH" | "ACTION";
+  }> = [];
+
+  for (const [variantId, rows] of snapshotGroups) {
+    const ordered = [...rows].sort(
+      (a, b) => a.at.getTime() - b.at.getTime(),
+    );
+    if (ordered.length < 2) continue;
+
+    const after = ordered.at(-1)!;
+    const candidates = ordered
+      .slice(0, -1)
+      .map((row) => ({
+        row,
+        hours:
+          (after.at.getTime() - row.at.getTime()) / 3_600_000,
+      }))
+      .filter(
+        (candidate) =>
+          candidate.hours >= 6 &&
+          candidate.hours <= 36,
+      )
+      .sort(
+        (a, b) =>
+          Math.abs(a.hours - 24) - Math.abs(b.hours - 24),
+      );
+    const fallbackCandidates = ordered
+      .slice(0, -1)
+      .map((row) => ({
+        row,
+        hours:
+          (after.at.getTime() - row.at.getTime()) / 3_600_000,
+      }))
+      .filter(
+        (candidate) =>
+          candidate.hours >= 1 &&
+          candidate.hours <= 24 * 7,
+      )
+      .sort((a, b) => b.hours - a.hours);
+
+    const before =
+      candidates[0]?.row ?? fallbackCandidates[0]?.row ?? null;
+    if (!before) continue;
+
+    const salesConsumption = (usageEvents.get(variantId) ?? [])
+      .filter(
+        (event) =>
+          event.at > before.at &&
+          event.at <= after.at,
+      )
+      .reduce((sum, event) => sum + event.quantity, 0);
+    const loggedWaste = wasteEvents
+      .filter(
+        (event) =>
+          event.variantExternalId === variantId &&
+          event.occurredAt > before.at &&
+          event.occurredAt <= after.at,
+      )
+      .reduce(
+        (sum, event) => sum + Number(event.quantity ?? 0),
+        0,
+      );
+    const expectedConsumption = salesConsumption + loggedWaste;
+    const actualConsumption = before.stock - after.stock;
+    const variance = actualConsumption - expectedConsumption;
+
+    const significanceFloor = Math.max(
+      0.25,
+      expectedConsumption * 0.2,
+    );
+    if (variance <= significanceFloor) continue;
+
+    const item = inventoryByVariant.get(variantId);
+    const variancePct =
+      expectedConsumption > 0
+        ? (variance / expectedConsumption) * 100
+        : null;
+
+    anomalyRows.push({
+      variantExternalId: variantId,
+      itemName: item?.itemName ?? variantId,
+      unitLabel: item?.unitLabel ?? "u.",
+      before: before.stock,
+      after: after.stock,
+      actualConsumption,
+      salesConsumption,
+      loggedWaste,
+      expectedConsumption,
+      variance,
+      variancePct,
+      from: before.at,
+      to: after.at,
+      severity:
+        variance >= Math.max(1, expectedConsumption * 0.5)
+          ? "ACTION"
+          : "WATCH",
+    });
+  }
+
+  anomalyRows.sort(
+    (a, b) =>
+      (a.severity === "ACTION" ? 0 : 1) -
+        (b.severity === "ACTION" ? 0 : 1) ||
+      b.variance - a.variance,
+  );
+
+  const outOfStockVariantIds = new Set(
+    smartRows
+      .filter((row) => row.inStock <= 0)
+      .map((row) => row.variantExternalId),
+  );
+
+  function leafDependencies(
+    variantId: string,
+    path = new Set<string>(),
+  ): Set<string> {
+    if (path.has(variantId)) return new Set();
+    const variant = variantById.get(variantId);
+    const item = variant?.loyverseItemExternalId
+      ? itemById.get(variant.loyverseItemExternalId)
+      : undefined;
+    if (!variant || !item) return new Set();
+
+    const children = components(item.payload);
+    if (bool(item.payload.is_composite) && children.length > 0) {
+      const next = new Set(path);
+      next.add(variantId);
+      const result = new Set<string>();
+      for (const child of children) {
+        for (const leaf of leafDependencies(child.variantId, next)) {
+          result.add(leaf);
+        }
+      }
+      return result;
+    }
+
+    return bool(item.payload.track_stock)
+      ? new Set([variantId])
+      : new Set();
+  }
+
+  const unavailableProducts = variants.flatMap((variant) => {
+    if (!variant.loyverseItemExternalId) return [];
+    const item = itemById.get(variant.loyverseItemExternalId);
+    if (!item || !bool(item.payload.is_composite)) return [];
+    if (item.payload.available_for_sale === false) return [];
+
+    const leaves = leafDependencies(variant.externalId);
+    const blockers = [...leaves].filter((id) =>
+      outOfStockVariantIds.has(id),
+    );
+    if (blockers.length === 0) return [];
+
+    return [{
+      variantExternalId: variant.externalId,
+      itemName: item.itemName,
+      blockers: blockers.map(
+        (id) => inventoryByVariant.get(id)?.itemName ?? id,
+      ),
+    }];
+  });
+
+  const trafficByHour = Array.from({ length: 24 }, (_, hour) => ({
+    hour,
+    tickets: 0,
+    sales: 0,
+  }));
+  if (todaySamples > 0) {
+    for (const receipt of receipts) {
+      if (!receipt.receiptDate) continue;
+      const local = localParts(receipt.receiptDate);
+      if (!todayMatchingDates.has(local.date)) continue;
+      trafficByHour[local.hour].tickets += 1;
+      trafficByHour[local.hour].sales += Number(receipt.totalMoney ?? 0);
+    }
+    for (const row of trafficByHour) {
+      row.tickets /= todaySamples;
+      row.sales /= todaySamples;
+    }
+  }
+
+  const upcomingTraffic = trafficByHour
+    .filter(
+      (row) =>
+        row.hour >= currentDay.hour &&
+        row.hour <= 22 &&
+        row.tickets > 0,
+    )
+    .sort(
+      (a, b) =>
+        b.tickets - a.tickets ||
+        b.sales - a.sales,
+    );
+  const nextPeak = upcomingTraffic[0] ?? null;
+  const currentHourForecast =
+    trafficByHour.find((row) => row.hour === currentDay.hour) ?? null;
+
+  const productForecast = new Map<string, UsageBucket>();
+  if (todaySamples > 0) {
+    for (const date of todayMatchingDates) {
+      const day = productUsageByDate.get(date);
+      if (!day) continue;
+      for (const [name, usage] of day) {
+        const current = productForecast.get(name) ?? {
+          total: 0,
+          morning: 0,
+          afternoon: 0,
+        };
+        current.total += usage.total;
+        current.morning += usage.morning;
+        current.afternoon += usage.afternoon;
+        productForecast.set(name, current);
+      }
+    }
+    for (const usage of productForecast.values()) {
+      usage.total /= todaySamples;
+      usage.morning /= todaySamples;
+      usage.afternoon /= todaySamples;
+    }
+  }
+
+  const currentShift =
+    currentDay.hour < 16 ? ("MORNING" as const) : ("AFTERNOON" as const);
+  const topProductsForShift = [...productForecast.entries()]
+    .map(([name, usage]) => ({
+      name,
+      expected:
+        currentShift === "MORNING"
+          ? usage.morning
+          : usage.afternoon,
+    }))
+    .filter((row) => row.expected > 0)
+    .sort((a, b) => b.expected - a.expected)
+    .slice(0, 8);
+  const shiftRisks = smartRows
+    .flatMap((row) => {
+      const expected =
+        currentShift === "MORNING"
+          ? row.expectedTodayMorning
+          : row.expectedTodayAfternoon;
+      if (expected <= 0) return [];
+      const ratio = row.inStock / expected;
+      if (ratio >= 1.25) return [];
+      return [{
+        variantExternalId: row.variantExternalId,
+        itemName: row.itemName,
+        unitLabel: row.unitLabel,
+        inStock: row.inStock,
+        expectedShift: expected,
+        coverageRatio: ratio,
+        status:
+          ratio < 1 ? ("ACTION" as const) : ("WATCH" as const),
+      }];
+    })
+    .sort((a, b) => a.coverageRatio - b.coverageRatio);
+
   const suggested = smartRows.filter(
     (row) => row.suggestedPurchase > 0.0005,
   );
@@ -461,6 +822,29 @@ export async function getInventoryIntelligence(
         0,
       ),
       tomorrowSampleDays: tomorrowSamples,
+      todaySampleDays: todaySamples,
+      anomalies: anomalyRows.length,
+      unavailableProducts: unavailableProducts.length,
+      shiftRisks: shiftRisks.length,
+    },
+    anomalies: anomalyRows.slice(0, 20),
+    unavailableProducts: unavailableProducts
+      .filter(
+        (row, index, array) =>
+          array.findIndex(
+            (candidate) => candidate.itemName === row.itemName,
+          ) === index,
+      )
+      .slice(0, 30),
+    shift: {
+      current: currentShift,
+      sampleDays: todaySamples,
+      risks: shiftRisks.slice(0, 12),
+      traffic: {
+        currentHour: currentHourForecast,
+        nextPeak,
+      },
+      topProducts: topProductsForShift,
     },
   };
 }

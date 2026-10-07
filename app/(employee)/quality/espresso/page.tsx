@@ -134,6 +134,29 @@ export default async function EspressoQcPage({ searchParams }: PageProps) {
     typeof params.ratio === "string" ? Number(params.ratio) : null;
   const error =
     typeof params.error === "string" ? params.error : undefined;
+  const timeDirection =
+    params.timeDirection === "FAST" ||
+    params.timeDirection === "SLOW" ||
+    params.timeDirection === "OK"
+      ? params.timeDirection
+      : null;
+  const yieldDirection =
+    params.yieldDirection === "LOW" ||
+    params.yieldDirection === "HIGH" ||
+    params.yieldDirection === "OK"
+      ? params.yieldDirection
+      : null;
+
+  const adjustmentGuide =
+    !overall && yieldDirection && yieldDirection !== "OK"
+      ? yieldDirection === "LOW"
+        ? "Primero corrige el rendimiento: la bebida quedó corta. Lleva el yield al rango de la receta y vuelve a medir tiempo antes de tocar molienda."
+        : "Primero corrige el rendimiento: la bebida quedó larga. Lleva el yield al rango de la receta y vuelve a medir tiempo antes de tocar molienda."
+      : !overall && timeDirection === "FAST"
+        ? "Con el yield ya dentro de rango, prueba un ajuste pequeño hacia más fino y repite el control. Cambia una sola variable a la vez."
+        : !overall && timeDirection === "SLOW"
+          ? "Con el yield ya dentro de rango, prueba un ajuste pequeño hacia más grueso y repite el control. Cambia una sola variable a la vez."
+          : null;
 
   return (
     <main className="shell">
@@ -212,10 +235,18 @@ export default async function EspressoQcPage({ searchParams }: PageProps) {
             Yield/ratio: {yieldOk ? "OK" : "FUERA"}
           </div>
           {!overall && (
-            <p>
-              No se considera un espresso de control aprobado. Reportar y
-              revisar calibración/SOP antes de darlo por bueno.
-            </p>
+            <>
+              <p>
+                No se considera un espresso de control aprobado. Reportar y
+                revisar calibración/SOP antes de darlo por bueno.
+              </p>
+              {adjustmentGuide && (
+                <div className="card" style={{ marginTop: ".7rem" }}>
+                  <p className="eyebrow">GUÍA DE AJUSTE</p>
+                  <strong>{adjustmentGuide}</strong>
+                </div>
+              )}
+            </>
           )}
         </section>
       )}

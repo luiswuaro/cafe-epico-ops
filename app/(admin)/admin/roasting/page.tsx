@@ -63,6 +63,14 @@ export default async function RoastingPage({
   const selectedBatch = selectedBatchId
     ? data.batches.find((batch) => batch.id === selectedBatchId) ?? null
     : null;
+  const comparisonBatches = selectedBatch
+    ? data.batches
+        .filter(
+          (batch) =>
+            batch.coffeeLotId === selectedBatch.coffeeLotId,
+        )
+        .slice(0, 5)
+    : [];
 
   return (
     <main className="shell">
@@ -73,6 +81,11 @@ export default async function RoastingPage({
           Café verde → perfil → batch → reposo → barra → Espresso QC → cata.
           El objetivo es medir repetibilidad, costo y disponibilidad, no solo
           guardar curvas.
+        </p>
+        <p>
+          <Link href="/admin/roasting/compare">
+            <button>Comparar batches en Roast Engineer</button>
+          </Link>
         </p>
       </section>
 
@@ -213,6 +226,33 @@ export default async function RoastingPage({
         </article>
       </section>
 
+      <section className="card" style={{ marginTop: "1rem" }}>
+        <p className="eyebrow">ROAST ENGINEER · CORRELACIONES</p>
+        <h2>Qué variables se están moviendo junto con la cata</h2>
+        <p className="muted">
+          Pearson r sobre batches con puntaje sensorial disponible. Se muestra
+          la asociación observada; no implica causalidad. Menos de 4 muestras
+          se considera insuficiente.
+        </p>
+        <div className="stack">
+          {data.correlations.map((row) => (
+            <div className="task" key={row.key}>
+              <div style={{ flex: 1 }}>
+                <strong>{row.label}</strong>
+                <div className="muted">
+                  n={row.samples} · {row.strength}
+                </div>
+              </div>
+              <div className="metric" style={{ fontSize: "1.35rem" }}>
+                {row.r == null
+                  ? "—"
+                  : (row.r > 0 ? "+" : "") + row.r.toFixed(2)}
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
       <section className="grid" style={{ marginTop: "1rem" }}>
         <article className="card">
           <h2>Café actualmente en barra</h2>
@@ -329,7 +369,11 @@ export default async function RoastingPage({
 
       <section className="card" style={{ marginTop: "1rem" }}>
         <h2>Registrar batch</h2>
-        <form action={recordRoastBatch} className="stack">
+        <form
+          action={recordRoastBatch}
+          className="stack"
+          encType="multipart/form-data"
+        >
           <div className="grid">
             <label>
               Café
@@ -474,14 +518,40 @@ export default async function RoastingPage({
             </label>
           </div>
 
-          <label>
-            Curva CSV opcional
-            <textarea
-              name="curveCsv"
-              rows={7}
-              placeholder={"Pega export de Artisan/HiBean con columnas como Time, BT, ET, RoR, Power y Fan.\nEjemplo:\nTime,BT,ET,RoR,Power,Fan\n0:00,25,180,,80,20"}
-            />
-          </label>
+          <section className="card">
+            <p className="eyebrow">CURVA DEL TUESTE</p>
+            <h3>Archivo JSON, ALOG o CSV</h3>
+            <p className="muted">
+              Recomendado: JSON/ALOG porque conserva mejor la estructura del
+              roast. CSV sigue soportado. Ops normaliza todo internamente a un
+              mismo formato JSON con tiempo, BT, ET, RoR, potencia y aire.
+            </p>
+            <label>
+              Archivo
+              <input
+                name="curveFile"
+                type="file"
+                accept=".json,.alog,.csv,text/csv,application/json"
+              />
+            </label>
+            <details style={{ marginTop: ".7rem" }}>
+              <summary style={{ cursor: "pointer" }}>
+                O pegar los datos manualmente
+              </summary>
+              <label style={{ display: "block", marginTop: ".6rem" }}>
+                JSON o CSV
+                <textarea
+                  name="curveRaw"
+                  rows={7}
+                  placeholder={'JSON: [{"tS":0,"btC":25,"etC":180,"powerPct":80}]\n\nCSV: Time,BT,ET,RoR,Power,Fan'}
+                />
+              </label>
+            </details>
+            <p className="muted">
+              Límite de archivo: 5 MB. Si el archivo no contiene RoR pero sí
+              BT y tiempo, Ops calcula una estimación de RoR para el análisis.
+            </p>
+          </section>
           <label>
             Observaciones
             <textarea
@@ -1272,6 +1342,83 @@ export default async function RoastingPage({
             </label>
             <button type="submit">Asignar batch</button>
           </form>
+        </section>
+      )}
+
+      {selectedBatch && comparisonBatches.length > 1 && (
+        <section className="card" style={{ marginTop: "1rem" }}>
+          <p className="eyebrow">ROAST ENGINEER · COMPARATIVO</p>
+          <h2>Últimos batches de {selectedBatch.lot?.name}</h2>
+          <p className="muted">
+            Comparación rápida del mismo café para revisar repetibilidad,
+            desarrollo, merma, curva, Espresso QC y cata sin mezclar lotes de
+            origen diferente.
+          </p>
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr>
+                  <th style={{ textAlign: "left" }}>Batch</th>
+                  <th>FC</th>
+                  <th>Drop</th>
+                  <th>DTR</th>
+                  <th>Merma</th>
+                  <th>RoR pico</th>
+                  <th>QC</th>
+                  <th>Cata</th>
+                </tr>
+              </thead>
+              <tbody>
+                {comparisonBatches.map((batch) => (
+                  <tr key={batch.id}>
+                    <td>
+                      <Link href={"/admin/roasting?batch=" + batch.id}>
+                        <strong>{batch.batchCode}</strong>
+                      </Link>
+                      <div className="muted">
+                        {batch.roastedAt.toLocaleDateString("es-MX", {
+                          timeZone: "America/Mexico_City",
+                        })}
+                      </div>
+                    </td>
+                    <td style={{ textAlign: "right" }}>
+                      {seconds(batch.firstCrackTimeS)}
+                    </td>
+                    <td style={{ textAlign: "right" }}>
+                      {seconds(batch.dropTimeS)}
+                    </td>
+                    <td style={{ textAlign: "right" }}>
+                      {batch.dtrPct
+                        ? Number(batch.dtrPct).toFixed(2) + "%"
+                        : "—"}
+                    </td>
+                    <td style={{ textAlign: "right" }}>
+                      {Number(batch.weightLossPct).toFixed(2)}%
+                    </td>
+                    <td style={{ textAlign: "right" }}>
+                      {batch.diagnostics.peakRor == null
+                        ? "—"
+                        : batch.diagnostics.peakRor.toFixed(1)}
+                    </td>
+                    <td style={{ textAlign: "right" }}>
+                      {batch.espressoQcPassRate == null
+                        ? "—"
+                        : batch.espressoQcPassRate.toFixed(0) +
+                          "% · n=" +
+                          batch.espressoQcCount}
+                    </td>
+                    <td style={{ textAlign: "right" }}>
+                      {batch.latestSensory?.overallScore == null
+                        ? "—"
+                        : Number(
+                            batch.latestSensory.overallScore,
+                          ).toFixed(2)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </section>
       )}
 

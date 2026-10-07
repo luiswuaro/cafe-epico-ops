@@ -153,12 +153,14 @@ export async function recordEspressoQualityCheck(formData: FormData) {
       yieldMaxG: evaluation.yieldMaxG,
       timeMinS: evaluation.timeMinS,
       timeMaxS: evaluation.timeMaxS,
+      timeDirection: evaluation.timeDirection,
+      yieldDirection: evaluation.yieldDirection,
       recipeVersionId: recipeVersion.id,
       roastBatchId: activeRoast?.roastBatchId ?? null,
     },
   });
 
   redirect(
-    `/quality/espresso?saved=1&overall=${evaluation.withinSpec ? "1" : "0"}&time=${evaluation.withinTimeSpec ? "1" : "0"}&yield=${evaluation.withinYieldSpec ? "1" : "0"}&ratio=${evaluation.ratio.toFixed(3)}`,
+    `/quality/espresso?saved=1&overall=${evaluation.withinSpec ? "1" : "0"}&time=${evaluation.withinTimeSpec ? "1" : "0"}&yield=${evaluation.withinYieldSpec ? "1" : "0"}&ratio=${evaluation.ratio.toFixed(3)}&timeDirection=${evaluation.timeDirection}&yieldDirection=${evaluation.yieldDirection}`,
   );
 }
