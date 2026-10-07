@@ -90,7 +90,8 @@ export default async function DecisionCenterPage() {
           <p className="muted">
             {snapshot.watchInventory} en vigilancia ·{" "}
             {snapshot.suggestedPurchases} reposiciones ·{" "}
-            {snapshot.inventoryAnomalies} desviaciones por auditar
+            {snapshot.inventoryAnomalies} desviaciones por auditar ·{" "}
+            {snapshot.unavailableProducts} posibles 86
           </p>
         </article>
 
@@ -126,6 +127,10 @@ export default async function DecisionCenterPage() {
           <span className="pill">PRODUCTIVIDAD · 14 DÍAS</span>
           <div className="metric">{snapshot.measuredTasks14}</div>
           <p>tareas con tiempo medible</p>
+          <p className="muted">
+            {snapshot.openOperationalEvents} incidencia(s) operativa(s)
+            abiertas.
+          </p>
           <Link href="/admin/reports/productivity">
             Revisar productividad →
           </Link>
