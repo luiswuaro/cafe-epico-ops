@@ -62,6 +62,105 @@ export default async function TodayPage() {
         </section>
       )}
 
+      <section className="grid" style={{ marginBottom: "1rem" }}>
+        <article className="card">
+          <p className="eyebrow">BARRA · TURNO ACTUAL</p>
+          <h2>
+            {summary.bar.shift === "MORNING" ? "Mañana" : "Tarde"}
+          </h2>
+          <p className="muted">
+            Pronóstico basado en {summary.bar.forecastSampleDays} día(s)
+            comparables cuando hay historial suficiente.
+          </p>
+          {summary.bar.activeRoast ? (
+            <>
+              <strong>{summary.bar.activeRoast.lotName}</strong>
+              <div className="muted">
+                Batch {summary.bar.activeRoast.batchCode} ·{" "}
+                {summary.bar.activeRoast.ageDays.toFixed(1)} d post-tueste
+              </div>
+            </>
+          ) : (
+            <p className="status-warn">
+              No hay batch activo asignado a espresso.
+            </p>
+          )}
+        </article>
+
+        <article className="card">
+          <p className="eyebrow">QC ESPRESSO · HOY</p>
+          <div className="metric">{summary.espressoToday.checks}</div>
+          <p>controles registrados</p>
+          {summary.espressoToday.consecutiveOutOfSpec >= 2 ? (
+            <p className="status-warn">
+              {summary.espressoToday.consecutiveOutOfSpec} controles
+              consecutivos fuera de especificación. Revisar calibración antes
+              de seguir tomando el control como estable.
+            </p>
+          ) : (
+            <p className="muted">
+              {summary.espressoToday.consecutiveOutOfSpec === 1
+                ? "Último control fuera de especificación."
+                : "Sin racha de controles fuera de especificación."}
+            </p>
+          )}
+          <Link href="/quality/espresso">Abrir QC →</Link>
+        </article>
+
+        <article className="card">
+          <p className="eyebrow">RIESGO DE STOCK · TURNO</p>
+          <div className="metric">{summary.bar.stockRisks.length}</div>
+          <p>insumos con cobertura ajustada para el turno.</p>
+          {summary.bar.stockRisks.slice(0, 3).map((row) => (
+            <div className="muted" key={row.variantExternalId}>
+              {row.itemName}: {row.inStock.toFixed(2)} actuales /{" "}
+              {row.expectedShift.toFixed(2)} esperados
+            </div>
+          ))}
+          <Link href="/inventory">Revisar inventario →</Link>
+        </article>
+
+        <article className="card">
+          <p className="eyebrow">POSIBLES 86</p>
+          <div className="metric">
+            {summary.bar.unavailableProducts.length}
+          </div>
+          <p>productos bloqueados por algún insumo sin existencia.</p>
+          {summary.bar.unavailableProducts.slice(0, 4).map((row) => (
+            <div key={row.variantExternalId}>
+              <strong>{row.itemName}</strong>
+              <div className="muted">
+                Falta: {row.blockers.join(", ")}
+              </div>
+            </div>
+          ))}
+        </article>
+      </section>
+
+      <section className="card" style={{ marginBottom: "1rem" }}>
+        <p className="eyebrow">ACCESOS RÁPIDOS DE BARRA</p>
+        <div
+          style={{
+            display: "flex",
+            gap: ".6rem",
+            flexWrap: "wrap",
+          }}
+        >
+          <Link className="button" href="/recipes">
+            Recetario
+          </Link>
+          <Link className="button" href="/quality/espresso">
+            Calibrar espresso
+          </Link>
+          <Link className="button" href="/sops">
+            SOPs
+          </Link>
+          <Link className="button" href="/handoff">
+            Entrega de turno
+          </Link>
+        </div>
+      </section>
+
       <section className="grid">
         <article className="card">
           <span className="pill">APERTURA</span>
