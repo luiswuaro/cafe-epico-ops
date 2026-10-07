@@ -313,7 +313,12 @@ export default async function PurchasesAdminPage({
                       type="number"
                       min="0"
                       step="0.001"
-                      defaultValue={row.displayFactor}
+                      defaultValue={
+                        row.displayUnit ? row.displayFactor : ""
+                      }
+                      placeholder={
+                        row.soldByWeight ? "1000" : "1"
+                      }
                     />
                   </label>
                 </div>
