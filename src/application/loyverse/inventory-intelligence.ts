@@ -104,6 +104,7 @@ export async function getInventoryIntelligence(
           currentHour: null,
           nextPeak: null,
         },
+        topProducts: [],
       },
       summary: {
         atRisk: 0,
@@ -262,6 +263,10 @@ export async function getInventoryIntelligence(
 
   const usage14 = new Map<string, UsageBucket>();
   const usageByDate = new Map<string, Map<string, UsageBucket>>();
+  const productUsageByDate = new Map<
+    string,
+    Map<string, UsageBucket>
+  >();
   const usageEvents = new Map<
     string,
     Array<{ at: Date; quantity: number }>
@@ -279,6 +284,28 @@ export async function getInventoryIntelligence(
     const local = localParts(receipt.receiptDate);
     const shift =
       local.hour < 16 ? ("morning" as const) : ("afternoon" as const);
+
+    const soldVariant = variantById.get(line.variantExternalId);
+    const soldItem = soldVariant?.loyverseItemExternalId
+      ? itemById.get(soldVariant.loyverseItemExternalId)
+      : null;
+    if (soldItem) {
+      const dayProducts =
+        productUsageByDate.get(local.date) ?? new Map<string, UsageBucket>();
+      const bucket = dayProducts.get(soldItem.itemName) ?? {
+        total: 0,
+        morning: 0,
+        afternoon: 0,
+      };
+      const soldQty = Number(line.quantity);
+      if (Number.isFinite(soldQty)) {
+        bucket.total += soldQty;
+        bucket[shift] += soldQty;
+        dayProducts.set(soldItem.itemName, bucket);
+        productUsageByDate.set(local.date, dayProducts);
+      }
+    }
+
     const expanded = new Map<string, number>();
     expand(
       line.variantExternalId,
@@ -689,8 +716,43 @@ export async function getInventoryIntelligence(
   const currentHourForecast =
     trafficByHour.find((row) => row.hour === currentDay.hour) ?? null;
 
+  const productForecast = new Map<string, UsageBucket>();
+  if (todaySamples > 0) {
+    for (const date of todayMatchingDates) {
+      const day = productUsageByDate.get(date);
+      if (!day) continue;
+      for (const [name, usage] of day) {
+        const current = productForecast.get(name) ?? {
+          total: 0,
+          morning: 0,
+          afternoon: 0,
+        };
+        current.total += usage.total;
+        current.morning += usage.morning;
+        current.afternoon += usage.afternoon;
+        productForecast.set(name, current);
+      }
+    }
+    for (const usage of productForecast.values()) {
+      usage.total /= todaySamples;
+      usage.morning /= todaySamples;
+      usage.afternoon /= todaySamples;
+    }
+  }
+
   const currentShift =
     currentDay.hour < 16 ? ("MORNING" as const) : ("AFTERNOON" as const);
+  const topProductsForShift = [...productForecast.entries()]
+    .map(([name, usage]) => ({
+      name,
+      expected:
+        currentShift === "MORNING"
+          ? usage.morning
+          : usage.afternoon,
+    }))
+    .filter((row) => row.expected > 0)
+    .sort((a, b) => b.expected - a.expected)
+    .slice(0, 8);
   const shiftRisks = smartRows
     .flatMap((row) => {
       const expected =
@@ -753,6 +815,7 @@ export async function getInventoryIntelligence(
         currentHour: currentHourForecast,
         nextPeak,
       },
+      topProducts: topProductsForShift,
     },
   };
 }
