@@ -85,6 +85,12 @@ const createItemSchema = z.object({
   preset: presetSchema,
 });
 
+function mappingError(message: string): never {
+  redirect(
+    `/admin/loyverse/inventory?error=${encodeURIComponent(message)}`,
+  );
+}
+
 async function requireInventoryIntegrationAdmin() {
   const { user, employee } = await getCurrentEmployee();
   if (!employee.homeStoreId) throw new Error("Employee has no home store");
@@ -198,7 +204,7 @@ export async function saveLoyverseInventoryMapping(formData: FormData) {
     preset: String(formData.get("preset") ?? ""),
   });
 
-  if (!parsed.success) throw new Error("Mapeo inválido");
+  if (!parsed.success) mappingError("Mapeo inválido. Revisa todos los campos.");
 
   const { user, employee, storeId } =
     await requireInventoryIntegrationAdmin();
@@ -233,10 +239,10 @@ export async function saveLoyverseInventoryMapping(formData: FormData) {
     ),
   ]);
 
-  if (!item) throw new Error("Insumo interno no encontrado");
+  if (!item) mappingError("Insumo interno no encontrado");
   if (item.canonicalUnit !== config.canonicalUnit) {
-    throw new Error(
-      `La medición elegida termina en ${config.canonicalUnit}, pero ${item.name} está configurado en ${item.canonicalUnit}`,
+    mappingError(
+      `La medición elegida termina en ${config.canonicalUnit}, pero ${item.name} está configurado en ${item.canonicalUnit}. Elige una conversión que termine en ${item.canonicalUnit}.`,
     );
   }
 
@@ -281,8 +287,8 @@ export async function saveLoyverseInventoryMapping(formData: FormData) {
     variantConflict &&
     variantConflict.id !== currentForBalance?.id
   ) {
-    throw new Error(
-      "Esa variante de Loyverse ya está vinculada a otro insumo",
+    mappingError(
+      "Esa variante de Loyverse ya está vinculada a otro insumo.",
     );
   }
 
@@ -337,6 +343,7 @@ export async function saveLoyverseInventoryMapping(formData: FormData) {
   });
 
   revalidatePath("/admin/loyverse/inventory");
+  redirect("/admin/loyverse/inventory?mapped=1");
 }
 
 export async function createInventoryItemFromLoyverse(formData: FormData) {
