@@ -308,7 +308,10 @@ export default async function LoyverseInventoryMappingPage({
 
           <label>
             Cómo se mide
-            <select name="preset" required defaultValue="PIECE">
+            <select name="preset" required defaultValue="">
+              <option value="" disabled>
+                Selecciona según la unidad del insumo…
+              </option>
               <option value="PIECE">Pieza → pz</option>
               <option value="KG_TO_G">kg → g</option>
               <option value="G_TO_G">g → g</option>
@@ -345,8 +348,9 @@ export default async function LoyverseInventoryMappingPage({
 
           <button type="submit">Guardar mapeo</button>
           <p className="muted">
-            Si la medición elegida no coincide con la unidad interna, el
-            sistema la rechaza.
+            Elige una conversión que termine en la misma unidad del insumo.
+            Ejemplo: si el insumo interno está en ml y Loyverse muestra 1.300
+            para 1.3 L, usa “L → ml”.
           </p>
         </form>
 
