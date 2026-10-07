@@ -13,7 +13,7 @@ where r.code in ('OWNER','BARISTA')
   and p.code in ('pos.sell','pos.mirror.read')
 on conflict do nothing;
 
-create table if not exists public.pos_orders (
+create table if not exists pos_orders (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references public.organizations(id) on delete cascade,
   store_id uuid not null references public.stores(id) on delete restrict,
@@ -45,7 +45,7 @@ create index if not exists pos_orders_store_paid_idx
 create index if not exists pos_orders_employee_idx
   on public.pos_orders(employee_id, paid_at desc);
 
-create table if not exists public.pos_order_lines (
+create table if not exists pos_order_lines (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references public.organizations(id) on delete cascade,
   order_id uuid not null references public.pos_orders(id) on delete cascade,
@@ -65,7 +65,7 @@ create index if not exists pos_order_lines_order_idx
 create index if not exists pos_order_lines_catalog_idx
   on public.pos_order_lines(organization_id, catalog_external_id);
 
-create table if not exists public.pos_payments (
+create table if not exists pos_payments (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references public.organizations(id) on delete cascade,
   order_id uuid not null references public.pos_orders(id) on delete cascade,
