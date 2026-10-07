@@ -100,6 +100,10 @@ export async function getInventoryIntelligence(
         current: "MORNING" as const,
         sampleDays: 0,
         risks: [],
+        traffic: {
+          currentHour: null,
+          nextPeak: null,
+        },
       },
       summary: {
         atRisk: 0,
@@ -140,6 +144,7 @@ export async function getInventoryIntelligence(
         .select({
           externalId: loyverseReceipts.externalId,
           receiptDate: loyverseReceipts.receiptDate,
+          totalMoney: loyverseReceipts.totalMoney,
         })
         .from(loyverseReceipts)
         .where(
@@ -649,6 +654,41 @@ export async function getInventoryIntelligence(
     }];
   });
 
+  const trafficByHour = Array.from({ length: 24 }, (_, hour) => ({
+    hour,
+    tickets: 0,
+    sales: 0,
+  }));
+  if (todaySamples > 0) {
+    for (const receipt of receipts) {
+      if (!receipt.receiptDate) continue;
+      const local = localParts(receipt.receiptDate);
+      if (!todayMatchingDates.has(local.date)) continue;
+      trafficByHour[local.hour].tickets += 1;
+      trafficByHour[local.hour].sales += Number(receipt.totalMoney ?? 0);
+    }
+    for (const row of trafficByHour) {
+      row.tickets /= todaySamples;
+      row.sales /= todaySamples;
+    }
+  }
+
+  const upcomingTraffic = trafficByHour
+    .filter(
+      (row) =>
+        row.hour >= currentDay.hour &&
+        row.hour <= 22 &&
+        row.tickets > 0,
+    )
+    .sort(
+      (a, b) =>
+        b.tickets - a.tickets ||
+        b.sales - a.sales,
+    );
+  const nextPeak = upcomingTraffic[0] ?? null;
+  const currentHourForecast =
+    trafficByHour.find((row) => row.hour === currentDay.hour) ?? null;
+
   const currentShift =
     currentDay.hour < 16 ? ("MORNING" as const) : ("AFTERNOON" as const);
   const shiftRisks = smartRows
@@ -709,6 +749,10 @@ export async function getInventoryIntelligence(
       current: currentShift,
       sampleDays: todaySamples,
       risks: shiftRisks.slice(0, 12),
+      traffic: {
+        currentHour: currentHourForecast,
+        nextPeak,
+      },
     },
   };
 }
