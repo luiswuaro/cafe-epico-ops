@@ -329,7 +329,11 @@ export default async function RoastingPage({
 
       <section className="card" style={{ marginTop: "1rem" }}>
         <h2>Registrar batch</h2>
-        <form action={recordRoastBatch} className="stack">
+        <form
+          action={recordRoastBatch}
+          className="stack"
+          encType="multipart/form-data"
+        >
           <div className="grid">
             <label>
               Café
@@ -474,14 +478,40 @@ export default async function RoastingPage({
             </label>
           </div>
 
-          <label>
-            Curva CSV opcional
-            <textarea
-              name="curveCsv"
-              rows={7}
-              placeholder={"Pega export de Artisan/HiBean con columnas como Time, BT, ET, RoR, Power y Fan.\nEjemplo:\nTime,BT,ET,RoR,Power,Fan\n0:00,25,180,,80,20"}
-            />
-          </label>
+          <section className="card">
+            <p className="eyebrow">CURVA DEL TUESTE</p>
+            <h3>Archivo JSON, ALOG o CSV</h3>
+            <p className="muted">
+              Recomendado: JSON/ALOG porque conserva mejor la estructura del
+              roast. CSV sigue soportado. Ops normaliza todo internamente a un
+              mismo formato JSON con tiempo, BT, ET, RoR, potencia y aire.
+            </p>
+            <label>
+              Archivo
+              <input
+                name="curveFile"
+                type="file"
+                accept=".json,.alog,.csv,text/csv,application/json"
+              />
+            </label>
+            <details style={{ marginTop: ".7rem" }}>
+              <summary style={{ cursor: "pointer" }}>
+                O pegar los datos manualmente
+              </summary>
+              <label style={{ display: "block", marginTop: ".6rem" }}>
+                JSON o CSV
+                <textarea
+                  name="curveRaw"
+                  rows={7}
+                  placeholder={'JSON: [{"tS":0,"btC":25,"etC":180,"powerPct":80}]\n\nCSV: Time,BT,ET,RoR,Power,Fan'}
+                />
+              </label>
+            </details>
+            <p className="muted">
+              Límite de archivo: 5 MB. Si el archivo no contiene RoR pero sí
+              BT y tiempo, Ops calcula una estimación de RoR para el análisis.
+            </p>
+          </section>
           <label>
             Observaciones
             <textarea
