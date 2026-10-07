@@ -56,6 +56,7 @@ export default async function TodayPage({
       : cockpit.currentHour >= 21;
   const actionQueue = buildBaristaActionQueue({
     currentHour: cockpit.currentHour,
+    handoffWindow,
     opening: summary.opening,
     handoff: summary.handoff,
     latestQc: cockpit.latestQc,
