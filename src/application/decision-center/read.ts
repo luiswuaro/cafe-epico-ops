@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, isNull } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull } from "drizzle-orm";
 import { getBusinessAnalytics } from "@/src/application/analytics/business";
 import { getInventoryIntelligence } from "@/src/application/loyverse/inventory-intelligence";
 import { getProductivityReport } from "@/src/application/reports/productivity";
@@ -58,6 +58,12 @@ export async function getDecisionCenter(organizationId: string) {
           and(
             eq(operationalEvents.organizationId, organizationId),
             isNull(operationalEvents.resolvedAt),
+            inArray(operationalEvents.eventType, [
+              "EQUIPMENT",
+              "STOCK",
+              "SERVICE",
+              "OTHER",
+            ]),
           ),
         )
         .orderBy(desc(operationalEvents.occurredAt))
