@@ -1,8 +1,59 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getActiveRecipe } from "@/src/application/recipes/read";
+import { getEmployeeRecipe } from "@/src/application/loyverse/recipe-book";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
+
 export const dynamic = "force-dynamic";
-export default async function RecipeDetail({ params }: { params: Promise<{id:string}> }) {
-  const { id } = await params; const { employee } = await getCurrentEmployee(); const recipe = await getActiveRecipe(employee.organizationId, id); if (!recipe) notFound();
-  return <main className="shell"><section className="hero"><p className="eyebrow">RECETA ACTIVA · v{recipe.majorVersion}.{recipe.minorVersion}</p><h1>{recipe.name}</h1></section><section className="grid"><article className="card"><h2>Ingredientes</h2>{recipe.components.map((c,i)=><div className="task" key={`${c.itemName}-${i}`}><div><strong>{c.itemName}</strong><div className="muted">{c.quantity} {c.unit}{Number(c.wasteFactor)>0 ? ` + ${Number(c.wasteFactor)*100}% merma` : ""}</div>{c.notes&&<small className="muted">{c.notes}</small>}</div></div>)}</article><article className="card"><h2>Procedimiento</h2><p style={{whiteSpace:'pre-wrap'}}>{recipe.instructions}</p><h3>Control de calidad</h3><pre style={{whiteSpace:'pre-wrap',overflow:'auto'}}>{JSON.stringify(recipe.qualitySpec,null,2)}</pre></article></section></main>;
+
+const number = new Intl.NumberFormat("es-MX", {
+  maximumFractionDigits: 1,
+});
+
+export default async function RecipeDetail({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  const { employee } = await getCurrentEmployee();
+  const recipe = await getEmployeeRecipe(employee.organizationId, id);
+  if (!recipe) notFound();
+
+  return (
+    <main className="shell">
+      <section className="hero">
+        <p className="eyebrow">RECETA · {recipe.category}</p>
+        <h1>{recipe.name}</h1>
+        <p className="muted">
+          Receta operativa sin empaque. Si un componente es una receta madre,
+          se muestra como una unidad de esa preparación.
+        </p>
+      </section>
+
+      <section className="card">
+        <div className="stack">
+          {recipe.components.map((component) => (
+            <div className="task" key={component.variantExternalId}>
+              <div style={{ flex: 1 }}>
+                <strong>{component.sourceName}</strong>
+                {component.isComposite && (
+                  <span className="pill" style={{ marginLeft: ".5rem" }}>
+                    RECETA MADRE
+                  </span>
+                )}
+              </div>
+              <div className="metric" style={{ fontSize: "1.4rem" }}>
+                {number.format(component.displayQuantity)}{" "}
+                {component.displayUnit}
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <p style={{ marginTop: "1rem" }}>
+        <Link href="/recipes">← Volver al recetario</Link>
+      </p>
+    </main>
+  );
 }
