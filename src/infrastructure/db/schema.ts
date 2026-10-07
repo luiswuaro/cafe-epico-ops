@@ -380,6 +380,20 @@ export const espressoQualityChecks = pgTable("espresso_quality_checks", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const roastSettings = pgTable("roast_settings", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  roasterName: text("roaster_name").notNull().default("Skywalker v1"),
+  nominalPowerW: integer("nominal_power_w").notNull().default(1000),
+  electricityRatePerKwh: numeric("electricity_rate_per_kwh", { precision: 10, scale: 4 }),
+  laborCostPerHour: numeric("labor_cost_per_hour", { precision: 10, scale: 2 }),
+  defaultStoreId: uuid("default_store_id").references(() => stores.id, { onDelete: "set null" }),
+  defaultLocationId: uuid("default_location_id").references(() => inventoryLocations.id, { onDelete: "set null" }),
+  ...timestamps,
+}, (t) => [
+  uniqueIndex("roast_settings_org_uidx").on(t.organizationId),
+]);
+
 export const roastCoffeeLots = pgTable("roast_coffee_lots", {
   id: uuid("id").primaryKey().defaultRandom(),
   organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
