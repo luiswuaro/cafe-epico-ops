@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 const STORAGE_KEY = "cafe-epico-printer-bridge-v1";
@@ -107,6 +108,7 @@ export function DirectPrintTicketButton({
 }: {
   ticket: DirectReceiptPayload;
 }) {
+  const router = useRouter();
   const [state, setState] = useState<"idle" | "printing" | "ok" | "error">(
     "idle",
   );
@@ -114,7 +116,7 @@ export function DirectPrintTicketButton({
   async function printDirect() {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) {
-      window.location.href = "/pos/printer";
+      router.push("/pos/printer");
       return;
     }
 

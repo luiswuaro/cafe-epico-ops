@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 const STORAGE_KEY = "cafe-epico-printer-bridge-v1";
 
@@ -14,18 +14,6 @@ export function PrinterBridgeSetup() {
   const [token, setToken] = useState("");
   const [status, setStatus] = useState("Sin probar");
 
-  useEffect(() => {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return;
-
-    try {
-      const parsed = JSON.parse(raw) as StoredConfig;
-      if (parsed.url) setUrl(parsed.url);
-      if (parsed.token) setToken(parsed.token);
-    } catch {
-      window.localStorage.removeItem(STORAGE_KEY);
-    }
-  }, []);
 
   async function testAndSave() {
     setStatus("Probando conexión…");
