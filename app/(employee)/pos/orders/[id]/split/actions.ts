@@ -273,7 +273,7 @@ export async function payOrderSplit(formData: FormData) {
     if (paymentMethod === "CASH" && cashSession) {
       await tx.insert(posCashMovements).values({
         organizationId: employee.organizationId,
-        storeId: employee.homeStoreId,
+        storeId: employee.homeStoreId!,
         sessionId: cashSession.id,
         orderId: order.id,
         splitId: split.id,
