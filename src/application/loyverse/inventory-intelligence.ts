@@ -93,11 +93,22 @@ export async function getInventoryIntelligence(
       ...inventory,
       smartRows: [],
       recentChanges: [],
+      anomalies: [],
+      unavailableProducts: [],
+      shift: {
+        current: "MORNING" as const,
+        sampleDays: 0,
+        risks: [],
+      },
       summary: {
         atRisk: 0,
         suggestedPurchases: 0,
         estimatedReplenishmentCost: 0,
         tomorrowSampleDays: 0,
+        todaySampleDays: 0,
+        anomalies: 0,
+        unavailableProducts: 0,
+        shiftRisks: 0,
       },
     };
   }
