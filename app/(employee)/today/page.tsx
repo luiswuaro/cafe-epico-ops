@@ -3,6 +3,7 @@ import { markEmployeeMessageRead } from "@/app/actions/messages";
 import {
   reportBarIncident,
   reportBarWaste,
+  reportQuickStockCount,
 } from "./actions";
 import { buildBaristaActionQueue } from "@/src/application/barista/action-queue";
 import { getBaristaCockpit } from "@/src/application/barista/cockpit";
@@ -13,6 +14,12 @@ export const dynamic = "force-dynamic";
 
 const number = new Intl.NumberFormat("es-MX", {
   maximumFractionDigits: 2,
+});
+
+const money = new Intl.NumberFormat("es-MX", {
+  style: "currency",
+  currency: "MXN",
+  maximumFractionDigits: 0,
 });
 
 function time(date: Date) {
@@ -86,6 +93,17 @@ export default async function TodayPage({
       {params.saved === "incident" && (
         <p className="card status-ok">
           Incidencia enviada a operación.
+        </p>
+      )}
+      {params.saved === "stock-count" && (
+        <p
+          className={
+            params.reconcile === "1" ? "alert" : "card status-ok"
+          }
+        >
+          {params.reconcile === "1"
+            ? "Conteo guardado. La diferencia quedó pendiente para conciliación administrativa con Loyverse."
+            : "Conteo guardado y sin diferencia relevante contra Loyverse."}
         </p>
       )}
       {typeof params.error === "string" && (
@@ -222,8 +240,14 @@ export default async function TodayPage({
           </p>
           {cockpit.inventoryCorrectionCount > 0 && (
             <p className="status-warn">
-              {cockpit.inventoryCorrectionCount} existencia(s) negativas en
-              Loyverse requieren conteo/corrección.
+              {cockpit.inventoryCorrectionCount} existencia(s) negativas aún
+              requieren conteo físico.
+            </p>
+          )}
+          {cockpit.inventoryCorrectionSubmitted > 0 && (
+            <p className="muted">
+              {cockpit.inventoryCorrectionSubmitted} ya contada(s) hoy y
+              pendiente(s) de conciliación cuando aplique.
             </p>
           )}
           <Link href="/inventory">Abrir inventario →</Link>
@@ -462,6 +486,160 @@ export default async function TodayPage({
       </section>
 
       <section className="grid" style={{ marginTop: "1rem" }}>
+        <article className="card">
+          <p className="eyebrow">CALIDAD DEL TURNO</p>
+          <h2>Merma registrada</h2>
+          <div className="metric">{cockpit.lossSummary.wasteEvents}</div>
+          <p>evento(s) de merma hoy.</p>
+          <p className="muted">
+            Costo estimado conocido:{" "}
+            {money.format(cockpit.lossSummary.estimatedLossCost)}
+            {" · "}
+            {cockpit.lossSummary.costedLossEvents}/
+            {cockpit.lossSummary.totalLossEvents} evento(s) con costo.
+          </p>
+        </article>
+
+        <article className="card">
+          <p className="eyebrow">CALIDAD DE SERVICIO</p>
+          <h2>Bebidas rehechas</h2>
+          <div className="metric">{cockpit.lossSummary.remakeEvents}</div>
+          <p>
+            {cockpit.lossSummary.remakeRate == null
+              ? "Sin base de ventas sincronizada para calcular tasa."
+              : cockpit.lossSummary.remakeRate.toFixed(1) +
+                "% de las unidades vendidas sincronizadas hoy."}
+          </p>
+          <p className="muted">
+            Base sincronizada:{" "}
+            {number.format(cockpit.lossSummary.soldUnitsToday)} unidad(es).
+          </p>
+        </article>
+
+        <article className="card">
+          <p className="eyebrow">CONTEOS DEL TURNO</p>
+          <h2>Verificación física</h2>
+          <div className="metric">{cockpit.stockCountsToday.length}</div>
+          <p>insumo(s) contado(s) hoy.</p>
+          <p className="muted">
+            {
+              cockpit.stockCountsToday.filter((row) => row.pendingAdmin)
+                .length
+            }{" "}
+            con diferencia pendiente de conciliación.
+          </p>
+        </article>
+      </section>
+
+      {cockpit.lossSummary.topLosses.length > 0 && (
+        <section className="card" style={{ marginTop: "1rem" }}>
+          <p className="eyebrow">DETALLE DE MERMAS / REMAKES</p>
+          <h2>Qué se ha perdido hoy</h2>
+          <div className="stack">
+            {cockpit.lossSummary.topLosses.map((row) => (
+              <div
+                className="task"
+                key={row.itemName + row.displayUnit}
+              >
+                <div style={{ flex: 1 }}>
+                  <strong>{row.itemName}</strong>
+                  <div className="muted">
+                    {row.events} registro(s)
+                    {row.remakes > 0
+                      ? " · " + row.remakes + " remake(s)"
+                      : ""}
+                  </div>
+                </div>
+                <div style={{ textAlign: "right" }}>
+                  <strong>
+                    {number.format(row.displayQuantity)} {row.displayUnit}
+                  </strong>
+                  {row.estimatedCost > 0 && (
+                    <div className="muted">
+                      ≈ {money.format(row.estimatedCost)}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <section className="grid" style={{ marginTop: "1rem" }}>
+        <form action={reportQuickStockCount} className="card stack">
+          <p className="eyebrow">CONTEO RÁPIDO</p>
+          <h2>Confirmar existencia física</h2>
+          <p className="muted">
+            Registra lo que realmente hay. No modifica Loyverse; si existe una
+            diferencia, administración recibe el pendiente para conciliarlo.
+          </p>
+          <label>
+            Insumo
+            <select name="variantExternalId" required defaultValue="">
+              <option value="" disabled>
+                Selecciona…
+              </option>
+              {cockpit.countOptions.map((row) => (
+                <option
+                  key={row.variantExternalId}
+                  value={row.variantExternalId}
+                >
+                  {row.itemName} · Loyverse{" "}
+                  {number.format(row.sourceQuantity)} {row.unitLabel}
+                  {row.countedToday ? " · contado hoy" : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Conteo físico
+            <input
+              name="physicalQuantity"
+              type="number"
+              min="0"
+              step="0.001"
+              required
+              placeholder="Cantidad real en la unidad indicada arriba"
+            />
+          </label>
+          <label>
+            Nota opcional
+            <input
+              name="note"
+              maxLength={300}
+              placeholder="Ej. caja abierta, producto en almacén, etc."
+            />
+          </label>
+          <button type="submit">Guardar conteo físico</button>
+
+          {cockpit.stockCountsToday.length > 0 && (
+            <div className="stack" style={{ marginTop: ".5rem" }}>
+              {cockpit.stockCountsToday.slice(0, 4).map((row) => (
+                <div className="task" key={row.id}>
+                  <div style={{ flex: 1 }}>
+                    <strong>{row.itemName}</strong>
+                    <div className="muted">
+                      físico{" "}
+                      {row.physicalQuantity == null
+                        ? "—"
+                        : number.format(row.physicalQuantity)}{" "}
+                      {row.displayUnit}
+                    </div>
+                  </div>
+                  <span
+                    className={
+                      row.pendingAdmin ? "status-warn" : "status-ok"
+                    }
+                  >
+                    {row.pendingAdmin ? "conciliar" : "coincide"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </form>
+
         <form action={reportBarWaste} className="card stack">
           <p className="eyebrow">REGISTRO RÁPIDO</p>
           <h2>Merma / derrame / bebida rehecha</h2>
