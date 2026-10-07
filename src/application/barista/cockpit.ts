@@ -345,6 +345,8 @@ export async function getBaristaCockpit(employee: {
   );
 
   let estimatedLossCost = 0;
+  let estimatedWasteCost = 0;
+  let estimatedRemakeCost = 0;
   let costedLossEvents = 0;
   const lossByItem = new Map<
     string,
@@ -371,6 +373,11 @@ export async function getBaristaCockpit(employee: {
 
     if (unitCost != null && Number.isFinite(nativeQuantity)) {
       estimatedLossCost += eventCost;
+      if (event.eventType === "REMAKE") {
+        estimatedRemakeCost += eventCost;
+      } else {
+        estimatedWasteCost += eventCost;
+      }
       costedLossEvents += 1;
     }
 
@@ -521,6 +528,8 @@ export async function getBaristaCockpit(employee: {
       soldUnitsToday,
       remakeRate,
       estimatedLossCost,
+      estimatedWasteCost,
+      estimatedRemakeCost,
       costedLossEvents,
       totalLossEvents: lossEvents.length,
       topLosses: [...lossByItem.values()]
