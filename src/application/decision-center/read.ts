@@ -77,6 +77,23 @@ export async function getDecisionCenter(organizationId: string) {
     });
   }
 
+  const cashNeeds7 = inventory.smartRows
+    .filter(
+      (row) =>
+        row.suggestedCost != null &&
+        row.suggestedPurchase > 0 &&
+        (row.orderInDays == null || row.orderInDays <= 7),
+    )
+    .reduce((sum, row) => sum + (row.suggestedCost ?? 0), 0);
+  const cashNeeds14 = inventory.smartRows
+    .filter(
+      (row) =>
+        row.suggestedCost != null &&
+        row.suggestedPurchase > 0 &&
+        (row.orderInDays == null || row.orderInDays <= 14),
+    )
+    .reduce((sum, row) => sum + (row.suggestedCost ?? 0), 0);
+
   if (inventory.summary.suggestedPurchases > 0) {
     decisions.push({
       level: "ACTION",
@@ -86,10 +103,34 @@ export async function getDecisionCenter(organizationId: string) {
         inventory.summary.suggestedPurchases +
         " reposición(es)",
       detail:
-        "Presupuesto estimado con costos configurados: $" +
-        inventory.summary.estimatedReplenishmentCost.toFixed(0) +
+        "Caja estimada próximos 7 días: $" +
+        cashNeeds7.toFixed(0) +
+        " MXN · 14 días: $" +
+        cashNeeds14.toFixed(0) +
         " MXN.",
       href: "/admin/purchases",
+    });
+  }
+
+  const inventoryAnomalies = inventory.anomalies ?? [];
+  if (inventoryAnomalies.length > 0) {
+    const first = inventoryAnomalies[0];
+    decisions.push({
+      level: first.severity,
+      area: "INVENTARIO",
+      title:
+        inventoryAnomalies.length +
+        " desviación(es) de inventario para auditar",
+      detail:
+        first.itemName +
+        ": caída observada " +
+        first.actualConsumption.toFixed(2) +
+        " vs consumo teórico " +
+        first.expectedConsumption.toFixed(2) +
+        " " +
+        first.unitLabel +
+        ". No implica merma o pérdida hasta conciliar compras y ajustes.",
+      href: "/inventory",
     });
   }
 
@@ -202,12 +243,13 @@ export async function getDecisionCenter(organizationId: string) {
   );
   const medianQty = median(products.map((product) => product.qty));
   const medianMargin = median(
-    products.map((product) => product.contributionPct),
+    products.map((product) => product.effectiveContributionPct),
   );
 
   const menuEngineering = products.map((product) => {
     const popular = product.qty >= medianQty;
-    const profitable = product.contributionPct >= medianMargin;
+    const profitable =
+      product.effectiveContributionPct >= medianMargin;
     const quadrant =
       popular && profitable
         ? ("STAR" as const)
@@ -244,6 +286,11 @@ export async function getDecisionCenter(organizationId: string) {
       suggestedPurchases: inventory.summary.suggestedPurchases,
       replenishmentBudget:
         inventory.summary.estimatedReplenishmentCost,
+      cashNeeds7,
+      cashNeeds14,
+      inventoryAnomalies: inventoryAnomalies.length,
+      unavailableProducts:
+        inventory.summary.unavailableProducts ?? 0,
       batches30: roasting.summary.batches30,
       avgRoastLoss30: roasting.summary.avgLoss30,
       activeRoastAssignments: roasting.summary.activeAssignments,
