@@ -1,11 +1,12 @@
 "use server";
 
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import {
   auditEvents,
   espressoQualityChecks,
+  roastBarAssignments,
   recipes,
   recipeVersions,
 } from "@/src/infrastructure/db/schema";
@@ -96,6 +97,23 @@ export async function recordEspressoQualityCheck(formData: FormData) {
     redirect("/quality/espresso?error=spec");
   }
 
+  const [activeRoast] = await db
+    .select({ roastBatchId: roastBarAssignments.roastBatchId })
+    .from(roastBarAssignments)
+    .where(
+      and(
+        eq(
+          roastBarAssignments.organizationId,
+          employee.organizationId,
+        ),
+        eq(roastBarAssignments.storeId, employee.homeStoreId),
+        eq(roastBarAssignments.barRole, "ESPRESSO"),
+        eq(roastBarAssignments.isActive, true),
+      ),
+    )
+    .orderBy(desc(roastBarAssignments.startedAt))
+    .limit(1);
+
   const [created] = await db
     .insert(espressoQualityChecks)
     .values({
@@ -103,6 +121,7 @@ export async function recordEspressoQualityCheck(formData: FormData) {
       storeId: employee.homeStoreId,
       employeeId: employee.id,
       recipeVersionId: recipeVersion.id,
+      roastBatchId: activeRoast?.roastBatchId ?? null,
       doseG: parsed.data.doseG.toFixed(3),
       yieldG: parsed.data.yieldG.toFixed(3),
       brewTimeS: parsed.data.brewTimeS.toFixed(2),
@@ -135,6 +154,7 @@ export async function recordEspressoQualityCheck(formData: FormData) {
       timeMinS: evaluation.timeMinS,
       timeMaxS: evaluation.timeMaxS,
       recipeVersionId: recipeVersion.id,
+      roastBatchId: activeRoast?.roastBatchId ?? null,
     },
   });
 
