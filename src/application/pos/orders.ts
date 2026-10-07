@@ -7,7 +7,7 @@ import {
   posOrders,
 } from "@/src/infrastructure/db/schema";
 
-const OPEN_STATUSES = ["SENT", "PREPARING", "READY"] as const;
+const OPEN_STATUSES = ["SENT", "PREPARING", "READY", "PARTIALLY_PAID"] as const;
 
 export async function getOpenPosOrders(
   organizationId: string,

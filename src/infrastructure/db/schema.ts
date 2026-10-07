@@ -1130,14 +1130,79 @@ export const posManualProducts = pgTable("pos_manual_products", {
   index("pos_manual_products_org_active_idx").on(t.organizationId, t.isActive),
 ]);
 
+export const posOrderSplits = pgTable("pos_order_splits", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  orderId: uuid("order_id").notNull().references(() => posOrders.id, { onDelete: "cascade" }),
+  label: text("label").notNull(),
+  status: varchar("status", { length: 20 }).notNull().default("OPEN"),
+  total: numeric("total", { precision: 14, scale: 2 }).notNull(),
+  paidAt: timestamp("paid_at", { withTimezone: true }),
+  ...timestamps,
+}, (t) => [
+  uniqueIndex("pos_order_splits_label_uidx").on(t.orderId, t.label),
+  index("pos_order_splits_order_idx").on(t.orderId, t.status),
+]);
+
+export const posOrderSplitLines = pgTable("pos_order_split_lines", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  splitId: uuid("split_id").notNull().references(() => posOrderSplits.id, { onDelete: "cascade" }),
+  orderLineId: uuid("order_line_id").notNull().references(() => posOrderLines.id, { onDelete: "cascade" }),
+  quantity: numeric("quantity", { precision: 12, scale: 3 }).notNull(),
+  lineTotal: numeric("line_total", { precision: 14, scale: 2 }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("pos_order_split_lines_uidx").on(t.splitId, t.orderLineId),
+  index("pos_order_split_lines_order_line_idx").on(t.orderLineId),
+]);
+
 export const posPayments = pgTable("pos_payments", {
   id: uuid("id").primaryKey().defaultRandom(),
   organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
   orderId: uuid("order_id").notNull().references(() => posOrders.id, { onDelete: "cascade" }),
+  splitId: uuid("split_id").references(() => posOrderSplits.id, { onDelete: "set null" }),
   method: varchar("method", { length: 30 }).notNull(),
   amount: numeric("amount", { precision: 14, scale: 2 }).notNull(),
   reference: text("reference"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   index("pos_payments_order_idx").on(t.orderId),
+]);
+
+
+export const posCashSessions = pgTable("pos_cash_sessions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  storeId: uuid("store_id").notNull().references(() => stores.id, { onDelete: "restrict" }),
+  status: varchar("status", { length: 20 }).notNull().default("OPEN"),
+  openingCash: numeric("opening_cash", { precision: 14, scale: 2 }).notNull(),
+  openedByEmployeeId: uuid("opened_by_employee_id").references(() => employees.id, { onDelete: "set null" }),
+  openedAt: timestamp("opened_at", { withTimezone: true }).notNull().defaultNow(),
+  countedCash: numeric("counted_cash", { precision: 14, scale: 2 }),
+  expectedCashSnapshot: numeric("expected_cash_snapshot", { precision: 14, scale: 2 }),
+  difference: numeric("difference", { precision: 14, scale: 2 }),
+  closedByEmployeeId: uuid("closed_by_employee_id").references(() => employees.id, { onDelete: "set null" }),
+  closedAt: timestamp("closed_at", { withTimezone: true }),
+  closingNote: text("closing_note"),
+  ...timestamps,
+}, (t) => [
+  index("pos_cash_sessions_store_status_idx").on(t.storeId, t.status, t.openedAt),
+]);
+
+export const posCashMovements = pgTable("pos_cash_movements", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  storeId: uuid("store_id").notNull().references(() => stores.id, { onDelete: "restrict" }),
+  sessionId: uuid("session_id").notNull().references(() => posCashSessions.id, { onDelete: "restrict" }),
+  orderId: uuid("order_id").references(() => posOrders.id, { onDelete: "set null" }),
+  splitId: uuid("split_id").references(() => posOrderSplits.id, { onDelete: "set null" }),
+  employeeId: uuid("employee_id").references(() => employees.id, { onDelete: "set null" }),
+  movementType: varchar("movement_type", { length: 30 }).notNull(),
+  amount: numeric("amount", { precision: 14, scale: 2 }).notNull(),
+  note: text("note"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("pos_cash_movements_session_idx").on(t.sessionId, t.createdAt),
+  index("pos_cash_movements_order_idx").on(t.orderId),
 ]);

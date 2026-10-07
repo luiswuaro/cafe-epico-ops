@@ -6,14 +6,18 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getPosCatalog, type PosServiceMode } from "@/src/application/pos/catalog";
+import { getOpenCashSession } from "@/src/application/pos/cash";
 import { syncLoyverseReceipts } from "@/src/application/loyverse/sync";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
 import { assertEmployeePermission } from "@/src/infrastructure/auth/permissions";
 import { getDb } from "@/src/infrastructure/db/client";
 import {
   auditEvents,
+  posCashMovements,
+  posCashSessions,
   posCustomers,
   posOrderLines,
+  posOrderSplits,
   posOrders,
   posPayments,
 } from "@/src/infrastructure/db/schema";
@@ -168,6 +172,18 @@ async function createShadowOrder(
 
   if (existing) return existing.id;
 
+  const cashSession =
+    status === "PAID" && paymentMethod === "CASH"
+      ? await getOpenCashSession(
+          employee.organizationId,
+          employee.homeStoreId,
+        )
+      : null;
+
+  if (status === "PAID" && paymentMethod === "CASH" && !cashSession) {
+    throw new Error("Abre la caja antes de cobrar en efectivo");
+  }
+
   const order = await db.transaction(async (tx) => {
     const [created] = await tx
       .insert(posOrders)
@@ -216,6 +232,19 @@ async function createShadowOrder(
         method: paymentMethod,
         amount: input.total.toFixed(2),
       });
+
+      if (paymentMethod === "CASH" && cashSession) {
+        await tx.insert(posCashMovements).values({
+          organizationId: employee.organizationId,
+          storeId: employee.homeStoreId!,
+          sessionId: cashSession.id,
+          orderId: created.id,
+          employeeId: employee.id,
+          movementType: "SALE",
+          amount: input.total.toFixed(2),
+          note: created.folio,
+        });
+      }
     }
 
     await tx.insert(auditEvents).values({
@@ -352,6 +381,28 @@ export async function payShadowCommand(formData: FormData) {
     redirect("/pos?saved=" + order.id);
   }
 
+  const [existingSplit] = await db
+    .select({ id: posOrderSplits.id })
+    .from(posOrderSplits)
+    .where(eq(posOrderSplits.orderId, order.id))
+    .limit(1);
+
+  if (existingSplit) {
+    redirect("/pos/orders/" + order.id + "/split");
+  }
+
+  const cashSession =
+    paymentMethod === "CASH"
+      ? await getOpenCashSession(
+          employee.organizationId,
+          employee.homeStoreId,
+        )
+      : null;
+
+  if (paymentMethod === "CASH" && !cashSession) {
+    throw new Error("Abre la caja antes de cobrar en efectivo");
+  }
+
   const now = new Date();
 
   await db.transaction(async (tx) => {
@@ -370,6 +421,19 @@ export async function payShadowCommand(formData: FormData) {
       method: paymentMethod,
       amount: order.total,
     });
+
+    if (paymentMethod === "CASH" && cashSession) {
+      await tx.insert(posCashMovements).values({
+        organizationId: employee.organizationId,
+        storeId: employee.homeStoreId!,
+        sessionId: cashSession.id,
+        orderId: order.id,
+        employeeId: employee.id,
+        movementType: "SALE",
+        amount: order.total,
+        note: order.folio,
+      });
+    }
 
     await tx.insert(auditEvents).values({
       organizationId: employee.organizationId,
@@ -474,6 +538,47 @@ export async function cancelPosOrder(formData: FormData) {
     );
   }
 
+  const [paidSplit] = await db
+    .select({ id: posOrderSplits.id })
+    .from(posOrderSplits)
+    .where(
+      and(
+        eq(posOrderSplits.orderId, order.id),
+        eq(posOrderSplits.status, "PAID"),
+      ),
+    )
+    .limit(1);
+
+  if (paidSplit) {
+    throw new Error(
+      "Esta orden tiene cuentas divididas ya pagadas. La reversa parcial requiere flujo administrativo.",
+    );
+  }
+
+  const cashSales = await db
+    .select()
+    .from(posCashMovements)
+    .where(
+      and(
+        eq(posCashMovements.orderId, order.id),
+        eq(posCashMovements.movementType, "SALE"),
+      ),
+    );
+
+  if (cashSales.length > 0) {
+    const [cashSession] = await db
+      .select()
+      .from(posCashSessions)
+      .where(eq(posCashSessions.id, cashSales[0].sessionId))
+      .limit(1);
+
+    if (!cashSession || cashSession.status !== "OPEN") {
+      throw new Error(
+        "Este cobro en efectivo pertenece a una caja ya cerrada. No se puede cancelar sin una reversa administrativa.",
+      );
+    }
+  }
+
   const now = new Date();
   await db.transaction(async (tx) => {
     await tx
@@ -486,6 +591,21 @@ export async function cancelPosOrder(formData: FormData) {
         updatedAt: now,
       })
       .where(eq(posOrders.id, order.id));
+
+    if (cashSales.length > 0) {
+      await tx.insert(posCashMovements).values(
+        cashSales.map((movement) => ({
+          organizationId: employee.organizationId,
+          storeId: employee.homeStoreId!,
+          sessionId: movement.sessionId,
+          orderId: order.id,
+          employeeId: employee.id,
+          movementType: "REFUND",
+          amount: (-Number(movement.amount)).toFixed(2),
+          note: "Cancelación · " + order.folio,
+        })),
+      );
+    }
 
     await tx.insert(auditEvents).values({
       organizationId: employee.organizationId,

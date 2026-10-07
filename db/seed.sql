@@ -34,7 +34,8 @@ insert into permissions(code,description) values
 ('pos.sell','Registrar ventas en el POS'),
 ('pos.mirror.read','Comparar ventas espejo contra Loyverse'),
 ('pos.cancel','Cancelar cuentas y tickets del POS'),
-('pos.catalog.manage','Administrar productos y recetas del POS')
+('pos.catalog.manage','Administrar productos y recetas del POS'),
+('pos.cash.manage','Abrir, operar y cerrar la caja de efectivo')
 on conflict(code) do nothing;
 
 insert into roles(id,organization_id,code,name,description,is_system_role) values
@@ -48,7 +49,7 @@ on conflict do nothing;
 
 insert into role_permissions(role_id,permission_id)
 select '00000000-0000-4000-8000-000000000031',id from permissions
-where code in ('checklist.execute','recipe.read','sop.read','inventory.read','inventory.count','inventory.waste','pos.sell','pos.mirror.read')
+where code in ('checklist.execute','recipe.read','sop.read','inventory.read','inventory.count','inventory.waste','pos.sell','pos.mirror.read','pos.cash.manage')
 on conflict do nothing;
 
 insert into employees(id,organization_id,home_store_id,name,is_active) values

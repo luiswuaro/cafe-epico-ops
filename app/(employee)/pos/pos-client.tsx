@@ -26,6 +26,7 @@ type Props = {
   catalog: CatalogItem[];
   customers: Customer[];
   selectedCustomerId?: string | null;
+  cashOpen: boolean;
 };
 
 const money = new Intl.NumberFormat("es-MX", {
@@ -38,6 +39,7 @@ export function PosClient({
   catalog,
   customers,
   selectedCustomerId = null,
+  cashOpen,
 }: Props) {
   const [category, setCategory] = useState<"TODAS" | CatalogItem["category"]>(
     "CALIENTES",
@@ -265,8 +267,13 @@ export function PosClient({
 
           <label>
             Método de pago
-            <select name="paymentMethod" defaultValue="CASH">
-              <option value="CASH">Efectivo</option>
+            <select
+              name="paymentMethod"
+              defaultValue={cashOpen ? "CASH" : "CARD"}
+            >
+              <option value="CASH" disabled={!cashOpen}>
+                Efectivo{cashOpen ? "" : " · abre caja"}
+              </option>
               <option value="CARD">Tarjeta</option>
               <option value="TRANSFER">Transferencia</option>
             </select>

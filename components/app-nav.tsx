@@ -29,7 +29,7 @@ export async function AppNav() {
 
   if (!employee) return null;
 
-  const [canAdmin, canPos] = await Promise.all([
+  const [canAdmin, canPos, canCash] = await Promise.all([
     employeeHasPermission(
       employee.id,
       "admin.access",
@@ -40,6 +40,11 @@ export async function AppNav() {
       "pos.sell",
       employee.homeStoreId ?? undefined,
     ),
+    employeeHasPermission(
+      employee.id,
+      "pos.cash.manage",
+      employee.homeStoreId ?? undefined,
+    ),
   ]);
 
   return (
@@ -47,6 +52,7 @@ export async function AppNav() {
       <Link href="/today">Hoy</Link>
       {canPos && <Link href="/pos">POS</Link>}
       {canPos && <Link href="/pos/orders">Comandas</Link>}
+      {canCash && <Link href="/pos/cash">Caja</Link>}
       <Link href="/checklists">Checklist</Link>
       <Link href="/handoff">Entrega</Link>
       <Link href="/inventory">Inventario</Link>

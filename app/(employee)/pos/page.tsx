@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { PosClient } from "./pos-client";
 import { getPosCatalog } from "@/src/application/pos/catalog";
+import { getCashState } from "@/src/application/pos/cash";
 import { getPosCustomers } from "@/src/application/pos/customers";
 import {
   getRecentShadowOrders,
@@ -52,7 +53,7 @@ export default async function PosPage({
   const selectedCustomerId =
     typeof params.customer === "string" ? params.customer : null;
 
-  const [catalog, customers, recent, saved, canCancel] = await Promise.all([
+  const [catalog, customers, recent, saved, canCancel, cash] = await Promise.all([
     getPosCatalog(employee.organizationId),
     getPosCustomers(employee.organizationId),
     getRecentShadowOrders(
@@ -68,6 +69,7 @@ export default async function PosPage({
       "pos.cancel",
       employee.homeStoreId,
     ),
+    getCashState(employee.organizationId, employee.homeStoreId),
   ]);
 
   return (
@@ -206,6 +208,11 @@ export default async function PosPage({
         <Link href="/pos/orders" className="button">
           Ver comandas abiertas
         </Link>
+        <Link href="/pos/cash" className="button">
+          {cash.session
+            ? "Caja abierta · " + money.format(cash.expectedCash)
+            : "Abrir caja"}
+        </Link>
       </div>
 
       <PosClient
@@ -223,6 +230,7 @@ export default async function PosPage({
           pointsBalance: Number(customer.pointsBalance),
         }))}
         selectedCustomerId={selectedCustomerId}
+        cashOpen={Boolean(cash.session)}
       />
 
       <section className="card pos-recent">
