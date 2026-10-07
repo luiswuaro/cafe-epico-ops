@@ -89,16 +89,22 @@ export default async function DecisionCenterPage() {
           <p>insumos críticos</p>
           <p className="muted">
             {snapshot.watchInventory} en vigilancia ·{" "}
-            {snapshot.suggestedPurchases} reposiciones sugeridas
+            {snapshot.suggestedPurchases} reposiciones ·{" "}
+            {snapshot.inventoryAnomalies} desviaciones por auditar
           </p>
         </article>
 
         <article className="card">
-          <span className="pill">COMPRA SUGERIDA</span>
+          <span className="pill">CAJA · 7 DÍAS</span>
           <div className="metric">
-            {money.format(snapshot.replenishmentBudget)}
+            {money.format(snapshot.cashNeeds7)}
           </div>
-          <p>presupuesto estimado de reposición</p>
+          <p>
+            {money.format(snapshot.cashNeeds14)} estimados a 14 días
+          </p>
+          <p className="muted">
+            Basado en reposiciones con costo configurado y fecha sugerida.
+          </p>
           <Link href="/admin/purchases">Abrir compras →</Link>
         </article>
 
@@ -184,10 +190,11 @@ export default async function DecisionCenterPage() {
         <p className="eyebrow">INGENIERÍA DE MENÚ · HEURÍSTICA</p>
         <h2>Popularidad vs margen</h2>
         <p className="muted">
-          Clasifica los productos usando mediana de unidades vendidas y mediana
-          de margen de contribución dentro de la muestra de 30 días. Es una
-          señal para investigar, no una decisión automática de eliminar o subir
-          precios.
+          Clasifica los productos usando mediana de unidades vendidas y margen
+          de contribución de 30 días. Cuando al menos 80% de las unidades tienen
+          costo configurado, prioriza el costo reconstruido desde la receta
+          Loyverse y tus costos de insumo; si no, conserva el COGS de Loyverse.
+          Es una señal para investigar, no una decisión automática.
         </p>
 
         <div style={{ overflowX: "auto" }}>
@@ -198,8 +205,9 @@ export default async function DecisionCenterPage() {
                 <th>Clasificación</th>
                 <th>Unidades</th>
                 <th>Venta</th>
-                <th>Contribución</th>
-                <th>Margen</th>
+                <th>Contribución POS</th>
+                <th>Margen efectivo</th>
+                <th>Base costo</th>
               </tr>
             </thead>
             <tbody>
@@ -221,7 +229,16 @@ export default async function DecisionCenterPage() {
                     {money.format(product.contribution)}
                   </td>
                   <td style={{ textAlign: "right" }}>
-                    {product.contributionPct.toFixed(1)}%
+                    {product.effectiveContributionPct.toFixed(1)}%
+                  </td>
+                  <td style={{ textAlign: "right" }}>
+                    {product.costBasis === "CONFIGURED"
+                      ? "Receta/config."
+                      : "Loyverse"}
+                    <div className="muted">
+                      cobertura costo{" "}
+                      {product.configuredCoveragePct.toFixed(0)}%
+                    </div>
                   </td>
                 </tr>
               ))}
