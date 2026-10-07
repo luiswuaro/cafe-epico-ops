@@ -72,6 +72,16 @@ export default async function TodayPage() {
             Pronóstico basado en {summary.bar.forecastSampleDays} día(s)
             comparables cuando hay historial suficiente.
           </p>
+          {summary.bar.traffic.nextPeak && (
+            <p>
+              Próxima hora fuerte estimada:{" "}
+              <strong>
+                {String(summary.bar.traffic.nextPeak.hour).padStart(2, "0")}:00
+              </strong>{" "}
+              · {summary.bar.traffic.nextPeak.tickets.toFixed(1)} tickets/h
+              históricos.
+            </p>
+          )}
           {summary.bar.activeRoast ? (
             <>
               <strong>{summary.bar.activeRoast.lotName}</strong>
