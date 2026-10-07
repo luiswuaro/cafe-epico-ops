@@ -267,6 +267,7 @@ export async function getInventoryIntelligence(
     string,
     Map<string, UsageBucket>
   >();
+  const productSales35 = new Map<string, number>();
   const usageEvents = new Map<
     string,
     Array<{ at: Date; quantity: number }>
@@ -299,6 +300,10 @@ export async function getInventoryIntelligence(
       };
       const soldQty = Number(line.quantity);
       if (Number.isFinite(soldQty)) {
+        productSales35.set(
+          soldItem.itemName,
+          (productSales35.get(soldItem.itemName) ?? 0) + soldQty,
+        );
         bucket.total += soldQty;
         bucket[shift] += soldQty;
         dayProducts.set(soldItem.itemName, bucket);
@@ -701,14 +706,22 @@ export async function getInventoryIntelligence(
     );
     if (blockers.length === 0) return [];
 
+    const recentQty = productSales35.get(item.itemName) ?? 0;
+    if (recentQty <= 0) return [];
+
     return [{
       variantExternalId: variant.externalId,
       itemName: item.itemName,
       blockers: blockers.map(
         (id) => inventoryByVariant.get(id)?.itemName ?? id,
       ),
+      recentQty,
     }];
-  });
+  }).sort(
+    (a, b) =>
+      b.recentQty - a.recentQty ||
+      a.itemName.localeCompare(b.itemName, "es"),
+  );
 
   const trafficByHour = Array.from({ length: 24 }, (_, hour) => ({
     hour,
