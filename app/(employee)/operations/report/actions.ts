@@ -58,6 +58,9 @@ export async function recordOperationalEvent(formData: FormData) {
   const data = parsed.data;
   let itemNameSnapshot: string | null = null;
   let unitLabel: string | null = null;
+  let displayQuantity: number | null = null;
+  let displayUnit: string | null = null;
+  let nativeQuantity: number | null = data.quantity ?? null;
   let variantExternalId: string | null =
     data.variantExternalId ?? null;
 
@@ -79,6 +82,25 @@ export async function recordOperationalEvent(formData: FormData) {
 
     itemNameSnapshot = row.itemName;
     unitLabel = row.unitLabel;
+
+    const dryPattern =
+      /(CAFE|CAFÉ|MATCHA|TARO|CACAO|POLVO|AZUCAR|AZÚCAR|CANELA|HIELO)/i;
+    displayUnit =
+      row.displayUnit ??
+      (row.soldByWeight
+        ? dryPattern.test(row.itemName)
+          ? "g"
+          : "ml"
+        : "pz");
+    const displayFactor =
+      row.displayUnit && row.displayFactor > 0
+        ? row.displayFactor
+        : row.soldByWeight
+          ? 1000
+          : 1;
+    displayQuantity = data.quantity ?? null;
+    nativeQuantity =
+      data.quantity == null ? null : data.quantity / displayFactor;
   } else if (
     ["EQUIPMENT", "STOCK", "SERVICE", "OTHER"].includes(
       data.eventType,
@@ -111,8 +133,11 @@ export async function recordOperationalEvent(formData: FormData) {
     variantExternalId,
     itemNameSnapshot,
     quantity:
-      data.quantity == null ? null : String(data.quantity),
+      nativeQuantity == null ? null : String(nativeQuantity),
     unitLabel,
+    displayQuantity:
+      displayQuantity == null ? null : String(displayQuantity),
+    displayUnit,
     note: data.note ?? null,
   });
 
