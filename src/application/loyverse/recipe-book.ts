@@ -40,7 +40,9 @@ function candidateScore(candidate: OperationalCandidate) {
   };
 }
 
-export async function getEmployeeRecipeBook(organizationId: string) {
+export async function getOperationalRecipeSource(
+  organizationId: string,
+) {
   const source = await getLoyverseRecipeSource(organizationId);
   const groups = new Map<string, OperationalCandidate[]>();
 
@@ -72,26 +74,44 @@ export async function getEmployeeRecipeBook(organizationId: string) {
       })[0];
 
       return {
-        key: operationalRecipeKey(
-          selected.recipe.itemName,
-          selected.category,
-        ),
-        id: selected.recipe.externalId,
-        name: selected.recipe.itemName,
+        ...selected.recipe,
+        sourceCategory: selected.recipe.category,
         category: selected.category,
-        components: selected.recipe.directComponents.filter(
-          (component) => !component.isDisposable,
-        ),
       };
     })
     .sort((a, b) => {
       const byCategory =
         operationalRecipeCategoryOrder(a.category) -
         operationalRecipeCategoryOrder(b.category);
-      return byCategory || a.name.localeCompare(b.name, "es");
+      return byCategory || a.itemName.localeCompare(b.itemName, "es");
     });
 
-  return recipes;
+  return {
+    recipes,
+    totalDirectComponents: recipes.reduce(
+      (sum, recipe) => sum + recipe.directComponents.length,
+      0,
+    ),
+    totalEffectiveComponents: recipes.reduce(
+      (sum, recipe) => sum + recipe.effectiveComponents.length,
+      0,
+    ),
+    categories: ["CALIENTES", "FRÍAS", "ALIMENTOS"] as const,
+  };
+}
+
+export async function getEmployeeRecipeBook(organizationId: string) {
+  const source = await getOperationalRecipeSource(organizationId);
+
+  return source.recipes.map((recipe) => ({
+    key: operationalRecipeKey(recipe.itemName, recipe.category),
+    id: recipe.externalId,
+    name: recipe.itemName,
+    category: recipe.category,
+    components: recipe.directComponents.filter(
+      (component) => !component.isDisposable,
+    ),
+  }));
 }
 
 export async function getEmployeeRecipe(
