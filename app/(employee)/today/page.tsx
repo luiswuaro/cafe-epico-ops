@@ -156,6 +156,31 @@ export default async function TodayPage() {
         </article>
 
         <article className="card">
+          <p className="eyebrow">INCIDENCIAS ABIERTAS</p>
+          <div className="metric">{summary.bar.openEvents.length}</div>
+          <p>pendientes que pueden afectar el turno.</p>
+          {summary.bar.openEvents.slice(0, 3).map((event) => (
+            <div className="task" key={event.id}>
+              <div>
+                <strong>
+                  {event.itemNameSnapshot ?? event.eventType}
+                </strong>
+                <div
+                  className={
+                    event.severity === "CRITICAL"
+                      ? "status-warn"
+                      : "muted"
+                  }
+                >
+                  {event.note ?? "Sin nota"}
+                </div>
+              </div>
+            </div>
+          ))}
+          <Link href="/operations/report">Agregar incidencia →</Link>
+        </article>
+
+        <article className="card">
           <p className="eyebrow">POSIBLES 86</p>
           <div className="metric">
             {summary.bar.unavailableProducts.length}
