@@ -136,7 +136,7 @@ export function buildBaristaActionQueue(input: {
         " existencia(s) negativas",
       detail:
         "Loyverse tiene cantidades menores a cero. Haz conteo físico antes de tratarlas como faltante real.",
-      href: "/inventory",
+      href: "/today#conteo-rapido",
       rank: 30,
     });
   }
