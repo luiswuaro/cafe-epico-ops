@@ -49,6 +49,10 @@ export default async function TodayPage({
     cockpit.latestQc?.withinYieldSpec !== false;
   const shiftLabel =
     cockpit.currentShift === "MORNING" ? "MAÑANA" : "TARDE";
+  const handoffWindow =
+    cockpit.currentShift === "MORNING"
+      ? cockpit.currentHour >= 15
+      : cockpit.currentHour >= 21;
 
   return (
     <main className="shell">
@@ -548,13 +552,17 @@ export default async function TodayPage({
             {summary.handoff.total > 0 &&
             summary.handoff.completed === summary.handoff.total
               ? "Entrega de turno completada."
-              : "Barra abastecida, limpieza, incidencias, faltantes y corte."}
+              : handoffWindow
+                ? "Ya es momento de dejar barra, incidencias y faltantes documentados."
+                : "No requiere atención todavía; úsala cerca del final de tu turno."}
           </p>
           <Link href="/handoff">
             {summary.handoff.total > 0 &&
             summary.handoff.completed === summary.handoff.total
               ? "Ver entrega →"
-              : "Continuar entrega →"}
+              : handoffWindow
+                ? "Completar entrega →"
+                : "Ver entrega →"}
           </Link>
         </article>
 
