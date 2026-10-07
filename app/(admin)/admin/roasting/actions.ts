@@ -389,10 +389,10 @@ export async function recordRoastBatch(formData: FormData) {
   );
   const dropTimeS = parseSeconds(formData.get("dropTimeS"));
   const dropTempC = optionalNumber(formData.get("dropTempC"));
-  let curveImport = {
-    points: [] as ReturnType<typeof parseRoastCurveInput>["points"],
-    format: null as ReturnType<typeof parseRoastCurveInput>["format"] | null,
-    warnings: [] as string[],
+  let curveImport: ReturnType<typeof parseRoastCurveInput> = {
+    points: [],
+    format: "CSV",
+    warnings: [],
   };
   let curveSourceName: string | null = null;
 
@@ -401,11 +401,7 @@ export async function recordRoastBatch(formData: FormData) {
     curveSourceName = source.sourceName;
     if (source.raw) {
       const parsed = parseRoastCurveInput(source.raw);
-      curveImport = {
-        points: parsed.points,
-        format: parsed.format,
-        warnings: parsed.warnings,
-      };
+      curveImport = parsed;
     }
   } catch (error) {
     if (
@@ -416,6 +412,21 @@ export async function recordRoastBatch(formData: FormData) {
     }
     throw error;
   }
+
+  const resolvedChargeTempC =
+    chargeTempC ?? curveImport.events?.charge?.btC ?? null;
+  const resolvedYellowingTimeS =
+    yellowingTimeS ?? curveImport.events?.yellowing?.tS ?? null;
+  const resolvedYellowingTempC =
+    yellowingTempC ?? curveImport.events?.yellowing?.btC ?? null;
+  const resolvedFirstCrackTimeS =
+    firstCrackTimeS ?? curveImport.events?.firstCrack?.tS ?? null;
+  const resolvedFirstCrackTempC =
+    firstCrackTempC ?? curveImport.events?.firstCrack?.btC ?? null;
+  const resolvedDropTimeS =
+    dropTimeS ?? curveImport.events?.drop?.tS ?? null;
+  const resolvedDropTempC =
+    dropTempC ?? curveImport.events?.drop?.btC ?? null;
 
   if (
     !coffeeLotId ||
@@ -428,15 +439,15 @@ export async function recordRoastBatch(formData: FormData) {
     roastedWeightG > greenWeightG ||
     !roastedAtRaw ||
     ![
-      chargeTempC,
+      resolvedChargeTempC,
       turningPointTimeS,
       turningPointTempC,
-      yellowingTimeS,
-      yellowingTempC,
-      firstCrackTimeS,
-      firstCrackTempC,
-      dropTimeS,
-      dropTempC,
+      resolvedYellowingTimeS,
+      resolvedYellowingTempC,
+      resolvedFirstCrackTimeS,
+      resolvedFirstCrackTempC,
+      resolvedDropTimeS,
+      resolvedDropTempC,
     ].every(finiteOrNull)
   ) {
     redirect("/admin/roasting?error=batch");
@@ -450,12 +461,14 @@ export async function recordRoastBatch(formData: FormData) {
   const weightLossPct =
     ((greenWeightG - roastedWeightG) / greenWeightG) * 100;
   const developmentTimeS =
-    firstCrackTimeS != null && dropTimeS != null
-      ? Math.max(0, dropTimeS - firstCrackTimeS)
+    resolvedFirstCrackTimeS != null && resolvedDropTimeS != null
+      ? Math.max(0, resolvedDropTimeS - resolvedFirstCrackTimeS)
       : null;
   const dtrPct =
-    developmentTimeS != null && dropTimeS != null && dropTimeS > 0
-      ? (developmentTimeS / dropTimeS) * 100
+    developmentTimeS != null &&
+    resolvedDropTimeS != null &&
+    resolvedDropTimeS > 0
+      ? (developmentTimeS / resolvedDropTimeS) * 100
       : null;
   const curveData = curveImport.points;
   if (curveSourceName && curveData.length === 0) {
@@ -524,21 +537,29 @@ export async function recordRoastBatch(formData: FormData) {
           roastedWeightG: String(roastedWeightG),
           weightLossPct: weightLossPct.toFixed(3),
           chargeTempC:
-            chargeTempC == null ? null : String(chargeTempC),
+            resolvedChargeTempC == null
+              ? null
+              : String(resolvedChargeTempC),
           turningPointTimeS,
           turningPointTempC:
             turningPointTempC == null
               ? null
               : String(turningPointTempC),
-          yellowingTimeS,
+          yellowingTimeS: resolvedYellowingTimeS,
           yellowingTempC:
-            yellowingTempC == null ? null : String(yellowingTempC),
-          firstCrackTimeS,
+            resolvedYellowingTempC == null
+              ? null
+              : String(resolvedYellowingTempC),
+          firstCrackTimeS: resolvedFirstCrackTimeS,
           firstCrackTempC:
-            firstCrackTempC == null ? null : String(firstCrackTempC),
-          dropTimeS,
+            resolvedFirstCrackTempC == null
+              ? null
+              : String(resolvedFirstCrackTempC),
+          dropTimeS: resolvedDropTimeS,
           dropTempC:
-            dropTempC == null ? null : String(dropTempC),
+            resolvedDropTempC == null
+              ? null
+              : String(resolvedDropTempC),
           developmentTimeS,
           dtrPct: dtrPct == null ? null : dtrPct.toFixed(3),
           curveData,
@@ -631,14 +652,16 @@ export async function recordRoastBatch(formData: FormData) {
           greenWeightG,
           roastedWeightG,
           weightLossPct,
-          firstCrackTimeS,
-          dropTimeS,
+          firstCrackTimeS: resolvedFirstCrackTimeS,
+          dropTimeS: resolvedDropTimeS,
           developmentTimeS,
           dtrPct,
           curvePoints: curveData.length,
           curveFormat: curveImport.format,
           curveSourceName,
           curveWarnings: curveImport.warnings,
+          curveMetadata: curveImport.metadata ?? null,
+          curveEvents: curveImport.events ?? null,
           inventoryPosted: posted,
         },
       });
