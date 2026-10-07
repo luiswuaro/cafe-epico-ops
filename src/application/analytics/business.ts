@@ -97,7 +97,6 @@ export async function getBusinessAnalytics(organizationId: string) {
       beverageUnits: 0,
       foodUnits: 0,
       cogs: 0,
-      cogs: 0,
     },
     afternoon: {
       tickets: 0,
@@ -105,6 +104,7 @@ export async function getBusinessAnalytics(organizationId: string) {
       customerTickets: 0,
       beverageUnits: 0,
       foodUnits: 0,
+      cogs: 0,
     },
   };
 
