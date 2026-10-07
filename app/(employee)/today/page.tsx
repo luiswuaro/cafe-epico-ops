@@ -566,7 +566,11 @@ export default async function TodayPage({
       )}
 
       <section className="grid" style={{ marginTop: "1rem" }}>
-        <form action={reportQuickStockCount} className="card stack">
+        <form
+          id="conteo-rapido"
+          action={reportQuickStockCount}
+          className="card stack"
+        >
           <p className="eyebrow">CONTEO RÁPIDO</p>
           <h2>Confirmar existencia física</h2>
           <p className="muted">
