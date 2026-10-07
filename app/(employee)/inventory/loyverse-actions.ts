@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import {
+  loyverseReceiptWindowStart,
   syncLoyverseCategories,
   syncLoyverseInventory,
   syncLoyverseItems,
@@ -25,9 +26,7 @@ export async function refreshLoyverseInventorySource() {
     categories = await syncLoyverseCategories();
     items = await syncLoyverseItems();
     inventory = await syncLoyverseInventory();
-    const receiptSince = new Date(
-      Date.now() - 35 * 86_400_000,
-    ).toISOString();
+    const receiptSince = loyverseReceiptWindowStart(30);
     receipts = await syncLoyverseReceipts(receiptSince);
 
     await getDb().insert(auditEvents).values({

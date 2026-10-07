@@ -6,6 +6,7 @@ import { requirePermission } from "@/src/infrastructure/auth/permissions";
 import { getDb } from "@/src/infrastructure/db/client";
 import { auditEvents } from "@/src/infrastructure/db/schema";
 import {
+  loyverseReceiptWindowStart,
   syncLoyverseCustomers,
   syncLoyverseReceipts,
 } from "@/src/application/loyverse/sync";
@@ -18,7 +19,7 @@ export async function refreshAnalytics() {
   let customers = 0;
 
   try {
-    const since = new Date(Date.now() - 30 * 86_400_000).toISOString();
+    const since = loyverseReceiptWindowStart(30);
     [receipts, customers] = await Promise.all([
       syncLoyverseReceipts(since),
       syncLoyverseCustomers(),

@@ -4,9 +4,10 @@ const modules = [
   ["Checklist", "Plantillas, tareas, frecuencias, roles y SOPs", "/admin/checklists"],
   ["Recetas Loyverse", "Recetas madre, componentes y consumo real expandido", "/admin/loyverse/recipes"],
   ["Recetas técnicas QC", "Parámetros de extracción y control técnico", "/admin/recipes"],
-  ["SOPs", "Procedimientos versionados", "/sops"],
-  ["Inventario", "Existencias actuales tomadas directamente del POS", "/inventory"],
-  ["Analítica", "Ventas, turnos, lealtad, tendencias y sugerencias", "/admin/analytics"],
+  ["SOPs", "Crear, versionar y publicar procedimientos", "/admin/sops"],
+  ["Inventario", "Existencias, cobertura y reposición desde Loyverse", "/inventory"],
+  ["Compras", "Proveedores, costos, empaques, requisiciones y viajes", "/admin/purchases"],
+  ["Analítica", "Dashboard por día, 7, 15 y 30 días con COGS y margen", "/admin/analytics"],
   ["Loyverse", "Estado de sincronización, webhooks y reconciliación", "/admin/loyverse"],
 
   ["Notas a colaboradores", "Enviar instrucciones visibles en la pantalla principal", "/admin/messages"],
