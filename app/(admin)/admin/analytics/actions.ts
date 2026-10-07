@@ -14,9 +14,12 @@ export async function refreshAnalytics() {
   const { user, employeeId, organizationId } =
     await requirePermission("integration.manage");
 
+  let receipts = 0;
+  let customers = 0;
+
   try {
     const since = new Date(Date.now() - 30 * 86_400_000).toISOString();
-    const [receipts, customers] = await Promise.all([
+    [receipts, customers] = await Promise.all([
       syncLoyverseReceipts(since),
       syncLoyverseCustomers(),
     ]);
@@ -30,11 +33,6 @@ export async function refreshAnalytics() {
       entityId: "rolling-30d",
       afterData: { receipts, customers },
     });
-
-    revalidatePath("/admin/analytics");
-    redirect(
-      `/admin/analytics?refreshed=1&receipts=${receipts}&customers=${customers}`,
-    );
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Error desconocido";
@@ -42,4 +40,9 @@ export async function refreshAnalytics() {
       `/admin/analytics?error=${encodeURIComponent(message)}`,
     );
   }
+
+  revalidatePath("/admin/analytics");
+  redirect(
+    `/admin/analytics?refreshed=1&receipts=${receipts}&customers=${customers}`,
+  );
 }
