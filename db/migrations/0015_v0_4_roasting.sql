@@ -1,3 +1,19 @@
+create table if not exists roast_settings (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  roaster_name text not null default 'Skywalker v1',
+  nominal_power_w integer not null default 1000,
+  electricity_rate_per_kwh numeric(10,4),
+  labor_cost_per_hour numeric(10,2),
+  default_store_id uuid references public.stores(id) on delete set null,
+  default_location_id uuid references public.inventory_locations(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create unique index if not exists roast_settings_org_uidx
+  on public.roast_settings(organization_id);
+
 create table if not exists roast_coffee_lots (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references public.organizations(id) on delete cascade,
@@ -161,12 +177,14 @@ join public.permissions p on p.code in ('roast.read','roast.manage')
 where r.code='OWNER'
 on conflict do nothing;
 
+alter table public.roast_settings enable row level security;
 alter table public.roast_coffee_lots enable row level security;
 alter table public.roast_profiles enable row level security;
 alter table public.roast_batches enable row level security;
 alter table public.roast_sensory_evaluations enable row level security;
 alter table public.roast_bar_assignments enable row level security;
 
+revoke all on table public.roast_settings from anon,authenticated;
 revoke all on table public.roast_coffee_lots from anon,authenticated;
 revoke all on table public.roast_profiles from anon,authenticated;
 revoke all on table public.roast_batches from anon,authenticated;
