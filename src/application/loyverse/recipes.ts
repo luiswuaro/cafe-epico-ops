@@ -128,6 +128,8 @@ export async function getLoyverseRecipeSource(organizationId: string) {
         displayUnit: loyverseItemSettings.displayUnit,
         displayFactor: loyverseItemSettings.displayFactor,
         unitCostOverride: loyverseItemSettings.unitCostOverride,
+        packagePrice: loyverseItemSettings.packagePrice,
+        packageQuantityNative: loyverseItemSettings.packageQuantityNative,
       })
       .from(loyverseItemSettings)
       .where(eq(loyverseItemSettings.organizationId, organizationId)),
@@ -153,12 +155,9 @@ export async function getLoyverseRecipeSource(organizationId: string) {
     const override = nullableNumber(setting?.unitCostOverride);
     if (override != null) return override;
 
-    const packagePrice = nullableNumber(
-      (setting as { packagePrice?: unknown } | undefined)?.packagePrice,
-    );
+    const packagePrice = nullableNumber(setting?.packagePrice);
     const packageQuantity = nullableNumber(
-      (setting as { packageQuantityNative?: unknown } | undefined)
-        ?.packageQuantityNative,
+      setting?.packageQuantityNative,
     );
     if (
       packagePrice != null &&
