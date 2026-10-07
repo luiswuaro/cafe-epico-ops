@@ -27,7 +27,10 @@ export function normalizeInventoryName(value: string) {
     .replace(/[\u0300-\u036f]/g, "")
     .toUpperCase()
     .replace(/[^A-Z0-9]+/g, " ")
-    .trim();
+    .trim()
+    .split(/\s+/)
+    .filter((token) => token !== "DE")
+    .join(" ");
 }
 
 export function mappingPreset(input: {
