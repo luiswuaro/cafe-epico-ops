@@ -43,12 +43,9 @@ export default async function RecipesPage({
     return matchesQuery && matchesCategory;
   });
 
-  const categoryCounts = new Map(
-    OPERATIONAL_RECIPE_CATEGORIES.map((row) => [
-      row,
-      recipes.filter((recipe) => recipe.category === row).length,
-    ]),
-  );
+  const categoryCount = (
+    row: (typeof OPERATIONAL_RECIPE_CATEGORIES)[number],
+  ) => recipes.filter((recipe) => recipe.category === row).length;
 
   return (
     <main className="shell">
@@ -62,6 +59,9 @@ export default async function RecipesPage({
       </section>
 
       <form className="card stack recipe-filters" method="get">
+        {category && (
+          <input type="hidden" name="category" value={category} />
+        )}
         <label>
           Buscar
           <input
@@ -107,7 +107,7 @@ export default async function RecipesPage({
                   : row === "CALIENTES"
                     ? "Calientes"
                     : "Alimentos"}
-                <span>{categoryCounts.get(row) ?? 0}</span>
+                <span>{categoryCount(row)}</span>
               </Link>
             );
           })}
