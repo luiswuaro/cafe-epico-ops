@@ -1,10 +1,49 @@
 import { and, eq, gte } from "drizzle-orm";
 import { getDb } from "@/src/infrastructure/db/client";
 import {
+  loyverseCategories,
   loyverseCustomers,
+  loyverseItems,
   loyverseReceiptLines,
   loyverseReceipts,
+  loyverseVariants,
 } from "@/src/infrastructure/db/schema";
+
+type LineRollup = {
+  units: number;
+  gross: number;
+  net: number;
+  cogs: number;
+  discounts: number;
+};
+
+type PeriodMetrics = {
+  key: "today" | "7d" | "15d" | "30d";
+  label: string;
+  days: number;
+  sales: number;
+  grossSales: number;
+  discounts: number;
+  discountRate: number;
+  cogs: number;
+  contribution: number;
+  contributionPct: number;
+  tickets: number;
+  avgTicket: number;
+  units: number;
+  itemsPerTicket: number;
+  tax: number;
+  tips: number;
+  identifiedTickets: number;
+  captureRate: number;
+  morningSales: number;
+  afternoonSales: number;
+  previousSales: number | null;
+  previousTickets: number | null;
+  salesChangePct: number | null;
+  ticketsChangePct: number | null;
+  avgTicketChangePct: number | null;
+};
 
 const FOOD_NAMES = new Set([
   "CROISSANT JAMÓN",
@@ -15,7 +54,18 @@ const FOOD_NAMES = new Set([
   "Rebanada de panqué de zanahoria",
 ]);
 
-function mexicoDateParts(date: Date) {
+function num(value: unknown) {
+  const n = Number(value ?? 0);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function rec(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function localParts(date: Date) {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Mexico_City",
     year: "numeric",
@@ -23,6 +73,7 @@ function mexicoDateParts(date: Date) {
     day: "2-digit",
     hour: "2-digit",
     hourCycle: "h23",
+    weekday: "short",
   }).formatToParts(date);
 
   const part = (type: string) =>
@@ -31,17 +82,21 @@ function mexicoDateParts(date: Date) {
   return {
     date: `${part("year")}-${part("month")}-${part("day")}`,
     hour: Number(part("hour")),
+    weekday: part("weekday"),
   };
+}
+
+function dateKeys(count: number, offset = 0) {
+  const set = new Set<string>();
+  for (let i = offset; i < offset + count; i++) {
+    set.add(localParts(new Date(Date.now() - i * 86_400_000)).date);
+  }
+  return set;
 }
 
 function pctChange(current: number, previous: number) {
   if (previous === 0) return current === 0 ? 0 : null;
   return ((current - previous) / previous) * 100;
-}
-
-function startOfLocalDayDaysAgo(days: number) {
-  const now = new Date();
-  return new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
 }
 
 function isFood(name: string) {
@@ -50,185 +105,320 @@ function isFood(name: string) {
 
 export async function getBusinessAnalytics(organizationId: string) {
   const db = getDb();
-  const since30 = startOfLocalDayDaysAgo(30);
+  const since = new Date(Date.now() - 30 * 86_400_000);
 
-  const [receipts, lines, customers] = await Promise.all([
-    db
-      .select({
-        externalId: loyverseReceipts.externalId,
-        receiptDate: loyverseReceipts.receiptDate,
-        totalMoney: loyverseReceipts.totalMoney,
-        payload: loyverseReceipts.payload,
-      })
-      .from(loyverseReceipts)
-      .where(
-        and(
-          eq(loyverseReceipts.organizationId, organizationId),
-          eq(loyverseReceipts.receiptType, "SALE"),
-          gte(loyverseReceipts.receiptDate, since30),
+  const [receipts, lines, customers, items, variants, categories] =
+    await Promise.all([
+      db
+        .select({
+          externalId: loyverseReceipts.externalId,
+          receiptDate: loyverseReceipts.receiptDate,
+          totalMoney: loyverseReceipts.totalMoney,
+          payload: loyverseReceipts.payload,
+        })
+        .from(loyverseReceipts)
+        .where(
+          and(
+            eq(loyverseReceipts.organizationId, organizationId),
+            eq(loyverseReceipts.receiptType, "SALE"),
+            gte(loyverseReceipts.receiptDate, since),
+          ),
         ),
-      ),
-    db
-      .select({
-        receiptExternalId: loyverseReceiptLines.receiptExternalId,
-        quantity: loyverseReceiptLines.quantity,
-        grossTotalMoney: loyverseReceiptLines.grossTotalMoney,
-        payload: loyverseReceiptLines.payload,
-      })
-      .from(loyverseReceiptLines)
-      .where(eq(loyverseReceiptLines.organizationId, organizationId)),
-    db
-      .select({
-        payload: loyverseCustomers.payload,
-      })
-      .from(loyverseCustomers)
-      .where(eq(loyverseCustomers.organizationId, organizationId)),
-  ]);
+      db
+        .select({
+          receiptExternalId: loyverseReceiptLines.receiptExternalId,
+          variantExternalId: loyverseReceiptLines.variantExternalId,
+          quantity: loyverseReceiptLines.quantity,
+          grossTotalMoney: loyverseReceiptLines.grossTotalMoney,
+          payload: loyverseReceiptLines.payload,
+        })
+        .from(loyverseReceiptLines)
+        .where(eq(loyverseReceiptLines.organizationId, organizationId)),
+      db
+        .select({ payload: loyverseCustomers.payload })
+        .from(loyverseCustomers)
+        .where(eq(loyverseCustomers.organizationId, organizationId)),
+      db
+        .select({
+          externalId: loyverseItems.externalId,
+          itemName: loyverseItems.itemName,
+          payload: loyverseItems.payload,
+        })
+        .from(loyverseItems)
+        .where(eq(loyverseItems.organizationId, organizationId)),
+      db
+        .select({
+          externalId: loyverseVariants.externalId,
+          itemExternalId: loyverseVariants.loyverseItemExternalId,
+        })
+        .from(loyverseVariants)
+        .where(eq(loyverseVariants.organizationId, organizationId)),
+      db
+        .select({
+          externalId: loyverseCategories.externalId,
+          name: loyverseCategories.name,
+        })
+        .from(loyverseCategories)
+        .where(eq(loyverseCategories.organizationId, organizationId)),
+    ]);
 
   const receiptById = new Map(
     receipts.map((receipt) => [receipt.externalId, receipt]),
   );
+  const itemById = new Map(items.map((item) => [item.externalId, item]));
+  const variantById = new Map(
+    variants.map((variant) => [variant.externalId, variant]),
+  );
+  const categoryById = new Map(
+    categories.map((category) => [category.externalId, category.name]),
+  );
 
-  const shift = {
-    morning: {
-      tickets: 0,
-      sales: 0,
-      customerTickets: 0,
-      beverageUnits: 0,
-      foodUnits: 0,
-      cogs: 0,
-    },
-    afternoon: {
-      tickets: 0,
-      sales: 0,
-      customerTickets: 0,
-      beverageUnits: 0,
-      foodUnits: 0,
-      cogs: 0,
-    },
-  };
-
-  const daily = new Map<
+  const lineByReceipt = new Map<string, LineRollup>();
+  const product30 = new Map<
     string,
-    {
-      sales: number;
-      tickets: number;
-      morningSales: number;
-      afternoonSales: number;
-      cogs: number;
-    }
+    { qty: number; sales: number; cogs: number; discounts: number }
   >();
-  const hourly = Array.from({ length: 24 }, (_, hour) => ({
-    hour,
-    tickets: 0,
-    sales: 0,
-  }));
-
-  for (const receipt of receipts) {
-    if (!receipt.receiptDate) continue;
-    const local = mexicoDateParts(receipt.receiptDate);
-    const target =
-      local.hour < 16 ? shift.morning : shift.afternoon;
-    const money = Number(receipt.totalMoney ?? 0);
-    target.tickets += 1;
-    target.sales += money;
-    if (
-      typeof receipt.payload.customer_id === "string" &&
-      receipt.payload.customer_id
-    ) {
-      target.customerTickets += 1;
-    }
-
-    const day = daily.get(local.date) ?? {
-      sales: 0,
-      tickets: 0,
-      morningSales: 0,
-      afternoonSales: 0,
-      cogs: 0,
-    };
-    day.sales += money;
-    day.tickets += 1;
-    if (local.hour < 16) day.morningSales += money;
-    else day.afternoonSales += money;
-    daily.set(local.date, day);
-
-    if (local.hour >= 0 && local.hour <= 23) {
-      hourly[local.hour].tickets += 1;
-      hourly[local.hour].sales += money;
-    }
-  }
-
-  const productByShift = {
-    morning: new Map<string, { qty: number; sales: number; cogs: number }>(),
-    afternoon: new Map<string, { qty: number; sales: number; cogs: number }>(),
-  };
+  const category30 = new Map<
+    string,
+    { qty: number; sales: number; cogs: number }
+  >();
 
   for (const line of lines) {
     const receipt = receiptById.get(line.receiptExternalId);
     if (!receipt?.receiptDate) continue;
 
-    const local = mexicoDateParts(receipt.receiptDate);
-    const target =
-      local.hour < 16 ? shift.morning : shift.afternoon;
-    const products =
-      local.hour < 16
-        ? productByShift.morning
-        : productByShift.afternoon;
+    const payload = line.payload;
+    const qty = num(line.quantity);
+    const gross = num(payload.gross_total_money ?? line.grossTotalMoney);
+    const net = num(payload.total_money ?? line.grossTotalMoney);
+    const cogs = num(payload.cost_total ?? num(payload.cost) * qty);
+    const discounts = num(payload.total_discount);
+    const current = lineByReceipt.get(line.receiptExternalId) ?? {
+      units: 0,
+      gross: 0,
+      net: 0,
+      cogs: 0,
+      discounts: 0,
+    };
+    current.units += qty;
+    current.gross += gross;
+    current.net += net;
+    current.cogs += cogs;
+    current.discounts += discounts;
+    lineByReceipt.set(line.receiptExternalId, current);
 
     const name =
-      typeof line.payload.item_name === "string"
-        ? line.payload.item_name
+      typeof payload.item_name === "string"
+        ? payload.item_name
         : "Sin nombre";
-    const qty = Number(line.quantity ?? 0);
-    const sales = Number(
-      line.payload.total_money ?? line.grossTotalMoney ?? 0,
-    );
-    const cogs = Number(
-      line.payload.cost_total ??
-        Number(line.payload.cost ?? 0) * qty,
-    );
-
-    if (isFood(name)) target.foodUnits += qty;
-    else target.beverageUnits += qty;
-    target.cogs += cogs;
-
-    const day = daily.get(local.date);
-    if (day) day.cogs += cogs;
-
-    const product = products.get(name) ?? { qty: 0, sales: 0, cogs: 0 };
+    const product = product30.get(name) ?? {
+      qty: 0,
+      sales: 0,
+      cogs: 0,
+      discounts: 0,
+    };
     product.qty += qty;
-    product.sales += sales;
+    product.sales += net;
     product.cogs += cogs;
-    products.set(name, product);
+    product.discounts += discounts;
+    product30.set(name, product);
+
+    const variant = line.variantExternalId
+      ? variantById.get(line.variantExternalId)
+      : null;
+    const item = variant?.itemExternalId
+      ? itemById.get(variant.itemExternalId)
+      : null;
+    const categoryId =
+      typeof item?.payload.category_id === "string"
+        ? item.payload.category_id
+        : "";
+    const category =
+      categoryById.get(categoryId) ??
+      (isFood(name) ? "ALIMENTOS" : "SIN CATEGORÍA");
+    const cat = category30.get(category) ?? {
+      qty: 0,
+      sales: 0,
+      cogs: 0,
+    };
+    cat.qty += qty;
+    cat.sales += net;
+    cat.cogs += cogs;
+    category30.set(category, cat);
   }
 
-  const sortedDays = [...daily.entries()].sort(([a], [b]) =>
-    a.localeCompare(b),
-  );
-  const latestDate = sortedDays.at(-1)?.[0] ?? null;
+  function aggregate(keys: Set<string>) {
+    let sales = 0;
+    let grossSales = 0;
+    let discounts = 0;
+    let cogs = 0;
+    let tickets = 0;
+    let units = 0;
+    let tax = 0;
+    let tips = 0;
+    let identifiedTickets = 0;
+    let morningSales = 0;
+    let afternoonSales = 0;
 
-  const last14 = sortedDays.slice(-14);
-  const previous7 = last14.slice(0, Math.max(0, last14.length - 7));
-  const last7 = last14.slice(-7);
+    for (const receipt of receipts) {
+      if (!receipt.receiptDate) continue;
+      const local = localParts(receipt.receiptDate);
+      if (!keys.has(local.date)) continue;
 
-  const aggregateDays = (
-    rows: typeof last7,
-  ) =>
-    rows.reduce(
-      (acc, [, row]) => ({
-        sales: acc.sales + row.sales,
-        tickets: acc.tickets + row.tickets,
-        cogs: acc.cogs + row.cogs,
-      }),
-      { sales: 0, tickets: 0, cogs: 0 },
-    );
+      const payload = receipt.payload;
+      const lineRollup = lineByReceipt.get(receipt.externalId);
+      const receiptSales = num(receipt.totalMoney);
+      tickets += 1;
+      sales += receiptSales;
+      grossSales += lineRollup?.gross ?? receiptSales + num(payload.total_discount);
+      discounts +=
+        lineRollup?.discounts ?? num(payload.total_discount);
+      cogs += lineRollup?.cogs ?? 0;
+      units += lineRollup?.units ?? 0;
+      tax += num(payload.total_tax);
+      tips += num(payload.tip);
+      if (
+        typeof payload.customer_id === "string" &&
+        payload.customer_id
+      ) {
+        identifiedTickets += 1;
+      }
+      if (local.hour < 16) morningSales += receiptSales;
+      else afternoonSales += receiptSales;
+    }
 
-  const previous = aggregateDays(previous7);
-  const current = aggregateDays(last7);
-  const currentAvgTicket =
-    current.tickets > 0 ? current.sales / current.tickets : 0;
-  const previousAvgTicket =
-    previous.tickets > 0 ? previous.sales / previous.tickets : 0;
+    const contribution = sales - cogs;
+    return {
+      sales,
+      grossSales,
+      discounts,
+      discountRate:
+        grossSales > 0 ? (discounts / grossSales) * 100 : 0,
+      cogs,
+      contribution,
+      contributionPct:
+        sales > 0 ? (contribution / sales) * 100 : 0,
+      tickets,
+      avgTicket: tickets > 0 ? sales / tickets : 0,
+      units,
+      itemsPerTicket: tickets > 0 ? units / tickets : 0,
+      tax,
+      tips,
+      identifiedTickets,
+      captureRate:
+        tickets > 0 ? (identifiedTickets / tickets) * 100 : 0,
+      morningSales,
+      afternoonSales,
+    };
+  }
+
+  const periodDefs = [
+    { key: "today" as const, label: "Hoy", days: 1 },
+    { key: "7d" as const, label: "7 días", days: 7 },
+    { key: "15d" as const, label: "15 días", days: 15 },
+    { key: "30d" as const, label: "30 días", days: 30 },
+  ];
+
+  const periods: PeriodMetrics[] = periodDefs.map((definition) => {
+    const current = aggregate(dateKeys(definition.days));
+    const canCompare = definition.days < 30;
+    const previous = canCompare
+      ? aggregate(dateKeys(definition.days, definition.days))
+      : null;
+    return {
+      ...definition,
+      ...current,
+      previousSales: previous?.sales ?? null,
+      previousTickets: previous?.tickets ?? null,
+      salesChangePct: previous
+        ? pctChange(current.sales, previous.sales)
+        : null,
+      ticketsChangePct: previous
+        ? pctChange(current.tickets, previous.tickets)
+        : null,
+      avgTicketChangePct: previous
+        ? pctChange(current.avgTicket, previous.avgTicket)
+        : null,
+    };
+  });
+
+  const daily = [...dateKeys(30)]
+    .map((date) => {
+      const metrics = aggregate(new Set([date]));
+      return { date, ...metrics };
+    })
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  const hourly = Array.from({ length: 24 }, (_, hour) => ({
+    hour,
+    tickets: 0,
+    sales: 0,
+  }));
+  const payments = new Map<string, number>();
+  const dining = new Map<string, { tickets: number; sales: number }>();
+
+  for (const receipt of receipts) {
+    if (!receipt.receiptDate) continue;
+    const local = localParts(receipt.receiptDate);
+    const sales = num(receipt.totalMoney);
+    hourly[local.hour].tickets += 1;
+    hourly[local.hour].sales += sales;
+
+    const payload = receipt.payload;
+    const paymentRows = Array.isArray(payload.payments)
+      ? payload.payments
+      : [];
+    for (const raw of paymentRows) {
+      const payment = rec(raw);
+      const name =
+        typeof payment.name === "string"
+          ? payment.name
+          : typeof payment.type === "string"
+            ? payment.type
+            : "Otro";
+      payments.set(
+        name,
+        (payments.get(name) ?? 0) + num(payment.money_amount),
+      );
+    }
+
+    const diningOption =
+      typeof payload.dining_option === "string" && payload.dining_option
+        ? payload.dining_option
+        : "Sin opción";
+    const diningRow = dining.get(diningOption) ?? {
+      tickets: 0,
+      sales: 0,
+    };
+    diningRow.tickets += 1;
+    diningRow.sales += sales;
+    dining.set(diningOption, diningRow);
+  }
+
+  const topProducts = [...product30.entries()]
+    .map(([name, values]) => ({
+      name,
+      ...values,
+      contribution: values.sales - values.cogs,
+      contributionPct:
+        values.sales > 0
+          ? ((values.sales - values.cogs) / values.sales) * 100
+          : 0,
+    }))
+    .sort((a, b) => b.sales - a.sales)
+    .slice(0, 15);
+
+  const categories30 = [...category30.entries()]
+    .map(([name, values]) => ({
+      name,
+      ...values,
+      contribution: values.sales - values.cogs,
+      contributionPct:
+        values.sales > 0
+          ? ((values.sales - values.cogs) / values.sales) * 100
+          : 0,
+    }))
+    .sort((a, b) => b.sales - a.sales);
 
   const activeCustomers = customers.filter(
     (customer) => customer.payload.deleted_at == null,
@@ -238,68 +428,47 @@ export async function getBusinessAnalytics(organizationId: string) {
       typeof customer.payload.created_at === "string"
         ? new Date(customer.payload.created_at)
         : null,
-    visits: Number(customer.payload.total_visits ?? 0),
-    spent: Number(customer.payload.total_spent ?? 0),
+    visits: num(customer.payload.total_visits),
+    spent: num(customer.payload.total_spent),
   }));
-
   const now = Date.now();
-  const new7 = customerStats.filter(
-    (customer) =>
-      customer.createdAt &&
-      now - customer.createdAt.getTime() <= 7 * 86400000,
-  ).length;
-  const new30 = customerStats.filter(
-    (customer) =>
-      customer.createdAt &&
-      now - customer.createdAt.getTime() <= 30 * 86400000,
-  ).length;
-  const activated = customerStats.filter(
-    (customer) => customer.visits >= 1,
-  ).length;
-  const repeat = customerStats.filter(
-    (customer) => customer.visits >= 2,
-  ).length;
+  const loyalty = {
+    customers: activeCustomers.length,
+    new7: customerStats.filter(
+      (customer) =>
+        customer.createdAt &&
+        now - customer.createdAt.getTime() <= 7 * 86_400_000,
+    ).length,
+    new15: customerStats.filter(
+      (customer) =>
+        customer.createdAt &&
+        now - customer.createdAt.getTime() <= 15 * 86_400_000,
+    ).length,
+    new30: customerStats.filter(
+      (customer) =>
+        customer.createdAt &&
+        now - customer.createdAt.getTime() <= 30 * 86_400_000,
+    ).length,
+    activated: customerStats.filter((customer) => customer.visits >= 1)
+      .length,
+    repeat: customerStats.filter((customer) => customer.visits >= 2)
+      .length,
+    averageVisits:
+      customerStats.length > 0
+        ? customerStats.reduce((sum, row) => sum + row.visits, 0) /
+          customerStats.length
+        : 0,
+    averageSpent:
+      customerStats.length > 0
+        ? customerStats.reduce((sum, row) => sum + row.spent, 0) /
+          customerStats.length
+        : 0,
+  };
 
-  const totalTickets =
-    shift.morning.tickets + shift.afternoon.tickets;
-  const identifiedTickets =
-    shift.morning.customerTickets +
-    shift.afternoon.customerTickets;
-  const captureRate =
-    totalTickets > 0 ? (identifiedTickets / totalTickets) * 100 : 0;
-
-  const topProducts = (
-    map: Map<string, { qty: number; sales: number; cogs: number }>,
-  ) =>
-    [...map.entries()]
-      .map(([name, values]) => ({
-        name,
-        ...values,
-        contribution: values.sales - values.cogs,
-        contributionPct:
-          values.sales > 0
-            ? ((values.sales - values.cogs) / values.sales) * 100
-            : 0,
-      }))
-      .sort((a, b) => b.qty - a.qty)
-      .slice(0, 10);
-
-  const salesChange = pctChange(current.sales, previous.sales);
-  const ticketsChange = pctChange(current.tickets, previous.tickets);
-  const avgTicketChange = pctChange(
-    currentAvgTicket,
-    previousAvgTicket,
-  );
-  const currentContribution = current.sales - current.cogs;
-  const previousContribution = previous.sales - previous.cogs;
-  const currentContributionPct =
-    current.sales > 0 ? (currentContribution / current.sales) * 100 : 0;
-  const previousContributionPct =
-    previous.sales > 0 ? (previousContribution / previous.sales) * 100 : 0;
-  const contributionChange = pctChange(
-    currentContribution,
-    previousContribution,
-  );
+  const period30 = periods.find((period) => period.key === "30d")!;
+  const peakHour = hourly
+    .filter((row) => row.tickets > 0)
+    .sort((a, b) => b.sales - a.sales)[0] ?? null;
 
   const suggestions: Array<{
     level: "INFO" | "ACTION";
@@ -307,130 +476,60 @@ export async function getBusinessAnalytics(organizationId: string) {
     detail: string;
   }> = [];
 
+  const seven = periods.find((period) => period.key === "7d")!;
   if (
-    salesChange != null &&
-    salesChange <= -8 &&
-    ticketsChange != null &&
-    ticketsChange <= -8 &&
-    avgTicketChange != null &&
-    Math.abs(avgTicketChange) < 5
+    seven.salesChangePct != null &&
+    seven.salesChangePct <= -8 &&
+    seven.ticketsChangePct != null &&
+    seven.ticketsChangePct <= -8 &&
+    seven.avgTicketChangePct != null &&
+    Math.abs(seven.avgTicketChangePct) < 5
   ) {
     suggestions.push({
       level: "ACTION",
-      title: "La caída viene de tráfico, no de ticket",
-      detail: `Ventas 7d ${salesChange.toFixed(
+      title: "La caída viene de tráfico",
+      detail: `Ventas 7d ${seven.salesChangePct.toFixed(
         1,
-      )}% y tickets ${ticketsChange.toFixed(
+      )}% y tickets ${seven.ticketsChangePct.toFixed(
         1,
-      )}%, mientras el ticket promedio cambió ${avgTicketChange.toFixed(
-        1,
-      )}%. Prioridad: generar visitas y recuperar clientes.`,
-    });
-  } else if (
-    avgTicketChange != null &&
-    avgTicketChange <= -8 &&
-    (ticketsChange == null || Math.abs(ticketsChange) < 5)
-  ) {
-    suggestions.push({
-      level: "ACTION",
-      title: "El tráfico está, pero el ticket cayó",
-      detail: `Ticket promedio 7d ${avgTicketChange.toFixed(
-        1,
-      )}%. Prioridad: alimentos, extras y venta sugerida.`,
+      )}%, con ticket promedio relativamente estable.`,
     });
   }
 
-  if (captureRate < 40) {
+  if (period30.captureRate < 40) {
     suggestions.push({
       level: "ACTION",
-      title: "Hay margen para captar más clientes de lealtad",
-      detail: `Solo ${captureRate.toFixed(
+      title: "Subir captura de lealtad",
+      detail: `Solo ${period30.captureRate.toFixed(
         1,
-      )}% de los tickets del periodo están asociados a un cliente. Conviene medir y mejorar la invitación en caja.`,
+      )}% de los tickets de 30 días están asociados a cliente.`,
     });
   }
 
-  const afternoonShare =
-    shift.morning.sales + shift.afternoon.sales > 0
-      ? (shift.afternoon.sales /
-          (shift.morning.sales + shift.afternoon.sales)) *
-        100
-      : 0;
-  if (afternoonShare >= 58) {
+  if (period30.discountRate > 5) {
     suggestions.push({
       level: "INFO",
-      title: "La tarde concentra la mayor parte de la venta",
-      detail: `${afternoonShare.toFixed(
+      title: "Descuentos relevantes",
+      detail: `Los descuentos equivalen a ${period30.discountRate.toFixed(
         1,
-      )}% de la venta de 30 días ocurre desde las 16:00. Mise en place, leche, hielo, pan y bases deben llegar fuertes a ese corte.`,
+      )}% de la venta bruta de 30 días.`,
     });
   }
 
   return {
-    latestDate,
-    shift: {
-      morning: {
-        ...shift.morning,
-        avgTicket:
-          shift.morning.tickets > 0
-            ? shift.morning.sales / shift.morning.tickets
-            : 0,
-        captureRate:
-          shift.morning.tickets > 0
-            ? (shift.morning.customerTickets /
-                shift.morning.tickets) *
-              100
-            : 0,
-      },
-      afternoon: {
-        ...shift.afternoon,
-        avgTicket:
-          shift.afternoon.tickets > 0
-            ? shift.afternoon.sales / shift.afternoon.tickets
-            : 0,
-        captureRate:
-          shift.afternoon.tickets > 0
-            ? (shift.afternoon.customerTickets /
-                shift.afternoon.tickets) *
-              100
-            : 0,
-      },
-    },
-    trend: {
-      current,
-      previous,
-      currentAvgTicket,
-      previousAvgTicket,
-      salesChange,
-      ticketsChange,
-      avgTicketChange,
-      currentContribution,
-      previousContribution,
-      currentContributionPct,
-      previousContributionPct,
-      contributionChange,
-    },
-    loyalty: {
-      customers: activeCustomers.length,
-      activated,
-      repeat,
-      new7,
-      new30,
-      captureRate,
-      averageVisits:
-        customerStats.length > 0
-          ? customerStats.reduce((sum, row) => sum + row.visits, 0) /
-            customerStats.length
-          : 0,
-      averageSpent:
-        customerStats.length > 0
-          ? customerStats.reduce((sum, row) => sum + row.spent, 0) /
-            customerStats.length
-          : 0,
-    },
+    periods,
+    daily,
     hourly: hourly.filter((row) => row.tickets > 0),
-    topMorning: topProducts(productByShift.morning),
-    topAfternoon: topProducts(productByShift.afternoon),
+    payments: [...payments.entries()]
+      .map(([name, sales]) => ({ name, sales }))
+      .sort((a, b) => b.sales - a.sales),
+    dining: [...dining.entries()]
+      .map(([name, values]) => ({ name, ...values }))
+      .sort((a, b) => b.sales - a.sales),
+    topProducts,
+    categories30,
+    loyalty,
+    peakHour,
     suggestions,
   };
 }
