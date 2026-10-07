@@ -567,6 +567,70 @@ export const loyverseInventorySnapshots = pgTable("loyverse_inventory_snapshots"
   ),
 ]);
 
+export const loyverseItemSettings = pgTable("loyverse_item_settings", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  variantExternalId: text("variant_external_id").notNull(),
+  displayUnit: varchar("display_unit", { length: 20 }),
+  displayFactor: numeric("display_factor", { precision: 18, scale: 6 }).notNull().default("1"),
+  unitCostOverride: numeric("unit_cost_override", { precision: 14, scale: 4 }),
+  supplierId: uuid("supplier_id").references(() => suppliers.id, { onDelete: "set null" }),
+  packageName: text("package_name"),
+  packageQuantityNative: numeric("package_quantity_native", { precision: 18, scale: 3 }),
+  packagePrice: numeric("package_price", { precision: 14, scale: 2 }),
+  leadDays: integer("lead_days").notNull().default(0),
+  safetyDays: integer("safety_days").notNull().default(3),
+  notes: text("notes"),
+  ...timestamps,
+}, (t) => [
+  uniqueIndex("loyverse_item_settings_variant_uidx").on(
+    t.organizationId,
+    t.variantExternalId,
+  ),
+  index("loyverse_item_settings_supplier_idx").on(t.supplierId),
+]);
+
+export const purchasePlans = pgTable("purchase_plans", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  storeId: uuid("store_id").references(() => stores.id, { onDelete: "set null" }),
+  title: text("title").notNull(),
+  destination: text("destination"),
+  plannedFor: timestamp("planned_for", { withTimezone: true }),
+  status: varchar("status", { length: 20 }).notNull().default("DRAFT"),
+  notes: text("notes"),
+  estimatedBudget: numeric("estimated_budget", { precision: 14, scale: 2 }),
+  actualSpend: numeric("actual_spend", { precision: 14, scale: 2 }),
+  createdBy: uuid("created_by").references(() => userProfiles.id, { onDelete: "set null" }),
+  ...timestamps,
+}, (t) => [
+  index("purchase_plans_org_status_idx").on(t.organizationId, t.status),
+  index("purchase_plans_date_idx").on(t.organizationId, t.plannedFor),
+]);
+
+export const purchasePlanLines = pgTable("purchase_plan_lines", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  purchasePlanId: uuid("purchase_plan_id").notNull().references(() => purchasePlans.id, { onDelete: "cascade" }),
+  variantExternalId: text("variant_external_id"),
+  itemNameSnapshot: text("item_name_snapshot").notNull(),
+  supplierId: uuid("supplier_id").references(() => suppliers.id, { onDelete: "set null" }),
+  requestedNativeQuantity: numeric("requested_native_quantity", { precision: 18, scale: 3 }),
+  packageCount: numeric("package_count", { precision: 18, scale: 3 }),
+  packageNameSnapshot: text("package_name_snapshot"),
+  packageQuantitySnapshot: numeric("package_quantity_snapshot", { precision: 18, scale: 3 }),
+  unitCostSnapshot: numeric("unit_cost_snapshot", { precision: 14, scale: 4 }),
+  packagePriceSnapshot: numeric("package_price_snapshot", { precision: 14, scale: 2 }),
+  estimatedTotal: numeric("estimated_total", { precision: 14, scale: 2 }),
+  actualTotal: numeric("actual_total", { precision: 14, scale: 2 }),
+  status: varchar("status", { length: 20 }).notNull().default("PENDING"),
+  note: text("note"),
+  ...timestamps,
+}, (t) => [
+  index("purchase_plan_lines_plan_idx").on(t.purchasePlanId),
+  index("purchase_plan_lines_variant_idx").on(t.organizationId, t.variantExternalId),
+]);
+
 export const loyverseReceipts = pgTable("loyverse_receipts", {
   id: uuid("id").primaryKey().defaultRandom(),
   organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
