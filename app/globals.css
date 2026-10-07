@@ -228,3 +228,201 @@ select { width:100%; border:1px solid var(--line); border-radius:10px; padding:.
 @media (max-width: 760px) {
   .report-filters form { grid-template-columns: 1fr; }
 }
+
+
+/* Mobile-first platform pass */
+html {
+  -webkit-text-size-adjust: 100%;
+  scroll-padding-top: 5rem;
+}
+body {
+  min-width: 0;
+  overflow-x: hidden;
+}
+img, svg, video, canvas { max-width: 100%; }
+pre, code { max-width: 100%; overflow-x: auto; }
+button,
+.button,
+.nav > a,
+.nav-menu > summary,
+.nav-signout button { min-height: 44px; }
+input, select, textarea { min-height: 44px; }
+.card, .task, .queue-body, .grid > * {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+}
+.previous-handoff { border-left: 4px solid var(--ink); }
+.previous-handoff-grid {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.4fr) repeat(3, minmax(120px, .7fr));
+  gap: .75rem;
+  align-items: center;
+  margin-top: .7rem;
+}
+.previous-handoff-owner { display: grid; gap: .15rem; }
+.previous-handoff-value { font-size: 1.25rem; font-weight: 900; }
+.previous-handoff-note { margin-top: .8rem; }
+table { max-width: 100%; }
+th, td { vertical-align: top; }
+
+@media (max-width: 900px) {
+  .previous-handoff-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  body:has(.nav) {
+    padding-bottom: calc(4.7rem + env(safe-area-inset-bottom));
+  }
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    min-height: 3.35rem;
+    padding:
+      .55rem
+      max(.72rem, env(safe-area-inset-right))
+      .55rem
+      max(.72rem, env(safe-area-inset-left));
+    flex-direction: row;
+    align-items: center;
+  }
+  .brand {
+    font-size: .95rem;
+    white-space: nowrap;
+  }
+  .nav {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 60;
+    width: 100%;
+    max-width: none;
+    display: flex;
+    align-items: stretch;
+    gap: .15rem;
+    overflow-x: auto;
+    overflow-y: visible;
+    overscroll-behavior-inline: contain;
+    -webkit-overflow-scrolling: touch;
+    padding:
+      .38rem
+      max(.5rem, env(safe-area-inset-right))
+      calc(.38rem + env(safe-area-inset-bottom))
+      max(.5rem, env(safe-area-inset-left));
+    background: rgba(255,253,248,.97);
+    border-top: 1px solid var(--line);
+    box-shadow: 0 -10px 28px rgba(35,25,14,.08);
+  }
+  .nav > a,
+  .nav-menu > summary,
+  .nav-signout button {
+    min-width: 72px;
+    min-height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: .35rem .5rem;
+    border-radius: 10px;
+    font-size: .78rem;
+    text-align: center;
+  }
+  .nav-menu,
+  .nav-signout {
+    position: static;
+    flex: 0 0 auto;
+  }
+  .nav-popover {
+    position: fixed;
+    left: .65rem;
+    right: .65rem;
+    top: auto;
+    bottom: calc(4.65rem + env(safe-area-inset-bottom));
+    max-height: min(60vh, 420px);
+    overflow-y: auto;
+    padding: .55rem;
+    border-radius: 14px;
+    box-shadow: 0 -12px 36px rgba(35,25,14,.16);
+  }
+  .nav-popover a {
+    min-height: 46px;
+    display: flex;
+    align-items: center;
+  }
+  .shell {
+    width: 100%;
+    padding: .72rem .72rem 1.15rem;
+  }
+  .hero { padding: .65rem 0 .9rem; }
+  .hero h1 {
+    font-size: clamp(2rem, 11vw, 2.8rem);
+    line-height: .96;
+  }
+  .card {
+    border-radius: 14px;
+    padding: .82rem;
+  }
+  .metric { font-size: 1.7rem; }
+  .today-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: .55rem;
+  }
+  .today-kpis .card { padding: .72rem; }
+  .today-kpis p {
+    font-size: .86rem;
+    line-height: 1.3;
+  }
+  .today-kpis .button {
+    width: 100%;
+    padding-inline: .5rem;
+    font-size: .82rem;
+  }
+  .previous-handoff-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: .6rem;
+  }
+  .previous-handoff-owner {
+    grid-column: 1 / -1;
+    padding-bottom: .4rem;
+    border-bottom: 1px solid var(--line);
+  }
+  .task {
+    flex-wrap: wrap;
+    gap: .55rem;
+    padding: .72rem 0;
+  }
+  .task > form { width: 100%; }
+  .task > form button,
+  form.stack > button { width: 100%; }
+  input, select, textarea { font-size: 16px; }
+  table {
+    display: block;
+    width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+  th, td {
+    white-space: nowrap;
+    padding-right: .75rem;
+  }
+  .section-heading { gap: .55rem; }
+  .queue-row { padding: .65rem 0; }
+  .quick-action-links { width: 100%; }
+  .quick-action-links a {
+    flex: 1 1 30%;
+    text-align: center;
+  }
+  .report-filters button { width: 100%; }
+}
+
+@media (max-width: 390px) {
+  .today-kpis { grid-template-columns: 1fr; }
+  .previous-handoff-grid { grid-template-columns: 1fr; }
+  .previous-handoff-owner { grid-column: auto; }
+}

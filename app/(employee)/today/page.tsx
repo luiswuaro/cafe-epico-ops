@@ -7,6 +7,7 @@ import {
 } from "./actions";
 import { buildBaristaActionQueue } from "@/src/application/barista/action-queue";
 import { getBaristaCockpit } from "@/src/application/barista/cockpit";
+import { getLatestCompletedHandoffSummary } from "@/src/application/barista/previous-handoff";
 import { getTodayOperationalSummary } from "@/src/application/dashboard/today";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
 
@@ -50,9 +51,13 @@ export default async function TodayPage({
 }) {
   const params = await searchParams;
   const { employee } = await getCurrentEmployee();
-  const [summary, cockpit] = await Promise.all([
+  const [summary, cockpit, previousHandoff] = await Promise.all([
     getTodayOperationalSummary(employee),
     getBaristaCockpit(employee),
+    getLatestCompletedHandoffSummary(
+      employee.organizationId,
+      employee.homeStoreId ?? null,
+    ),
   ]);
 
   const openingDone =
@@ -184,7 +189,7 @@ export default async function TodayPage({
         </section>
       )}
 
-      <section className="grid">
+      <section className="grid today-kpis">
         <article className="card">
           <span className="pill">1 · APERTURA</span>
           <div className="metric">
@@ -298,6 +303,68 @@ export default async function TodayPage({
           </Link>
         </article>
       </section>
+
+      {previousHandoff && (
+        <section className="card previous-handoff" style={{ marginTop: "1rem" }}>
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">CONTINUIDAD · TURNO ANTERIOR</p>
+              <h2>Así se entregó el último turno cerrado</h2>
+            </div>
+            <span className="pill">{previousHandoff.businessDate}</span>
+          </div>
+
+          <div className="previous-handoff-grid">
+            <div className="previous-handoff-owner">
+              <strong>{previousHandoff.employeeName}</strong>
+              <span className="muted">
+                Cerró{" "}
+                {previousHandoff.completedAt
+                  ? time(previousHandoff.completedAt)
+                  : "sin hora registrada"}
+              </span>
+            </div>
+
+            <div>
+              <span className="previous-handoff-value">
+                {previousHandoff.completedTasks}/{previousHandoff.taskCount}
+              </span>
+              <span className="muted"> tareas</span>
+            </div>
+
+            <div>
+              <span className="previous-handoff-value">
+                {previousHandoff.onTargetRate == null
+                  ? "—"
+                  : Math.round(previousHandoff.onTargetRate) + "%"}
+              </span>
+              <span className="muted"> dentro de objetivo</span>
+            </div>
+
+            <div>
+              <span className="previous-handoff-value">
+                {cockpit.incidents.length}
+              </span>
+              <span className="muted"> incidencia(s) abierta(s) ahora</span>
+            </div>
+          </div>
+
+          {previousHandoff.closingNote ? (
+            <div className="handoff-note-preview previous-handoff-note">
+              <strong>Nota de entrega:</strong> {previousHandoff.closingNote}
+            </div>
+          ) : (
+            <p className="muted compact-copy">
+              El turno cerró sin nota general.
+              {previousHandoff.taskNotes > 0
+                ? " Hay " +
+                  previousHandoff.taskNotes +
+                  " nota(s) dentro de tareas."
+                : ""}
+            </p>
+          )}
+        </section>
+      )}
 
       <section className="card command-center" style={{ marginTop: "1rem" }}>
         <div className="section-heading">
