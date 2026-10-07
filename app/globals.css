@@ -426,3 +426,105 @@ th, td { vertical-align: top; }
   .previous-handoff-grid { grid-template-columns: 1fr; }
   .previous-handoff-owner { grid-column: auto; }
 }
+
+
+/* Operational recipe book */
+.recipe-filters {
+  gap: .8rem;
+}
+.recipe-category-tabs {
+  display: flex;
+  gap: .45rem;
+  flex-wrap: wrap;
+}
+.recipe-category-tabs a {
+  display: inline-flex;
+  align-items: center;
+  gap: .45rem;
+  min-height: 44px;
+  padding: .55rem .7rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: white;
+  font-weight: 800;
+}
+.recipe-category-tabs a span {
+  min-width: 1.7rem;
+  text-align: center;
+  padding: .12rem .35rem;
+  border-radius: 999px;
+  background: #eee8de;
+  color: var(--muted);
+  font-size: .78rem;
+}
+.recipe-category-tabs a.active {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: white;
+}
+.recipe-category-tabs a.active span {
+  background: rgba(255,255,255,.16);
+  color: white;
+}
+.recipe-filter-actions {
+  display: flex;
+  gap: .55rem;
+  flex-wrap: wrap;
+}
+.recipe-book {
+  display: grid;
+  gap: 1.25rem;
+  margin-top: 1rem;
+}
+.recipe-section {
+  min-width: 0;
+}
+.recipe-section-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: .75rem;
+  margin-bottom: .55rem;
+}
+.recipe-section-heading h2 {
+  margin: .1rem 0 0;
+}
+.recipe-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+}
+.recipe-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 165px;
+}
+.recipe-card h3 {
+  margin-bottom: .25rem;
+}
+.recipe-card .button {
+  margin-top: auto;
+  align-self: flex-start;
+}
+
+@media (max-width: 700px) {
+  .recipe-category-tabs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .recipe-category-tabs a {
+    justify-content: space-between;
+    border-radius: 12px;
+  }
+  .recipe-filter-actions > * {
+    flex: 1 1 auto;
+    text-align: center;
+  }
+  .recipe-section-heading {
+    align-items: center;
+  }
+  .recipe-card {
+    min-height: 0;
+  }
+  .recipe-card .button {
+    width: 100%;
+  }
+}

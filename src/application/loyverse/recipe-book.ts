@@ -1,13 +1,19 @@
 import { getLoyverseRecipeSource } from "@/src/application/loyverse/recipes";
+import {
+  operationalRecipeCategory,
+  operationalRecipeCategoryOrder,
+  operationalRecipeKey,
+  type OperationalRecipeCategory,
+} from "@/src/domain/recipes/operational";
 
-function normalizeName(value: string) {
-  return value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toUpperCase()
-    .replace(/\s+/g, " ")
-    .trim();
-}
+type SourceRecipe = Awaited<
+  ReturnType<typeof getLoyverseRecipeSource>
+>["recipes"][number];
+
+type OperationalCandidate = {
+  category: OperationalRecipeCategory;
+  recipe: SourceRecipe;
+};
 
 function preference(category: string, disposableCount: number) {
   const upper = category.toUpperCase();
@@ -16,48 +22,74 @@ function preference(category: string, disposableCount: number) {
   return 10 + disposableCount;
 }
 
+function candidateScore(candidate: OperationalCandidate) {
+  const disposableCount = candidate.recipe.directComponents.filter(
+    (row) => row.isDisposable,
+  ).length;
+  const operationalComponents = candidate.recipe.directComponents.filter(
+    (row) => !row.isDisposable,
+  ).length;
+
+  return {
+    sourcePreference: preference(
+      candidate.recipe.category,
+      disposableCount,
+    ),
+    disposableCount,
+    operationalComponents,
+  };
+}
+
 export async function getEmployeeRecipeBook(organizationId: string) {
   const source = await getLoyverseRecipeSource(organizationId);
-  const groups = new Map<string, typeof source.recipes>();
+  const groups = new Map<string, OperationalCandidate[]>();
 
   for (const recipe of source.recipes) {
     if (!recipe.availableForSale) continue;
-    const category = recipe.category.toUpperCase();
-    if (category.includes("INSUMO") || category.includes("ALIMENTO")) {
-      continue;
-    }
 
-    const key = normalizeName(recipe.itemName);
+    const category = operationalRecipeCategory(recipe.category);
+    if (!category) continue;
+
+    const key = operationalRecipeKey(recipe.itemName, category);
     const list = groups.get(key) ?? [];
-    list.push(recipe);
+    list.push({ category, recipe });
     groups.set(key, list);
   }
 
-  const recipes = [...groups.entries()]
-    .map(([key, candidates]) => {
-      const selected = [...candidates].sort(
-        (a, b) =>
-          preference(
-            a.category,
-            a.directComponents.filter((row) => row.isDisposable).length,
-          ) -
-          preference(
-            b.category,
-            b.directComponents.filter((row) => row.isDisposable).length,
-          ),
-      )[0];
+  const recipes = [...groups.values()]
+    .map((candidates) => {
+      const selected = [...candidates].sort((a, b) => {
+        const aScore = candidateScore(a);
+        const bScore = candidateScore(b);
+
+        return (
+          aScore.sourcePreference - bScore.sourcePreference ||
+          aScore.disposableCount - bScore.disposableCount ||
+          bScore.operationalComponents - aScore.operationalComponents ||
+          a.recipe.itemName.localeCompare(b.recipe.itemName, "es") ||
+          a.recipe.externalId.localeCompare(b.recipe.externalId)
+        );
+      })[0];
 
       return {
-        key,
-        id: selected.externalId,
-        name: selected.itemName,
+        key: operationalRecipeKey(
+          selected.recipe.itemName,
+          selected.category,
+        ),
+        id: selected.recipe.externalId,
+        name: selected.recipe.itemName,
         category: selected.category,
-        components: selected.directComponents.filter(
+        components: selected.recipe.directComponents.filter(
           (component) => !component.isDisposable,
         ),
       };
     })
-    .sort((a, b) => a.name.localeCompare(b.name, "es"));
+    .sort((a, b) => {
+      const byCategory =
+        operationalRecipeCategoryOrder(a.category) -
+        operationalRecipeCategoryOrder(b.category);
+      return byCategory || a.name.localeCompare(b.name, "es");
+    });
 
   return recipes;
 }

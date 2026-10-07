@@ -25,8 +25,9 @@ export default async function RecipeDetail({
         <p className="eyebrow">RECETA · {recipe.category}</p>
         <h1>{recipe.name}</h1>
         <p className="muted">
-          Receta operativa sin empaque. Si un componente es una receta madre,
-          se muestra como una unidad de esa preparación.
+          Receta operativa de barra. Los desechables de servicio no se
+          muestran aquí; si un componente es una preparación base, se conserva
+          como una unidad de esa preparación.
         </p>
       </section>
 
