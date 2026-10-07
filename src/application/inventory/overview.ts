@@ -6,6 +6,7 @@ import {
   inventoryCounts,
   inventoryItems,
   inventoryLocations,
+  loyverseInventoryMappings,
 } from "@/src/infrastructure/db/schema";
 
 export async function getInventoryOverview(
@@ -40,7 +41,7 @@ export async function getInventoryOverview(
     return { locations, selectedLocation: null, rows: [] };
   }
 
-  const [items, balances, countLines] = await Promise.all([
+  const [items, balances, countLines, loyverseMappings] = await Promise.all([
     db
       .select({
         id: inventoryItems.id,
@@ -90,10 +91,26 @@ export async function getInventoryOverview(
         ),
       )
       .orderBy(desc(inventoryCountLines.countedAt)),
+    db
+      .select({
+        inventoryItemId: loyverseInventoryMappings.inventoryItemId,
+        locationId: loyverseInventoryMappings.locationId,
+      })
+      .from(loyverseInventoryMappings)
+      .where(
+        and(
+          eq(loyverseInventoryMappings.organizationId, organizationId),
+          eq(loyverseInventoryMappings.storeId, storeId),
+          eq(loyverseInventoryMappings.isActive, true),
+        ),
+      ),
   ]);
 
   const balanceByItem = new Map(
     balances.map((row) => [row.inventoryItemId, row]),
+  );
+  const mappingByItem = new Map(
+    loyverseMappings.map((row) => [row.inventoryItemId, row]),
   );
 
   const latestPhysicalByItem = new Map<
@@ -127,6 +144,8 @@ export async function getInventoryOverview(
       ...item,
       theoretical,
       hasTheoreticalBalance: Boolean(balance),
+      loyverseMappingLocationId: mappingByItem.get(item.id)?.locationId ?? null,
+      isLoyverseMapped: mappingByItem.has(item.id),
       theoreticalUpdatedAt: balance?.updatedAt ?? null,
       physical,
       countedAt: latestPhysical?.countedAt ?? null,
