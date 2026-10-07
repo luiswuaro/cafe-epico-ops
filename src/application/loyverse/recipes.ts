@@ -195,7 +195,7 @@ export async function getLoyverseRecipeSource(organizationId: string) {
         : "ml"
       : "pz";
     const factor =
-      setting?.displayFactor != null
+      setting?.displayUnit && setting.displayFactor != null
         ? Number(setting.displayFactor)
         : soldByWeight
           ? 1000
