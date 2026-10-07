@@ -7,6 +7,8 @@ import {
   roastBarAssignments,
   roastBatches,
   roastCoffeeLots,
+  recipes,
+  recipeVersions,
 } from "@/src/infrastructure/db/schema";
 
 function localParts() {
@@ -82,8 +84,14 @@ export async function getBaristaCockpit(employee: {
         withinYieldSpec: espressoQualityChecks.withinYieldSpec,
         sensoryRating: espressoQualityChecks.sensoryRating,
         createdAt: espressoQualityChecks.createdAt,
+        recipeName: recipes.name,
       })
       .from(espressoQualityChecks)
+      .leftJoin(
+        recipeVersions,
+        eq(recipeVersions.id, espressoQualityChecks.recipeVersionId),
+      )
+      .leftJoin(recipes, eq(recipes.id, recipeVersions.recipeId))
       .where(
         and(
           eq(
@@ -118,10 +126,26 @@ export async function getBaristaCockpit(employee: {
   ]);
 
   const currentShift = local.hour < 16 ? "MORNING" : "AFTERNOON";
-  const latestQc = qcsToday[0] ?? null;
-  const qcPassedToday = qcsToday.filter(
+  const standardEspressoQcs = qcsToday.filter(
+    (row) => row.recipeName === "Espresso base 1:2",
+  );
+  const latestQc = standardEspressoQcs[0] ?? null;
+  const latestAnyQc = qcsToday[0] ?? null;
+  const qcPassedToday = standardEspressoQcs.filter(
     (row) => row.withinTimeSpec && row.withinYieldSpec === true,
   ).length;
+
+  const displayUnit = (row: {
+    displayUnit?: string | null;
+    unitLabel: string;
+  }) =>
+    row.displayUnit ??
+    (row.unitLabel === "peso/volumen" ? "u. Loyverse" : row.unitLabel);
+
+  const displayQuantity = (
+    row: { displayFactor?: number | null },
+    value: number,
+  ) => value * (row.displayFactor ?? 1);
 
   const shiftIngredients = inventory.smartRows
     .map((row) => {
@@ -129,13 +153,17 @@ export async function getBaristaCockpit(employee: {
         currentShift === "MORNING"
           ? row.expectedTodayMorning
           : row.expectedTodayAfternoon;
+      const factor = row.displayFactor ?? 1;
       return {
         variantExternalId: row.variantExternalId,
         itemName: row.itemName,
-        unitLabel: row.unitLabel,
-        inStock: row.inStock,
-        expected,
-        remainingAfterForecast: row.inStock - expected,
+        unitLabel: displayUnit(row),
+        inStock: displayQuantity(row, Math.max(0, row.inStock)),
+        sourceInStock: displayQuantity(row, row.inStock),
+        expected: expected * factor,
+        remainingAfterForecast:
+          (Math.max(0, row.inStock) - expected) * factor,
+        inventoryNeedsCorrection: row.inStock < 0,
         status: row.status,
       };
     })
@@ -167,8 +195,11 @@ export async function getBaristaCockpit(employee: {
   if (!latestQc) {
     prepActions.push({
       priority: "ACTION",
-      title: "Calibrar espresso",
-      detail: "Todavía no hay QC registrado hoy.",
+      title: "Calibrar espresso base 1:2",
+      detail:
+        latestAnyQc
+          ? "Hay controles de otras extracciones hoy, pero falta confirmar el espresso estándar de barra."
+          : "Todavía no hay QC del espresso estándar registrado hoy.",
       href: "/quality/espresso",
     });
   } else if (
@@ -185,17 +216,38 @@ export async function getBaristaCockpit(employee: {
   }
 
   for (const risk of inventory.shift.risks.slice(0, 4)) {
+    const factor = risk.displayFactor ?? 1;
+    const unit =
+      risk.displayUnit ??
+      (risk.unitLabel === "peso/volumen" ? "u. Loyverse" : risk.unitLabel);
+    const expectedDisplay = risk.expectedShift * factor;
+    const stockDisplay = risk.operationalStock * factor;
+    const sourceDisplay = risk.inStock * factor;
+
     prepActions.push({
       priority: risk.status,
-      title: "Reponer " + risk.itemName,
-      detail:
-        "Stock " +
-        risk.inStock.toFixed(2) +
-        " " +
-        risk.unitLabel +
-        " vs consumo esperado del turno " +
-        risk.expectedShift.toFixed(2) +
-        ".",
+      title: risk.inventoryNeedsCorrection
+        ? "Verificar existencia: " + risk.itemName
+        : "Reponer " + risk.itemName,
+      detail: risk.inventoryNeedsCorrection
+        ? "Loyverse marca " +
+          sourceDisplay.toFixed(2) +
+          " " +
+          unit +
+          ". Para la operación se considera 0 hasta hacer conteo/corrección. Consumo esperado del turno " +
+          expectedDisplay.toFixed(2) +
+          " " +
+          unit +
+          "."
+        : "Disponible " +
+          stockDisplay.toFixed(2) +
+          " " +
+          unit +
+          " vs consumo esperado del turno " +
+          expectedDisplay.toFixed(2) +
+          " " +
+          unit +
+          ".",
       href: "/inventory",
     });
   }
@@ -252,14 +304,17 @@ export async function getBaristaCockpit(employee: {
       : null,
     latestQc,
     calibration: {
-      attemptsToday: qcsToday.length,
+      attemptsToday: standardEspressoQcs.length,
       passedToday: qcPassedToday,
       passRate:
-        qcsToday.length > 0
-          ? (qcPassedToday / qcsToday.length) * 100
+        standardEspressoQcs.length > 0
+          ? (qcPassedToday / standardEspressoQcs.length) * 100
           : null,
     },
     prepActions: prepActions.slice(0, 8),
+    inventoryCorrectionCount: inventory.smartRows.filter(
+      (row) => row.inStock < 0,
+    ).length,
     incidents,
     wasteOptions,
   };
