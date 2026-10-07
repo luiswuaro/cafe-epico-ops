@@ -83,7 +83,10 @@ export async function reportBarWaste(formData: FormData) {
     storeId: employee.homeStoreId,
     actorUserId: user.id,
     actorEmployeeId: employee.id,
-    action: "BAR_WASTE_REPORTED",
+    action:
+      reason === "REMAKE"
+        ? "BAR_REMAKE_REPORTED"
+        : "BAR_WASTE_REPORTED",
     entityType: "operational_event",
     entityId: created.id,
     afterData: {
