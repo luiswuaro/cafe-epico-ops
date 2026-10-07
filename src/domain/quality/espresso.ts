@@ -17,6 +17,8 @@ export type ExtractionEvaluation = {
   yieldMinG: number;
   yieldMaxG: number;
   targetYieldG: number | null;
+  timeDirection: "FAST" | "OK" | "SLOW";
+  yieldDirection: "LOW" | "OK" | "HIGH";
 };
 
 function finiteNumber(value: unknown): number | null {
@@ -114,6 +116,12 @@ export function evaluateExtraction(
   const ratio = yieldG / doseG;
   const withinTimeSpec =
     brewTimeS >= spec.time_min_s && brewTimeS <= spec.time_max_s;
+  const timeDirection =
+    brewTimeS < spec.time_min_s
+      ? ("FAST" as const)
+      : brewTimeS > spec.time_max_s
+        ? ("SLOW" as const)
+        : ("OK" as const);
 
   let yieldMinG: number;
   let yieldMaxG: number;
@@ -138,6 +146,12 @@ export function evaluateExtraction(
 
   const withinYieldSpec =
     yieldG >= yieldMinG && yieldG <= yieldMaxG;
+  const yieldDirection =
+    yieldG < yieldMinG
+      ? ("LOW" as const)
+      : yieldG > yieldMaxG
+        ? ("HIGH" as const)
+        : ("OK" as const);
 
   return {
     ratio,
@@ -149,5 +163,7 @@ export function evaluateExtraction(
     yieldMinG,
     yieldMaxG,
     targetYieldG,
+    timeDirection,
+    yieldDirection,
   };
 }
