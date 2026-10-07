@@ -12,6 +12,7 @@ import {
   syncStates,
 } from "@/src/infrastructure/db/schema";
 import {
+  syncLoyverseCategories,
   syncLoyverseCustomers,
   syncLoyverseInventory,
   syncLoyverseItems,
@@ -21,6 +22,7 @@ import {
 
 const resourceSchema = z.enum([
   "stores",
+  "categories",
   "items",
   "inventory",
   "customers",
@@ -86,6 +88,7 @@ export async function runLoyverseSync(formData: FormData) {
 
   try {
     if (resource === "stores") count = await syncLoyverseStores();
+    if (resource === "categories") count = await syncLoyverseCategories();
     if (resource === "items") count = await syncLoyverseItems();
     if (resource === "inventory") count = await syncLoyverseInventory();
     if (resource === "customers") count = await syncLoyverseCustomers();

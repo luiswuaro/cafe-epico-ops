@@ -1,18 +1,31 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { eq, isNull, and } from "drizzle-orm";
 import { getDb } from "@/src/infrastructure/db/client";
 import {
-  inventoryItems,
-  loyverseInventoryMappings,
+  loyverseCategories,
   loyverseItems,
   loyverseVariants,
 } from "@/src/infrastructure/db/schema";
 
-type RawComponent = {
+type ComponentRef = {
   variantExternalId: string;
   quantity: number;
 };
 
-function readComponents(payload: Record<string, unknown>): RawComponent[] {
+type ItemRecord = {
+  externalId: string;
+  itemName: string;
+  payload: Record<string, unknown>;
+};
+
+type VariantRecord = {
+  externalId: string;
+  loyverseItemExternalId: string | null;
+  variantName: string | null;
+  sku: string | null;
+  payload: Record<string, unknown>;
+};
+
+function readComponents(payload: Record<string, unknown>): ComponentRef[] {
   const raw = payload.components;
   if (!Array.isArray(raw)) return [];
 
@@ -29,13 +42,36 @@ function readComponents(payload: Record<string, unknown>): RawComponent[] {
   });
 }
 
-export async function getLoyverseRecipeSource(
-  organizationId: string,
-  storeId: string,
-) {
+function asBool(value: unknown) {
+  return value === true || value === "true";
+}
+
+function itemCategoryId(item: ItemRecord) {
+  return typeof item.payload.category_id === "string"
+    ? item.payload.category_id
+    : "";
+}
+
+function displayUnit(item: ItemRecord) {
+  if (asBool(item.payload.is_composite)) return "receta";
+  return asBool(item.payload.sold_by_weight) ? "peso/volumen" : "pz";
+}
+
+function availableForSale(variant: VariantRecord) {
+  const stores = Array.isArray(variant.payload.stores)
+    ? variant.payload.stores
+    : [];
+
+  return stores.some((row) => {
+    if (!row || typeof row !== "object") return false;
+    return (row as Record<string, unknown>).available_for_sale === true;
+  });
+}
+
+export async function getLoyverseRecipeSource(organizationId: string) {
   const db = getDb();
 
-  const [items, variants, mappings] = await Promise.all([
+  const [items, variants, categories] = await Promise.all([
     db
       .select({
         externalId: loyverseItems.externalId,
@@ -54,91 +90,213 @@ export async function getLoyverseRecipeSource(
         externalId: loyverseVariants.externalId,
         loyverseItemExternalId: loyverseVariants.loyverseItemExternalId,
         variantName: loyverseVariants.variantName,
+        sku: loyverseVariants.sku,
+        payload: loyverseVariants.payload,
       })
       .from(loyverseVariants)
       .where(eq(loyverseVariants.organizationId, organizationId)),
     db
       .select({
-        variantExternalId:
-          loyverseInventoryMappings.loyverseVariantExternalId,
-        sourceUnit: loyverseInventoryMappings.sourceUnit,
-        factorToCanonical: loyverseInventoryMappings.factorToCanonical,
-        inventoryItemName: inventoryItems.name,
-        canonicalUnit: inventoryItems.canonicalUnit,
+        externalId: loyverseCategories.externalId,
+        name: loyverseCategories.name,
       })
-      .from(loyverseInventoryMappings)
-      .innerJoin(
-        inventoryItems,
-        eq(inventoryItems.id, loyverseInventoryMappings.inventoryItemId),
-      )
-      .where(
-        and(
-          eq(
-            loyverseInventoryMappings.organizationId,
-            organizationId,
-          ),
-          eq(loyverseInventoryMappings.storeId, storeId),
-          eq(loyverseInventoryMappings.isActive, true),
-        ),
-      ),
+      .from(loyverseCategories)
+      .where(eq(loyverseCategories.organizationId, organizationId)),
   ]);
 
-  const itemNameById = new Map(
-    items.map((item) => [item.externalId, item.itemName]),
+  const itemById = new Map(
+    items.map((item) => [item.externalId, item as ItemRecord]),
   );
   const variantById = new Map(
-    variants.map((variant) => [variant.externalId, variant]),
+    variants.map((variant) => [
+      variant.externalId,
+      variant as VariantRecord,
+    ]),
   );
-  const mappingByVariant = new Map(
-    mappings.map((mapping) => [mapping.variantExternalId, mapping]),
+  const categoryById = new Map(
+    categories.map((category) => [category.externalId, category.name]),
   );
+
+  const variantForItem = new Map<string, VariantRecord>();
+  for (const variant of variants as VariantRecord[]) {
+    if (
+      variant.loyverseItemExternalId &&
+      !variantForItem.has(variant.loyverseItemExternalId)
+    ) {
+      variantForItem.set(variant.loyverseItemExternalId, variant);
+    }
+  }
+
+  function componentDetail(ref: ComponentRef) {
+    const variant = variantById.get(ref.variantExternalId);
+    const item = variant?.loyverseItemExternalId
+      ? itemById.get(variant.loyverseItemExternalId)
+      : undefined;
+
+    if (!variant || !item) {
+      return {
+        variantExternalId: ref.variantExternalId,
+        itemExternalId: null,
+        sourceName: ref.variantExternalId,
+        quantity: ref.quantity,
+        unitLabel: "unidad desconocida",
+        category: "Sin resolver",
+        isComposite: false,
+        sku: null,
+      };
+    }
+
+    const categoryId = itemCategoryId(item);
+    return {
+      variantExternalId: ref.variantExternalId,
+      itemExternalId: item.externalId,
+      sourceName: variant.variantName || item.itemName,
+      quantity: ref.quantity,
+      unitLabel: displayUnit(item),
+      category:
+        categoryById.get(categoryId) ??
+        (categoryId ? "Categoría pendiente de sincronizar" : "Sin categoría"),
+      isComposite: asBool(item.payload.is_composite),
+      sku: variant.sku,
+    };
+  }
+
+  function expandVariant(
+    variantExternalId: string,
+    factor: number,
+    path: Set<string>,
+    output: Map<
+      string,
+      {
+        variantExternalId: string;
+        itemExternalId: string | null;
+        sourceName: string;
+        quantity: number;
+        unitLabel: string;
+        category: string;
+        sku: string | null;
+      }
+    >,
+  ) {
+    if (path.has(variantExternalId)) return;
+
+    const variant = variantById.get(variantExternalId);
+    const item = variant?.loyverseItemExternalId
+      ? itemById.get(variant.loyverseItemExternalId)
+      : undefined;
+
+    if (!variant || !item) {
+      const current = output.get(variantExternalId);
+      output.set(variantExternalId, {
+        variantExternalId,
+        itemExternalId: null,
+        sourceName: variantExternalId,
+        quantity: (current?.quantity ?? 0) + factor,
+        unitLabel: "unidad desconocida",
+        category: "Sin resolver",
+        sku: null,
+      });
+      return;
+    }
+
+    const nested = readComponents(item.payload);
+    if (!asBool(item.payload.is_composite) || nested.length === 0) {
+      const categoryId = itemCategoryId(item);
+      const current = output.get(variantExternalId);
+      output.set(variantExternalId, {
+        variantExternalId,
+        itemExternalId: item.externalId,
+        sourceName: variant.variantName || item.itemName,
+        quantity: (current?.quantity ?? 0) + factor,
+        unitLabel: displayUnit(item),
+        category:
+          categoryById.get(categoryId) ??
+          (categoryId
+            ? "Categoría pendiente de sincronizar"
+            : "Sin categoría"),
+        sku: variant.sku,
+      });
+      return;
+    }
+
+    const nextPath = new Set(path);
+    nextPath.add(variantExternalId);
+
+    for (const component of nested) {
+      expandVariant(
+        component.variantExternalId,
+        factor * component.quantity,
+        nextPath,
+        output,
+      );
+    }
+  }
 
   const recipes = items
-    .filter((item) => item.payload.is_composite === true)
-    .map((item) => {
-      const components = readComponents(item.payload).map((component) => {
-        const variant = variantById.get(component.variantExternalId);
-        const mapping = mappingByVariant.get(component.variantExternalId);
-        const sourceItemName = variant?.loyverseItemExternalId
-          ? itemNameById.get(variant.loyverseItemExternalId)
-          : null;
+    .filter((item) => asBool(item.payload.is_composite))
+    .flatMap((item) => {
+      const variant = variantForItem.get(item.externalId);
+      if (!variant) return [];
 
-        return {
-          variantExternalId: component.variantExternalId,
-          quantity: component.quantity,
-          sourceName:
-            variant?.variantName ||
-            sourceItemName ||
-            component.variantExternalId,
-          mapped: Boolean(mapping),
-          inventoryItemName: mapping?.inventoryItemName ?? null,
-          sourceUnit: mapping?.sourceUnit ?? null,
-          canonicalUnit: mapping?.canonicalUnit ?? null,
-          canonicalQuantity: mapping
-            ? component.quantity * Number(mapping.factorToCanonical)
-            : null,
-        };
-      });
+      const directRefs = readComponents(item.payload);
+      const directComponents = directRefs.map(componentDetail);
+      const effective = new Map<
+        string,
+        {
+          variantExternalId: string;
+          itemExternalId: string | null;
+          sourceName: string;
+          quantity: number;
+          unitLabel: string;
+          category: string;
+          sku: string | null;
+        }
+      >();
 
-      return {
+      for (const component of directRefs) {
+        expandVariant(
+          component.variantExternalId,
+          component.quantity,
+          new Set([variant.externalId]),
+          effective,
+        );
+      }
+
+      const categoryId = itemCategoryId(item);
+      return [{
         externalId: item.externalId,
+        variantExternalId: variant.externalId,
         itemName: item.itemName,
-        components,
-        mappedComponents: components.filter((component) => component.mapped)
-          .length,
-      };
+        sku: variant.sku,
+        category:
+          categoryById.get(categoryId) ??
+          (categoryId
+            ? "Categoría pendiente de sincronizar"
+            : "Sin categoría"),
+        availableForSale: availableForSale(variant),
+        directComponents,
+        effectiveComponents: [...effective.values()].sort((a, b) =>
+          a.sourceName.localeCompare(b.sourceName, "es"),
+        ),
+      }];
     })
-    .sort((a, b) => a.itemName.localeCompare(b.itemName, "es"));
+    .sort((a, b) => {
+      const byCategory = a.category.localeCompare(b.category, "es");
+      return byCategory || a.itemName.localeCompare(b.itemName, "es");
+    });
 
   return {
     recipes,
-    totalComponents: recipes.reduce(
-      (sum, recipe) => sum + recipe.components.length,
+    totalDirectComponents: recipes.reduce(
+      (sum, recipe) => sum + recipe.directComponents.length,
       0,
     ),
-    mappedComponents: recipes.reduce(
-      (sum, recipe) => sum + recipe.mappedComponents,
+    totalEffectiveComponents: recipes.reduce(
+      (sum, recipe) => sum + recipe.effectiveComponents.length,
       0,
+    ),
+    categories: [...new Set(recipes.map((recipe) => recipe.category))].sort(
+      (a, b) => a.localeCompare(b, "es"),
     ),
   };
 }

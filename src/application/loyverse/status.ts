@@ -2,6 +2,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { getDb } from "@/src/infrastructure/db/client";
 import {
   integrationConnections,
+  loyverseCategories,
   loyverseCustomers,
   loyverseInventoryLevels,
   loyverseItems,
@@ -31,6 +32,7 @@ export async function getLoyverseStatus(organizationId: string) {
 
   const [
     [storesRow],
+    [categoriesRow],
     [itemsRow],
     [variantsRow],
     [inventoryRow],
@@ -42,6 +44,10 @@ export async function getLoyverseStatus(organizationId: string) {
       .select({ count: sql<number>`count(*)::int` })
       .from(loyverseStores)
       .where(eq(loyverseStores.organizationId, organizationId)),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(loyverseCategories)
+      .where(eq(loyverseCategories.organizationId, organizationId)),
     db
       .select({ count: sql<number>`count(*)::int` })
       .from(loyverseItems)
@@ -80,6 +86,7 @@ export async function getLoyverseStatus(organizationId: string) {
     connection: connection ?? null,
     counts: {
       stores: storesRow?.count ?? 0,
+      categories: categoriesRow?.count ?? 0,
       items: itemsRow?.count ?? 0,
       variants: variantsRow?.count ?? 0,
       inventoryLevels: inventoryRow?.count ?? 0,

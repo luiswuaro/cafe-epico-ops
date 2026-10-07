@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { getDb } from "@/src/infrastructure/db/client";
-import { loyverseCustomers, loyverseInventoryLevels, loyverseItems, loyverseReceiptLines, loyverseReceipts, loyverseStores, loyverseVariants, organizations } from "@/src/infrastructure/db/schema";
+import { loyverseCategories, loyverseCustomers, loyverseInventoryLevels, loyverseItems, loyverseReceiptLines, loyverseReceipts, loyverseStores, loyverseVariants, organizations } from "@/src/infrastructure/db/schema";
 import { LoyverseClient } from "@/src/infrastructure/loyverse/client";
 
 const asDate = (value: unknown) => typeof value === "string" && value ? new Date(value) : null;
@@ -26,6 +26,40 @@ export async function syncLoyverseStores() {
       .onConflictDoUpdate({ target: [loyverseStores.organizationId, loyverseStores.externalId], set: { name: asString(store.name) || "Unnamed", payload: store, externalUpdatedAt: asDate(store.updated_at), syncedAt: new Date() } });
   }
   return data.stores?.length ?? 0;
+}
+
+export async function syncLoyverseCategories() {
+  const { db, orgId, client } = await context();
+  const data = await client.get<{ categories: Record<string, unknown>[] }>("/categories");
+
+  for (const category of data.categories ?? []) {
+    const externalId = asString(category.id);
+    if (!externalId) continue;
+
+    await db
+      .insert(loyverseCategories)
+      .values({
+        externalId,
+        organizationId: orgId,
+        name: asString(category.name) || "Sin nombre",
+        payload: category,
+        externalUpdatedAt: asDate(category.updated_at),
+      })
+      .onConflictDoUpdate({
+        target: [
+          loyverseCategories.organizationId,
+          loyverseCategories.externalId,
+        ],
+        set: {
+          name: asString(category.name) || "Sin nombre",
+          payload: category,
+          externalUpdatedAt: asDate(category.updated_at),
+          syncedAt: new Date(),
+        },
+      });
+  }
+
+  return data.categories?.length ?? 0;
 }
 
 export async function syncLoyverseItems(updatedAtMin?: string) {
@@ -95,19 +129,21 @@ export async function syncLoyverseReceipts(updatedAtMin?: string) {
 export async function initialSyncLoyverse(receiptBackfillDays = 30) {
   const receiptSince = new Date(Date.now() - receiptBackfillDays * 86_400_000).toISOString();
   const stores = await syncLoyverseStores();
+  const categories = await syncLoyverseCategories();
   const items = await syncLoyverseItems();
   const inventory = await syncLoyverseInventory();
   const customers = await syncLoyverseCustomers();
   const receipts = await syncLoyverseReceipts(receiptSince);
-  return { stores, items, inventory, customers, receipts, receiptSince };
+  return { stores, categories, items, inventory, customers, receipts, receiptSince };
 }
 
 export async function reconcileLoyverse(overlapMinutes = 20) {
   const since = new Date(Date.now() - overlapMinutes * 60_000).toISOString();
   const stores = await syncLoyverseStores();
+  const categories = await syncLoyverseCategories();
   const items = await syncLoyverseItems(since);
   const inventory = await syncLoyverseInventory(since);
   const customers = await syncLoyverseCustomers(since);
   const receipts = await syncLoyverseReceipts(since);
-  return { stores, items, inventory, customers, receipts, since };
+  return { stores, categories, items, inventory, customers, receipts, since };
 }
