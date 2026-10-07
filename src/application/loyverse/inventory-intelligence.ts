@@ -558,10 +558,39 @@ export async function getInventoryIntelligence(
     if (ordered.length < 2) continue;
 
     const after = ordered.at(-1)!;
-    const before = ordered.at(-2)!;
-    const intervalHours =
-      (after.at.getTime() - before.at.getTime()) / 3_600_000;
-    if (intervalHours < 0.5 || intervalHours > 24 * 7) continue;
+    const candidates = ordered
+      .slice(0, -1)
+      .map((row) => ({
+        row,
+        hours:
+          (after.at.getTime() - row.at.getTime()) / 3_600_000,
+      }))
+      .filter(
+        (candidate) =>
+          candidate.hours >= 6 &&
+          candidate.hours <= 36,
+      )
+      .sort(
+        (a, b) =>
+          Math.abs(a.hours - 24) - Math.abs(b.hours - 24),
+      );
+    const fallbackCandidates = ordered
+      .slice(0, -1)
+      .map((row) => ({
+        row,
+        hours:
+          (after.at.getTime() - row.at.getTime()) / 3_600_000,
+      }))
+      .filter(
+        (candidate) =>
+          candidate.hours >= 1 &&
+          candidate.hours <= 24 * 7,
+      )
+      .sort((a, b) => b.hours - a.hours);
+
+    const before =
+      candidates[0]?.row ?? fallbackCandidates[0]?.row ?? null;
+    if (!before) continue;
 
     const salesConsumption = (usageEvents.get(variantId) ?? [])
       .filter(
