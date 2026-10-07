@@ -28,7 +28,7 @@ create table if not exists public.roast_green_inventory_confirmations (
   provider varchar(30) not null default 'HIBEAN',
   external_bean_id text,
   external_roast_id text,
-  reported_quantity_g numeric(14,2) not null,
+  reported_quantity_g numeric(14,2),
   confirmed_quantity_g numeric(14,2) not null,
   corrected boolean not null default false,
   source_file_name text,
