@@ -1,4 +1,4 @@
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { getOrCreateChecklistRun } from "@/src/application/checklists/run";
 import { countOpenShortages } from "@/src/application/inventory/shortages";
 import { getUnreadEmployeeMessages } from "@/src/application/messages/read";
@@ -6,6 +6,7 @@ import { getInventoryIntelligence } from "@/src/application/loyverse/inventory-i
 import { getDb } from "@/src/infrastructure/db/client";
 import {
   espressoQualityChecks,
+  operationalEvents,
   roastBarAssignments,
   roastBatches,
   roastCoffeeLots,
@@ -64,7 +65,7 @@ export async function getTodayOperationalSummary(employee: {
     handoffTasks.find((task) => task.status === "PENDING") ??
     null;
 
-  const [espressoRows, activeRoastRows] = await Promise.all([
+  const [espressoRows, activeRoastRows, openEventRows] = await Promise.all([
     db
       .select({
         id: espressoQualityChecks.id,
@@ -105,6 +106,31 @@ export async function getTodayOperationalSummary(employee: {
       ))
       .orderBy(desc(roastBarAssignments.startedAt))
       .limit(1),
+    db
+      .select({
+        id: operationalEvents.id,
+        eventType: operationalEvents.eventType,
+        severity: operationalEvents.severity,
+        itemNameSnapshot: operationalEvents.itemNameSnapshot,
+        note: operationalEvents.note,
+        occurredAt: operationalEvents.occurredAt,
+      })
+      .from(operationalEvents)
+      .where(
+        and(
+          eq(operationalEvents.organizationId, employee.organizationId),
+          eq(operationalEvents.storeId, employee.homeStoreId),
+          isNull(operationalEvents.resolvedAt),
+          inArray(operationalEvents.eventType, [
+            "EQUIPMENT",
+            "STOCK",
+            "SERVICE",
+            "OTHER",
+          ]),
+        ),
+      )
+      .orderBy(desc(operationalEvents.occurredAt))
+      .limit(5),
   ]);
 
   const latestEspresso = espressoRows[0] ?? null;
@@ -174,6 +200,7 @@ export async function getTodayOperationalSummary(employee: {
       topProducts: inventory.shift.topProducts,
       stockRisks: inventory.shift.risks,
       unavailableProducts: inventory.unavailableProducts,
+      openEvents: openEventRows,
       activeRoast: activeRoast
         ? {
             ...activeRoast,
