@@ -492,11 +492,8 @@ export default async function TodayPage({
           <div className="metric">{cockpit.lossSummary.wasteEvents}</div>
           <p>evento(s) de merma hoy.</p>
           <p className="muted">
-            Costo estimado conocido:{" "}
-            {money.format(cockpit.lossSummary.estimatedLossCost)}
-            {" · "}
-            {cockpit.lossSummary.costedLossEvents}/
-            {cockpit.lossSummary.totalLossEvents} evento(s) con costo.
+            Costo estimado de merma:{" "}
+            {money.format(cockpit.lossSummary.estimatedWasteCost)}.
           </p>
         </article>
 
@@ -512,7 +509,9 @@ export default async function TodayPage({
           </p>
           <p className="muted">
             Base sincronizada:{" "}
-            {number.format(cockpit.lossSummary.soldUnitsToday)} unidad(es).
+            {number.format(cockpit.lossSummary.soldUnitsToday)} unidad(es) ·
+            costo de insumo asociado ≈{" "}
+            {money.format(cockpit.lossSummary.estimatedRemakeCost)}.
           </p>
         </article>
 
@@ -676,7 +675,9 @@ export default async function TodayPage({
           </label>
           <p className="muted">
             Cada insumo muestra su unidad operativa. Si aparece “u. Loyverse”,
-            todavía falta configurar su unidad legible en Inventario.
+            todavía falta configurar su unidad legible en Inventario. Para una
+            bebida rehecha registra una sola vez el insumo principal perdido;
+            ese registro cuenta como 1 remake.
           </p>
           <label>
             Motivo
