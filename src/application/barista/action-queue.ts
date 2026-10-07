@@ -1,6 +1,14 @@
 export type BaristaAction = {
   priority: "ACTION" | "WATCH" | "INFO";
-  area: "APERTURA" | "ESPRESSO" | "INVENTARIO" | "RUSH" | "TUESTE" | "ENTREGA" | "INCIDENCIA";
+  area:
+    | "APERTURA"
+    | "ESPRESSO"
+    | "INVENTARIO"
+    | "RUSH"
+    | "TUESTE"
+    | "ENTREGA"
+    | "INCIDENCIA"
+    | "CALIDAD";
   title: string;
   detail: string;
   href?: string;
@@ -81,6 +89,11 @@ export function buildBaristaActionQueue(input: {
     note: string | null;
   }>;
   inventoryCorrectionCount: number;
+  lossSummary: {
+    remakeEvents: number;
+    remakeRate: number | null;
+    soldUnitsToday: number;
+  };
 }) {
   const actions: BaristaAction[] = [];
 
@@ -196,6 +209,28 @@ export function buildBaristaActionQueue(input: {
         rank: 70,
       });
     }
+  }
+
+  if (
+    input.lossSummary.soldUnitsToday >= 20 &&
+    input.lossSummary.remakeEvents >= 2 &&
+    input.lossSummary.remakeRate != null &&
+    input.lossSummary.remakeRate >= 3
+  ) {
+    actions.push({
+      priority: "WATCH",
+      area: "CALIDAD",
+      title: "Revisar bebidas rehechas",
+      detail:
+        input.lossSummary.remakeEvents +
+        " remake(s) sobre " +
+        input.lossSummary.soldUnitsToday.toFixed(0) +
+        " unidad(es) sincronizadas · " +
+        input.lossSummary.remakeRate.toFixed(1) +
+        "%. Revisa la causa antes de que se vuelva patrón.",
+      href: "/today#registro-merma",
+      rank: 50,
+    });
   }
 
   if (!input.activeRoast) {
