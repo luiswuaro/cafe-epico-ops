@@ -502,6 +502,16 @@ export const loyverseStores = pgTable("loyverse_stores", {
   syncedAt: timestamp("synced_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [uniqueIndex("loyverse_stores_external_uidx").on(t.organizationId, t.externalId)]);
 
+export const loyverseCategories = pgTable("loyverse_categories", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  externalId: text("external_id").notNull(),
+  name: text("name").notNull(),
+  payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
+  externalUpdatedAt: timestamp("external_updated_at", { withTimezone: true }),
+  syncedAt: timestamp("synced_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [uniqueIndex("loyverse_categories_external_uidx").on(t.organizationId, t.externalId)]);
+
 export const loyverseItems = pgTable("loyverse_items", {
   id: uuid("id").primaryKey().defaultRandom(),
   organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
