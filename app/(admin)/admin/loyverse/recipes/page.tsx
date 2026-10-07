@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getLoyverseRecipeSource } from "@/src/application/loyverse/recipes";
+import { getOperationalRecipeSource } from "@/src/application/loyverse/recipe-book";
 import { requirePermission } from "@/src/infrastructure/auth/permissions";
 
 export const dynamic = "force-dynamic";
@@ -23,7 +23,7 @@ export default async function LoyverseRecipesPage({
 }: PageProps) {
   const params = await searchParams;
   const { organizationId } = await requirePermission("integration.read");
-  const data = await getLoyverseRecipeSource(organizationId);
+  const data = await getOperationalRecipeSource(organizationId);
   const requestedCategory =
     typeof params.category === "string" ? params.category : null;
 
@@ -37,9 +37,10 @@ export default async function LoyverseRecipesPage({
         <p className="eyebrow">LOYVERSE · RECETAS</p>
         <h1>Recetas comerciales</h1>
         <p className="muted">
-          Loyverse es la fuente maestra. Ops respeta recetas anidadas: una
-          bebida puede usar otra receta como componente y aquí también puedes
-          ver el consumo final expandido hasta insumos base.
+          Loyverse sigue siendo la fuente maestra, pero Ops consolida las
+          presentaciones internas para mostrar una sola receta por bebida o
+          alimento. Las únicas categorías operativas son Calientes, Frías y
+          Alimentos.
         </p>
       </section>
 
@@ -47,7 +48,7 @@ export default async function LoyverseRecipesPage({
         <article className="card">
           <span className="pill">RECETAS</span>
           <div className="metric">{data.recipes.length}</div>
-          <p>artículos compuestos detectados.</p>
+          <p>recetas operativas únicas.</p>
         </article>
         <article className="card">
           <span className="pill">COMPONENTES DIRECTOS</span>
@@ -86,11 +87,10 @@ export default async function LoyverseRecipesPage({
       </section>
 
       <p className="card" style={{ marginTop: "1rem" }}>
-        <strong>Cómo leerlo:</strong> “Directo” es lo que capturaste en
-        Loyverse. “Consumo real” abre recetas madre recursivamente. Ejemplo:
-        LATTE P/LL puede consumir LATTE AQUI + desechables; a su vez LATTE AQUI
-        consume ESPRESSO DOBLE + leche, y ESPRESSO DOBLE finalmente consume
-        café + agua.
+        <strong>Cómo leerlo:</strong> “Directo” muestra la receta seleccionada
+        para operación. “Consumo real” abre preparaciones base recursivamente
+        hasta llegar a los insumos finales. Las presentaciones internas de
+        servicio se consolidan y no crean recetas duplicadas.
       </p>
 
       <section className="stack" style={{ marginTop: "1rem" }}>

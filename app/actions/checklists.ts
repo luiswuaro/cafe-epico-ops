@@ -87,6 +87,7 @@ export async function startChecklistTask(formData: FormData) {
   revalidatePath("/checklists");
   revalidatePath("/handoff");
   revalidatePath("/today");
+  revalidatePath("/admin/reports/shifts");
 }
 
 export async function completeChecklistTask(formData: FormData) {
@@ -224,6 +225,7 @@ export async function completeChecklistTask(formData: FormData) {
         .update(checklistRuns)
         .set({
           status: "COMPLETED",
+          completedByEmployeeId: employee.id,
           completedAt: new Date(),
           updatedAt: new Date(),
         })
@@ -248,4 +250,60 @@ export async function completeChecklistTask(formData: FormData) {
   revalidatePath("/checklists");
   revalidatePath("/handoff");
   revalidatePath("/today");
+  revalidatePath("/admin/reports/shifts");
+  revalidatePath("/admin/reports/productivity");
+}
+
+export async function saveChecklistRunNote(formData: FormData) {
+  const runId = String(formData.get("runId") ?? "");
+  const note = String(formData.get("note") ?? "").trim();
+
+  if (!runId) throw new Error("Missing runId");
+  if (note.length > 2000) {
+    throw new Error("La nota general no puede exceder 2000 caracteres");
+  }
+
+  const { user, employee } = await getCurrentEmployee();
+  const db = getDb();
+
+  const [run] = await db
+    .select()
+    .from(checklistRuns)
+    .where(
+      and(
+        eq(checklistRuns.id, runId),
+        eq(checklistRuns.organizationId, employee.organizationId),
+      ),
+    )
+    .limit(1);
+
+  if (!run) throw new Error("Checklist run not found");
+
+  await assertEmployeePermission(employee.id, "checklist.execute", run.storeId);
+
+  const closingNote = note || null;
+
+  await db.transaction(async (tx) => {
+    await tx
+      .update(checklistRuns)
+      .set({ closingNote, updatedAt: new Date() })
+      .where(eq(checklistRuns.id, run.id));
+
+    await tx.insert(auditEvents).values({
+      organizationId: run.organizationId,
+      storeId: run.storeId,
+      actorUserId: user.id,
+      actorEmployeeId: employee.id,
+      action: "CHECKLIST_RUN_NOTE_UPDATED",
+      entityType: "checklist_run",
+      entityId: run.id,
+      beforeData: { closingNote: run.closingNote ?? null },
+      afterData: { closingNote },
+    });
+  });
+
+  revalidatePath("/handoff");
+  revalidatePath("/checklists");
+  revalidatePath("/today");
+  revalidatePath("/admin/reports/shifts");
 }

@@ -1,5 +1,9 @@
 import Link from "next/link";
 import { getEmployeeRecipeBook } from "@/src/application/loyverse/recipe-book";
+import {
+  isOperationalRecipeCategory,
+  OPERATIONAL_RECIPE_CATEGORIES,
+} from "@/src/domain/recipes/operational";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
 
 export const dynamic = "force-dynamic";
@@ -23,12 +27,11 @@ export default async function RecipesPage({
 
   const query =
     typeof params.q === "string" ? normalize(params.q) : "";
-  const category =
+  const requestedCategory =
     typeof params.category === "string" ? params.category : "";
-
-  const categories = Array.from(
-    new Set(recipes.map((recipe) => recipe.category)),
-  ).sort((a, b) => a.localeCompare(b, "es"));
+  const category = isOperationalRecipeCategory(requestedCategory)
+    ? requestedCategory
+    : "";
 
   const visible = recipes.filter((recipe) => {
     const matchesQuery =
@@ -40,49 +43,77 @@ export default async function RecipesPage({
     return matchesQuery && matchesCategory;
   });
 
+  const categoryCount = (
+    row: (typeof OPERATIONAL_RECIPE_CATEGORIES)[number],
+  ) => recipes.filter((recipe) => recipe.category === row).length;
+
   return (
     <main className="shell">
       <section className="hero">
         <p className="eyebrow">RECETARIO DE BARRA</p>
-        <h1>Recetas básicas</h1>
+        <h1>Recetas</h1>
         <p className="muted">
-          Una sola receta por bebida. Se prioriza la versión “AQUI” y se
-          ocultan vasos, tapas, popotes, mangas y otros desechables.
+          Una receta operativa por bebida o alimento. El recetario solo usa
+          tres categorías: Calientes, Frías y Alimentos.
         </p>
       </section>
 
-      <form className="card stack" method="get">
-        <div className="grid">
-          <label>
-            Buscar bebida
-            <input
-              name="q"
-              defaultValue={
-                typeof params.q === "string" ? params.q : ""
-              }
-              placeholder="Latte, moka, matcha..."
-              autoFocus
-            />
-          </label>
-          <label>
-            Categoría
-            <select name="category" defaultValue={category}>
-              <option value="">Todas</option>
-              {categories.map((row) => (
-                <option key={row} value={row}>
-                  {row}
-                </option>
-              ))}
-            </select>
-          </label>
+      <form className="card stack recipe-filters" method="get">
+        {category && (
+          <input type="hidden" name="category" value={category} />
+        )}
+        <label>
+          Buscar
+          <input
+            name="q"
+            defaultValue={
+              typeof params.q === "string" ? params.q : ""
+            }
+            placeholder="Latte, moka, matcha, croissant..."
+          />
+        </label>
+
+        <div className="recipe-category-tabs" aria-label="Categorías de recetas">
+          <Link
+            href={
+              query
+                ? "/recipes?q=" + encodeURIComponent(
+                    typeof params.q === "string" ? params.q : "",
+                  )
+                : "/recipes"
+            }
+            className={!category ? "active" : undefined}
+          >
+            Todas
+            <span>{recipes.length}</span>
+          </Link>
+
+          {OPERATIONAL_RECIPE_CATEGORIES.map((row) => {
+            const href =
+              "/recipes?category=" +
+              encodeURIComponent(row) +
+              (typeof params.q === "string" && params.q.trim()
+                ? "&q=" + encodeURIComponent(params.q)
+                : "");
+
+            return (
+              <Link
+                key={row}
+                href={href}
+                className={category === row ? "active" : undefined}
+              >
+                {row === "FRÍAS"
+                  ? "Frías"
+                  : row === "CALIENTES"
+                    ? "Calientes"
+                    : "Alimentos"}
+                <span>{categoryCount(row)}</span>
+              </Link>
+            );
+          })}
         </div>
-        <div
-          style={{
-            display: "flex",
-            gap: ".6rem",
-            flexWrap: "wrap",
-          }}
-        >
+
+        <div className="recipe-filter-actions">
           <button type="submit">Buscar</button>
           {(query || category) && (
             <Link className="button" href="/recipes">
@@ -92,20 +123,46 @@ export default async function RecipesPage({
         </div>
       </form>
 
-      <section className="grid" style={{ marginTop: "1rem" }}>
-        {visible.map((recipe) => (
-          <article className="card" key={recipe.id}>
-            <p className="eyebrow">{recipe.category}</p>
-            <h2>{recipe.name}</h2>
-            <p className="muted">
-              {recipe.components.length} componentes de barra
-            </p>
-            <Link href={"/recipes/" + recipe.id}>
-              <button>Ver receta</button>
-            </Link>
-          </article>
-        ))}
-      </section>
+      <div className="recipe-book">
+        {OPERATIONAL_RECIPE_CATEGORIES.map((categoryName) => {
+          const rows = visible.filter(
+            (recipe) => recipe.category === categoryName,
+          );
+          if (rows.length === 0) return null;
+
+          return (
+            <section className="recipe-section" key={categoryName}>
+              <div className="recipe-section-heading">
+                <div>
+                  <p className="eyebrow">CATEGORÍA</p>
+                  <h2>
+                    {categoryName === "FRÍAS"
+                      ? "Frías"
+                      : categoryName === "CALIENTES"
+                        ? "Calientes"
+                        : "Alimentos"}
+                  </h2>
+                </div>
+                <span className="pill">{rows.length} receta(s)</span>
+              </div>
+
+              <div className="grid recipe-grid">
+                {rows.map((recipe) => (
+                  <article className="card recipe-card" key={recipe.id}>
+                    <h3>{recipe.name}</h3>
+                    <p className="muted">
+                      {recipe.components.length} componente(s) de operación
+                    </p>
+                    <Link href={"/recipes/" + recipe.id} className="button">
+                      Ver receta
+                    </Link>
+                  </article>
+                ))}
+              </div>
+            </section>
+          );
+        })}
+      </div>
 
       {visible.length === 0 && (
         <p className="card muted" style={{ marginTop: "1rem" }}>

@@ -258,9 +258,23 @@ export async function getRoastingDashboard(organizationId: string) {
         ? Math.max(0, loyverseStockG) / averageDailyUseG
         : null;
 
-    const greenStockG = lot.greenInventoryItemId
+    const hibeanGreenStockG =
+      lot.hibeanGreenInventoryG == null
+        ? null
+        : Number(lot.hibeanGreenInventoryG);
+    const internalGreenStockG = lot.greenInventoryItemId
       ? balanceByItem.get(lot.greenInventoryItemId) ?? 0
       : null;
+    const greenStockG =
+      hibeanGreenStockG != null
+        ? hibeanGreenStockG
+        : internalGreenStockG;
+    const greenStockSource =
+      hibeanGreenStockG != null
+        ? ("HIBEAN_CONFIRMED" as const)
+        : internalGreenStockG != null
+          ? ("INTERNAL" as const)
+          : ("UNMAPPED" as const);
     const internalRoastedStockG = lot.roastedInventoryItemId
       ? balanceByItem.get(lot.roastedInventoryItemId) ?? 0
       : null;
@@ -298,6 +312,9 @@ export async function getRoastingDashboard(organizationId: string) {
     return {
       ...lot,
       greenStockG,
+      greenStockSource,
+      hibeanGreenStockG,
+      internalGreenStockG,
       internalRoastedStockG,
       loyverseStockG,
       averageDailyUseG,
@@ -484,7 +501,9 @@ export async function getRoastingDashboard(organizationId: string) {
           level: "ACTION",
           title: "Café verde insuficiente: " + lot.name,
           detail:
-            "Stock interno " +
+            (lot.greenStockSource === "HIBEAN_CONFIRMED"
+              ? "Stock HiBean confirmado "
+              : "Stock interno ") +
             lot.greenStockG.toFixed(0) +
             " g vs " +
             greenNeeded.toFixed(0) +

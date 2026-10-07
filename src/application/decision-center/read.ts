@@ -50,6 +50,9 @@ export async function getDecisionCenter(organizationId: string) {
           eventType: operationalEvents.eventType,
           severity: operationalEvents.severity,
           itemNameSnapshot: operationalEvents.itemNameSnapshot,
+          variantExternalId: operationalEvents.variantExternalId,
+          displayQuantity: operationalEvents.displayQuantity,
+          displayUnit: operationalEvents.displayUnit,
           note: operationalEvents.note,
           occurredAt: operationalEvents.occurredAt,
         })
@@ -64,6 +67,7 @@ export async function getDecisionCenter(organizationId: string) {
               "SERVICE",
               "OTHER",
               "BAR_INCIDENT",
+              "STOCK_COUNT",
             ]),
           ),
         )
@@ -242,10 +246,46 @@ export async function getDecisionCenter(organizationId: string) {
   }
 
   const actionableEvents = openEvents.filter((event) =>
-    ["EQUIPMENT", "STOCK", "SERVICE", "OTHER", "BAR_INCIDENT"].includes(
-      event.eventType,
-    ),
+    [
+      "EQUIPMENT",
+      "STOCK",
+      "SERVICE",
+      "OTHER",
+      "BAR_INCIDENT",
+      "STOCK_COUNT",
+    ].includes(event.eventType),
   );
+  const operationalEventRows = actionableEvents.map((event) => {
+    const inventoryRow = event.variantExternalId
+      ? inventory.smartRows.find(
+          (row) => row.variantExternalId === event.variantExternalId,
+        )
+      : null;
+    const factor = inventoryRow?.displayFactor ?? 1;
+    const currentSourceDisplay =
+      inventoryRow == null ? null : inventoryRow.inStock * factor;
+    const physicalDisplay =
+      event.displayQuantity == null
+        ? null
+        : Number(event.displayQuantity);
+
+    return {
+      ...event,
+      currentSourceDisplay,
+      physicalDisplay,
+      currentDifference:
+        currentSourceDisplay == null || physicalDisplay == null
+          ? null
+          : physicalDisplay - currentSourceDisplay,
+      currentDisplayUnit:
+        event.displayUnit ??
+        inventoryRow?.displayUnit ??
+        (inventoryRow?.unitLabel === "peso/volumen"
+          ? "u. Loyverse"
+          : inventoryRow?.unitLabel ?? "u."),
+    };
+  });
+
   if (actionableEvents.length > 0) {
     const first = actionableEvents[0];
     decisions.push({
@@ -430,7 +470,7 @@ export async function getDecisionCenter(organizationId: string) {
       itemsWithoutSupplier,
       lotsWithoutLoyverse,
     },
-    operationalEvents: actionableEvents.slice(0, 12),
+    operationalEvents: operationalEventRows.slice(0, 12),
     inventoryAnomalies: inventoryAnomalies.slice(0, 10),
     unavailableProducts: inventory.unavailableProducts.slice(0, 12),
   };

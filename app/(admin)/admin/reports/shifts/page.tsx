@@ -1,5 +1,6 @@
 import Link from "next/link";
 import {
+  getShiftReportEmployees,
   getShiftReports,
   type ShiftReportFilter,
 } from "@/src/application/reports/shifts";
@@ -61,7 +62,30 @@ export default async function ShiftReportsPage({
       ? requested
       : "ALL";
 
-  const reports = await getShiftReports(organizationId, filter, 30);
+  const employeeId =
+    typeof params.employee === "string" && params.employee
+      ? params.employee
+      : null;
+
+  const [reports, employees] = await Promise.all([
+    getShiftReports(organizationId, filter, 30, employeeId),
+    getShiftReportEmployees(organizationId),
+  ]);
+
+  const completedRuns = reports.filter(
+    (report) => report.status === "COMPLETED",
+  );
+  const measuredTasks = reports.reduce(
+    (sum, report) => sum + report.measuredTasks,
+    0,
+  );
+  const onTargetTasks = reports.reduce(
+    (sum, report) => sum + report.onTargetTasks,
+    0,
+  );
+  const latestHandoff = reports.find(
+    (report) => report.shiftType === "HANDOFF",
+  );
 
   return (
     <main className="shell">
@@ -69,20 +93,112 @@ export default async function ShiftReportsPage({
         <p className="eyebrow">ADMIN · REPORTES</p>
         <h1>Turnos y tareas</h1>
         <p className="muted">
-          Historial de apertura y entrega con notas, valores, hora de
-          finalización y duración real cuando la tarea fue iniciada con timer.
+          Historial de apertura y entrega con notas, valores, hora de inicio y
+          fin, y tiempo transcurrido entre “Iniciar” y “Completar”. No funciona
+          como reloj checador de jornada laboral.
         </p>
       </section>
 
-      <section className="card">
-        <div style={{ display: "flex", gap: ".75rem", flexWrap: "wrap" }}>
-          <Link href="/admin/reports/shifts?shift=ALL">Todos</Link>
-          <Link href="/admin/reports/shifts?shift=MORNING">Aperturas</Link>
-          <Link href="/admin/reports/shifts?shift=HANDOFF">
-            Entregas de turno
-          </Link>
-        </div>
+      <section className="card report-filters">
+        <form method="get">
+          <label>
+            Tipo
+            <select name="shift" defaultValue={filter}>
+              <option value="ALL">Todos</option>
+              <option value="MORNING">Aperturas</option>
+              <option value="HANDOFF">Entregas de turno</option>
+            </select>
+          </label>
+          <label>
+            Colaborador
+            <select name="employee" defaultValue={employeeId ?? ""}>
+              <option value="">Todos</option>
+              {employees.map((employee) => (
+                <option key={employee.id} value={employee.id}>
+                  {employee.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button type="submit">Aplicar filtros</button>
+        </form>
       </section>
+
+      <section className="grid report-kpis" style={{ marginTop: "1rem" }}>
+        <article className="card">
+          <span className="pill">TURNOS</span>
+          <div className="metric">{reports.length}</div>
+          <p>en la muestra filtrada.</p>
+        </article>
+        <article className="card">
+          <span className="pill">CERRADOS</span>
+          <div className="metric">{completedRuns.length}</div>
+          <p>
+            {reports.length > 0
+              ? Math.round((completedRuns.length / reports.length) * 100) +
+                "% de la muestra."
+              : "Sin muestra."}
+          </p>
+        </article>
+        <article className="card">
+          <span className="pill">TAREAS MEDIDAS</span>
+          <div className="metric">{measuredTasks}</div>
+          <p>con objetivo y tiempo real.</p>
+        </article>
+        <article className="card">
+          <span className="pill">DENTRO DE OBJETIVO</span>
+          <div className="metric">
+            {measuredTasks > 0
+              ? Math.round((onTargetTasks / measuredTasks) * 100) + "%"
+              : "—"}
+          </div>
+          <p>
+            {measuredTasks > 0
+              ? onTargetTasks + " / " + measuredTasks + " tareas."
+              : "Sin tareas medidas."}
+          </p>
+        </article>
+      </section>
+
+      {latestHandoff && (
+        <section className="card latest-handoff" style={{ marginTop: "1rem" }}>
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">ÚLTIMA ENTREGA VISIBLE</p>
+              <h2>
+                {latestHandoff.businessDate} ·{" "}
+                {latestHandoff.completedByName ??
+                  latestHandoff.startedByName ??
+                  "Sin responsable identificado"}
+              </h2>
+            </div>
+            <span
+              className={
+                latestHandoff.status === "COMPLETED"
+                  ? "status-ok"
+                  : "status-warn"
+              }
+            >
+              {latestHandoff.status === "COMPLETED" ? "CERRADA" : "ABIERTA"}
+            </span>
+          </div>
+          <p className="muted">
+            Cierre {formatTime(latestHandoff.completedAt)} ·{" "}
+            {latestHandoff.completedTasks}/{latestHandoff.taskCount} tareas ·{" "}
+            {latestHandoff.onTargetRate == null
+              ? "eficiencia sin muestra"
+              : Math.round(latestHandoff.onTargetRate) +
+                "% dentro de objetivo"}
+          </p>
+          {latestHandoff.closingNote ? (
+            <div className="handoff-note-preview">
+              <strong>Nota general:</strong> {latestHandoff.closingNote}
+            </div>
+          ) : (
+            <p className="muted">Sin nota general de entrega.</p>
+          )}
+        </section>
+      )}
 
       <section className="stack" style={{ marginTop: "1rem" }}>
         {reports.length === 0 ? (
@@ -113,20 +229,37 @@ export default async function ShiftReportsPage({
                 <div>
                   <strong>{report.status}</strong>
                   <div className="muted">
-                    Inicio {formatTime(report.startedAt)}
+                    Checklist inició {formatTime(report.startedAt)}
                     {" · "}
-                    cierre {formatTime(report.completedAt)}
+                    cerró {formatTime(report.completedAt)}
                   </div>
                   <div className="muted">
-                    Duración del turno: {formatDuration(report.durationSeconds)}
+                    Duración del checklist: {formatDuration(report.durationSeconds)}
                   </div>
-                  {report.startedByName && (
+                  <div className="muted">
+                    Avance {report.completedTasks}/{report.taskCount} ·{" "}
+                    {Math.round(report.completionRate)}%
+                    {report.onTargetRate == null
+                      ? ""
+                      : " · " +
+                        Math.round(report.onTargetRate) +
+                        "% dentro de objetivo"}
+                  </div>
+                  {(report.startedByName || report.completedByName) && (
                     <div className="muted">
-                      Iniciado por {report.startedByName}
+                      Inició {report.startedByName ?? "—"} · cerró{" "}
+                      {report.completedByName ?? "—"}
                     </div>
                   )}
                 </div>
               </div>
+
+              {report.closingNote && (
+                <div className="handoff-note-preview">
+                  <strong>Nota general del turno:</strong>{" "}
+                  {report.closingNote}
+                </div>
+              )}
 
               <div className="stack" style={{ marginTop: "1rem" }}>
                 {report.tasks.map((task) => {

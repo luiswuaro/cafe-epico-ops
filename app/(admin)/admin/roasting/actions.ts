@@ -413,6 +413,10 @@ export async function recordRoastBatch(formData: FormData) {
     throw error;
   }
 
+  if (curveImport.format === "JSON_HIBEAN") {
+    redirect("/admin/roasting?error=hibean-use-smart-import");
+  }
+
   const resolvedChargeTempC =
     chargeTempC ?? curveImport.events?.charge?.btC ?? null;
   const resolvedYellowingTimeS =
@@ -571,6 +575,7 @@ export async function recordRoastBatch(formData: FormData) {
       if (
         settings?.defaultStoreId &&
         settings.defaultLocationId &&
+        !lot.hibeanBeanCloudId &&
         lot.greenInventoryItemId &&
         lot.roastedInventoryItemId
       ) {

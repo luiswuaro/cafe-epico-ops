@@ -36,30 +36,37 @@ export async function AppNav() {
   );
 
   return (
-    <nav className="nav">
+    <nav className="nav" aria-label="Navegación principal">
       <Link href="/today">Hoy</Link>
       <Link href="/checklists">Checklist</Link>
       <Link href="/handoff">Entrega</Link>
       <Link href="/inventory">Inventario</Link>
-      <Link href="/recipes">Recetas</Link>
-      <Link href="/sops">SOPs</Link>
-      <Link href="/quality/espresso">Espresso QC</Link>
-      <Link href="/operations/report">Reportar</Link>
-      {canAdmin && <Link href="/admin/roasting">Tueste</Link>}
-      {canAdmin && <Link href="/admin">Admin</Link>}
-      <form action="/auth/signout" method="post">
-        <button
-          type="submit"
-          style={{
-            border: 0,
-            background: "transparent",
-            padding: 0,
-            font: "inherit",
-            cursor: "pointer",
-          }}
-        >
-          Salir
-        </button>
+
+      <details className="nav-menu">
+        <summary>Barra</summary>
+        <div className="nav-popover">
+          <Link href="/recipes">Recetas</Link>
+          <Link href="/sops">SOPs</Link>
+          <Link href="/quality/espresso">Espresso QC</Link>
+          <Link href="/operations/report">Reportar</Link>
+        </div>
+      </details>
+
+      {canAdmin && (
+        <details className="nav-menu">
+          <summary>Gestión</summary>
+          <div className="nav-popover">
+            <Link href="/admin/checklists">Tareas</Link>
+            <Link href="/admin/reports/shifts">Turnos</Link>
+            <Link href="/admin/reports/productivity">Productividad</Link>
+            <Link href="/admin/roasting">Tueste</Link>
+            <Link href="/admin">Admin</Link>
+          </div>
+        </details>
+      )}
+
+      <form className="nav-signout" action="/auth/signout" method="post">
+        <button type="submit">Salir</button>
       </form>
     </nav>
   );

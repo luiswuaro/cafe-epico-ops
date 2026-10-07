@@ -15,8 +15,9 @@ export default async function ProductivityReportPage() {
         <p className="eyebrow">ADMIN · PRODUCTIVIDAD</p>
         <h1>Eficiencia de tareas · 30 días</h1>
         <p className="muted">
-          Solo entran tareas que tengan tiempo objetivo y que hayan sido
-          iniciadas y terminadas con el cronómetro del sistema.
+          Solo entran tareas con tiempo objetivo y registro de inicio/fin. La
+          métrica usa tiempo transcurrido entre ambos eventos; incluye pausas o
+          interrupciones y no equivale a tiempo laboral neto.
         </p>
       </section>
 
