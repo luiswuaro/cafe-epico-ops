@@ -63,6 +63,7 @@ export async function getDecisionCenter(organizationId: string) {
               "STOCK",
               "SERVICE",
               "OTHER",
+              "BAR_INCIDENT",
             ]),
           ),
         )
@@ -241,13 +242,15 @@ export async function getDecisionCenter(organizationId: string) {
   }
 
   const actionableEvents = openEvents.filter((event) =>
-    ["EQUIPMENT", "STOCK", "SERVICE", "OTHER"].includes(event.eventType),
+    ["EQUIPMENT", "STOCK", "SERVICE", "OTHER", "BAR_INCIDENT"].includes(
+      event.eventType,
+    ),
   );
   if (actionableEvents.length > 0) {
     const first = actionableEvents[0];
     decisions.push({
       level:
-        first.severity === "CRITICAL"
+        first.severity === "CRITICAL" || first.severity === "URGENT"
           ? "ACTION"
           : first.severity === "IMPORTANT"
             ? "WATCH"
@@ -261,7 +264,7 @@ export async function getDecisionCenter(organizationId: string) {
           ? first.itemNameSnapshot + " · "
           : "") +
         (first.note ?? first.eventType),
-      href: "/admin/operations/events",
+      href: "/admin/decision-center",
     });
   }
 
@@ -427,5 +430,8 @@ export async function getDecisionCenter(organizationId: string) {
       itemsWithoutSupplier,
       lotsWithoutLoyverse,
     },
+    operationalEvents: actionableEvents.slice(0, 12),
+    inventoryAnomalies: inventoryAnomalies.slice(0, 10),
+    unavailableProducts: inventory.unavailableProducts.slice(0, 12),
   };
 }
