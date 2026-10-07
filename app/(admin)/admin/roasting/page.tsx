@@ -559,18 +559,7 @@ export default async function RoastingPage({
 
       <section className="grid" style={{ marginTop: "1rem" }}>
         <form action={saveCoffeeLot} className="card stack">
-          <h2>Nuevo / editar café</h2>
-          <label>
-            Lote existente
-            <select name="lotId" defaultValue="">
-              <option value="">Crear nuevo</option>
-              {data.lots.map((lot) => (
-                <option key={lot.id} value={lot.id}>
-                  {lot.name}
-                </option>
-              ))}
-            </select>
-          </label>
+          <h2>Nuevo café</h2>
           <label>
             Nombre
             <input name="name" required placeholder="Marsellesa Loma Celosa" />
@@ -698,18 +687,7 @@ export default async function RoastingPage({
         </form>
 
         <form action={saveRoastProfile} className="card stack">
-          <h2>Perfil objetivo</h2>
-          <label>
-            Perfil existente
-            <select name="profileId" defaultValue="">
-              <option value="">Crear nuevo</option>
-              {data.profiles.map((profile) => (
-                <option key={profile.id} value={profile.id}>
-                  {profile.name}
-                </option>
-              ))}
-            </select>
-          </label>
+          <h2>Nuevo perfil objetivo</h2>
           <label>
             Café
             <select name="coffeeLotId" defaultValue="">
@@ -824,6 +802,181 @@ export default async function RoastingPage({
           </label>
           <button type="submit">Guardar perfil</button>
         </form>
+      </section>
+
+      <section className="card" style={{ marginTop: "1rem" }}>
+        <h2>Ajustar lotes existentes</h2>
+        <p className="muted">
+          Aquí puedes conectar cada café con inventario, Loyverse y sus días
+          reales de reposo sin volver a crear el lote.
+        </p>
+        <div className="stack">
+          {data.lots.map((lot) => (
+            <details className="task" key={lot.id}>
+              <summary style={{ cursor: "pointer" }}>
+                <strong>{lot.name}</strong> · {lot.targetUse}
+                {lot.greenCostPerKg
+                  ? " · " + money.format(Number(lot.greenCostPerKg)) + "/kg verde"
+                  : ""}
+              </summary>
+              <form
+                action={saveCoffeeLot}
+                className="stack"
+                style={{ marginTop: ".8rem", width: "100%" }}
+              >
+                <input type="hidden" name="lotId" value={lot.id} />
+                <input type="hidden" name="name" value={lot.name} />
+                <input type="hidden" name="origin" value={lot.origin ?? ""} />
+                <input type="hidden" name="farm" value={lot.farm ?? ""} />
+                <input
+                  type="hidden"
+                  name="producer"
+                  value={lot.producer ?? ""}
+                />
+                <input
+                  type="hidden"
+                  name="variety"
+                  value={lot.variety ?? ""}
+                />
+                <input
+                  type="hidden"
+                  name="process"
+                  value={lot.process ?? ""}
+                />
+                <input
+                  type="hidden"
+                  name="altitudeMasl"
+                  value={lot.altitudeMasl ?? ""}
+                />
+                <input
+                  type="hidden"
+                  name="densityGPerL"
+                  value={lot.densityGPerL ?? ""}
+                />
+                <input
+                  type="hidden"
+                  name="moisturePct"
+                  value={lot.moisturePct ?? ""}
+                />
+
+                <div className="grid">
+                  <label>
+                    Uso
+                    <select name="targetUse" defaultValue={lot.targetUse}>
+                      <option value="ESPRESSO">Espresso</option>
+                      <option value="FILTER">Filtro</option>
+                      <option value="OMNI">Omni</option>
+                    </select>
+                  </label>
+                  <label>
+                    Costo verde $/kg
+                    <input
+                      name="greenCostPerKg"
+                      type="number"
+                      step="0.01"
+                      defaultValue={lot.greenCostPerKg ?? ""}
+                    />
+                  </label>
+                  <label>
+                    Reposo mínimo d
+                    <input
+                      name="minRestDays"
+                      type="number"
+                      defaultValue={lot.minRestDays}
+                    />
+                  </label>
+                  <label>
+                    Ventana objetivo d
+                    <input
+                      name="peakRestDays"
+                      type="number"
+                      defaultValue={lot.peakRestDays}
+                    />
+                  </label>
+                  <label>
+                    Ventana máxima d
+                    <input
+                      name="maxRestDays"
+                      type="number"
+                      defaultValue={lot.maxRestDays}
+                    />
+                  </label>
+                </div>
+
+                <label>
+                  Inventario verde
+                  <select
+                    name="greenInventoryItemId"
+                    defaultValue={lot.greenInventoryItemId ?? ""}
+                  >
+                    <option value="">Sin mapear</option>
+                    {data.inventoryItems
+                      .filter((item) => item.canonicalUnit === "g")
+                      .map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.name} · {item.category}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+                <label>
+                  Inventario tostado interno
+                  <select
+                    name="roastedInventoryItemId"
+                    defaultValue={lot.roastedInventoryItemId ?? ""}
+                  >
+                    <option value="">Sin mapear</option>
+                    {data.inventoryItems
+                      .filter((item) => item.canonicalUnit === "g")
+                      .map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.name} · {item.category}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+                <label>
+                  Insumo tostado en Loyverse
+                  <select
+                    name="loyverseRoastedVariantExternalId"
+                    defaultValue={
+                      lot.loyverseRoastedVariantExternalId ?? ""
+                    }
+                  >
+                    <option value="">Sin mapear</option>
+                    {data.loyverseVariants.map((row) => (
+                      <option
+                        key={row.variantExternalId}
+                        value={row.variantExternalId}
+                      >
+                        {row.itemName}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Multiplicador Loyverse → g
+                  <input
+                    name="loyverseUnitToG"
+                    type="number"
+                    min="0.000001"
+                    step="0.001"
+                    defaultValue={lot.loyverseUnitToG}
+                  />
+                </label>
+                <label>
+                  Notas
+                  <textarea
+                    name="notes"
+                    rows={2}
+                    defaultValue={lot.notes ?? ""}
+                  />
+                </label>
+                <button type="submit">Guardar ajuste</button>
+              </form>
+            </details>
+          ))}
+        </div>
       </section>
 
       <section className="card" style={{ marginTop: "1rem" }}>
