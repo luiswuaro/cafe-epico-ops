@@ -1018,3 +1018,61 @@ export const auditEvents = pgTable("audit_events", {
   requestId: text("request_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [index("audit_entity_idx").on(t.entityType, t.entityId, t.createdAt)]);
+
+
+export const posOrders = pgTable("pos_orders", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  storeId: uuid("store_id").notNull().references(() => stores.id, { onDelete: "restrict" }),
+  clientOrderId: text("client_order_id").notNull(),
+  folio: varchar("folio", { length: 50 }).notNull(),
+  mode: varchar("mode", { length: 20 }).notNull().default("SHADOW"),
+  status: varchar("status", { length: 20 }).notNull().default("PAID"),
+  serviceMode: varchar("service_mode", { length: 20 }).notNull(),
+  tableLabel: text("table_label"),
+  employeeId: uuid("employee_id").references(() => employees.id, { onDelete: "set null" }),
+  businessDate: varchar("business_date", { length: 10 }).notNull(),
+  subtotal: numeric("subtotal", { precision: 14, scale: 2 }).notNull(),
+  total: numeric("total", { precision: 14, scale: 2 }).notNull(),
+  note: text("note"),
+  inventoryEffectApplied: boolean("inventory_effect_applied").notNull().default(false),
+  matchedExternalReceiptId: text("matched_external_receipt_id"),
+  matchedAt: timestamp("matched_at", { withTimezone: true }),
+  paidAt: timestamp("paid_at", { withTimezone: true }).notNull().defaultNow(),
+  ...timestamps,
+}, (t) => [
+  uniqueIndex("pos_orders_client_uidx").on(t.organizationId, t.clientOrderId),
+  uniqueIndex("pos_orders_folio_uidx").on(t.storeId, t.folio),
+  index("pos_orders_store_paid_idx").on(t.storeId, t.paidAt),
+  index("pos_orders_employee_idx").on(t.employeeId, t.paidAt),
+]);
+
+export const posOrderLines = pgTable("pos_order_lines", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  orderId: uuid("order_id").notNull().references(() => posOrders.id, { onDelete: "cascade" }),
+  catalogExternalId: text("catalog_external_id").notNull(),
+  variantExternalId: text("variant_external_id"),
+  nameSnapshot: text("name_snapshot").notNull(),
+  categorySnapshot: varchar("category_snapshot", { length: 40 }).notNull(),
+  unitPrice: numeric("unit_price", { precision: 14, scale: 2 }).notNull(),
+  quantity: numeric("quantity", { precision: 12, scale: 3 }).notNull(),
+  lineTotal: numeric("line_total", { precision: 14, scale: 2 }).notNull(),
+  expectedConsumption: jsonb("expected_consumption").$type<Record<string, unknown>>().notNull().default({}),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("pos_order_lines_order_idx").on(t.orderId),
+  index("pos_order_lines_catalog_idx").on(t.organizationId, t.catalogExternalId),
+]);
+
+export const posPayments = pgTable("pos_payments", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  orderId: uuid("order_id").notNull().references(() => posOrders.id, { onDelete: "cascade" }),
+  method: varchar("method", { length: 30 }).notNull(),
+  amount: numeric("amount", { precision: 14, scale: 2 }).notNull(),
+  reference: text("reference"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("pos_payments_order_idx").on(t.orderId),
+]);

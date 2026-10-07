@@ -60,7 +60,7 @@ export async function getOperationalRecipeSource(
 
   const recipes = [...groups.values()]
     .map((candidates) => {
-      const selected = [...candidates].sort((a, b) => {
+      const sortedCandidates = [...candidates].sort((a, b) => {
         const aScore = candidateScore(a);
         const bScore = candidateScore(b);
 
@@ -71,12 +71,39 @@ export async function getOperationalRecipeSource(
           a.recipe.itemName.localeCompare(b.recipe.itemName, "es") ||
           a.recipe.externalId.localeCompare(b.recipe.externalId)
         );
-      })[0];
+      });
+      const selected = sortedCandidates[0];
+      const dineIn =
+        candidates.find((candidate) =>
+          candidate.recipe.category.toUpperCase().includes("AQUI"),
+        ) ?? selected;
+      const takeaway =
+        candidates.find((candidate) => {
+          const sourceCategory = candidate.recipe.category.toUpperCase();
+          return (
+            sourceCategory.includes("P/LL") ||
+            sourceCategory.includes("LLEVAR")
+          );
+        }) ?? selected;
 
       return {
         ...selected.recipe,
         sourceCategory: selected.recipe.category,
         category: selected.category,
+        serviceRecipes: {
+          DINE_IN: {
+            externalId: dineIn.recipe.externalId,
+            variantExternalId: dineIn.recipe.variantExternalId,
+            sourceCategory: dineIn.recipe.category,
+            effectiveComponents: dineIn.recipe.effectiveComponents,
+          },
+          TAKEAWAY: {
+            externalId: takeaway.recipe.externalId,
+            variantExternalId: takeaway.recipe.variantExternalId,
+            sourceCategory: takeaway.recipe.category,
+            effectiveComponents: takeaway.recipe.effectiveComponents,
+          },
+        },
       };
     })
     .sort((a, b) => {

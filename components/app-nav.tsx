@@ -29,15 +29,23 @@ export async function AppNav() {
 
   if (!employee) return null;
 
-  const canAdmin = await employeeHasPermission(
-    employee.id,
-    "admin.access",
-    employee.homeStoreId ?? undefined,
-  );
+  const [canAdmin, canPos] = await Promise.all([
+    employeeHasPermission(
+      employee.id,
+      "admin.access",
+      employee.homeStoreId ?? undefined,
+    ),
+    employeeHasPermission(
+      employee.id,
+      "pos.sell",
+      employee.homeStoreId ?? undefined,
+    ),
+  ]);
 
   return (
     <nav className="nav" aria-label="Navegación principal">
       <Link href="/today">Hoy</Link>
+      {canPos && <Link href="/pos">POS</Link>}
       <Link href="/checklists">Checklist</Link>
       <Link href="/handoff">Entrega</Link>
       <Link href="/inventory">Inventario</Link>
