@@ -63,6 +63,14 @@ export default async function RoastingPage({
   const selectedBatch = selectedBatchId
     ? data.batches.find((batch) => batch.id === selectedBatchId) ?? null
     : null;
+  const comparisonBatches = selectedBatch
+    ? data.batches
+        .filter(
+          (batch) =>
+            batch.coffeeLotId === selectedBatch.coffeeLotId,
+        )
+        .slice(0, 5)
+    : [];
 
   return (
     <main className="shell">
@@ -1329,6 +1337,83 @@ export default async function RoastingPage({
             </label>
             <button type="submit">Asignar batch</button>
           </form>
+        </section>
+      )}
+
+      {selectedBatch && comparisonBatches.length > 1 && (
+        <section className="card" style={{ marginTop: "1rem" }}>
+          <p className="eyebrow">ROAST ENGINEER · COMPARATIVO</p>
+          <h2>Últimos batches de {selectedBatch.lot?.name}</h2>
+          <p className="muted">
+            Comparación rápida del mismo café para revisar repetibilidad,
+            desarrollo, merma, curva, Espresso QC y cata sin mezclar lotes de
+            origen diferente.
+          </p>
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr>
+                  <th style={{ textAlign: "left" }}>Batch</th>
+                  <th>FC</th>
+                  <th>Drop</th>
+                  <th>DTR</th>
+                  <th>Merma</th>
+                  <th>RoR pico</th>
+                  <th>QC</th>
+                  <th>Cata</th>
+                </tr>
+              </thead>
+              <tbody>
+                {comparisonBatches.map((batch) => (
+                  <tr key={batch.id}>
+                    <td>
+                      <Link href={"/admin/roasting?batch=" + batch.id}>
+                        <strong>{batch.batchCode}</strong>
+                      </Link>
+                      <div className="muted">
+                        {batch.roastedAt.toLocaleDateString("es-MX", {
+                          timeZone: "America/Mexico_City",
+                        })}
+                      </div>
+                    </td>
+                    <td style={{ textAlign: "right" }}>
+                      {seconds(batch.firstCrackTimeS)}
+                    </td>
+                    <td style={{ textAlign: "right" }}>
+                      {seconds(batch.dropTimeS)}
+                    </td>
+                    <td style={{ textAlign: "right" }}>
+                      {batch.dtrPct
+                        ? Number(batch.dtrPct).toFixed(2) + "%"
+                        : "—"}
+                    </td>
+                    <td style={{ textAlign: "right" }}>
+                      {Number(batch.weightLossPct).toFixed(2)}%
+                    </td>
+                    <td style={{ textAlign: "right" }}>
+                      {batch.diagnostics.peakRor == null
+                        ? "—"
+                        : batch.diagnostics.peakRor.toFixed(1)}
+                    </td>
+                    <td style={{ textAlign: "right" }}>
+                      {batch.espressoQcPassRate == null
+                        ? "—"
+                        : batch.espressoQcPassRate.toFixed(0) +
+                          "% · n=" +
+                          batch.espressoQcCount}
+                    </td>
+                    <td style={{ textAlign: "right" }}>
+                      {batch.latestSensory?.overallScore == null
+                        ? "—"
+                        : Number(
+                            batch.latestSensory.overallScore,
+                          ).toFixed(2)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </section>
       )}
 
