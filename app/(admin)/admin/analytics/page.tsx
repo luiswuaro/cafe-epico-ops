@@ -218,6 +218,21 @@ export default async function AnalyticsPage({
             {data.loyalty.new7} altas 7d · {data.loyalty.new15} altas 15d ·{" "}
             {data.loyalty.new30} altas 30d.
           </p>
+          <p className="muted">
+            Ritmo 7d {data.loyalty.newPerDay7.toFixed(2)}/día · proyección a
+            30 días {data.loyalty.projected30At7dPace.toFixed(0)} altas ·
+            tendencia{" "}
+            {data.loyalty.trendPct == null
+              ? "sin base previa comparable"
+              : (data.loyalty.trendPct > 0 ? "+" : "") +
+                data.loyalty.trendPct.toFixed(1) +
+                "% vs ritmo 30d"}
+          </p>
+          <p className="muted">
+            {data.loyalty.anonymousTickets30} tickets de 30 días no tienen
+            cliente identificado; son oportunidades de captura, no personas
+            únicas.
+          </p>
         </article>
       </section>
 
