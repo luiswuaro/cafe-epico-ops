@@ -158,6 +158,9 @@ export default async function TodayPage() {
           <Link className="button" href="/handoff">
             Entrega de turno
           </Link>
+          <Link className="button" href="/operations/report">
+            Merma / incidencia
+          </Link>
         </div>
       </section>
 
