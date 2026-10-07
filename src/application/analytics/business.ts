@@ -12,6 +12,7 @@ import {
 
 type LineRollup = {
   units: number;
+  beverageUnits: number;
   gross: number;
   net: number;
   cogs: number;
@@ -39,6 +40,10 @@ type PeriodMetrics = {
   captureRate: number;
   morningSales: number;
   afternoonSales: number;
+  morningTickets: number;
+  afternoonTickets: number;
+  morningBeverageUnits: number;
+  afternoonBeverageUnits: number;
   previousSales: number | null;
   previousTickets: number | null;
   salesChangePct: number | null;
@@ -292,12 +297,14 @@ export async function getBusinessAnalytics(organizationId: string) {
     const discounts = num(payload.total_discount);
     const current = lineByReceipt.get(line.receiptExternalId) ?? {
       units: 0,
+      beverageUnits: 0,
       gross: 0,
       net: 0,
       cogs: 0,
       discounts: 0,
     };
     current.units += qty;
+    if (!isFood(name)) current.beverageUnits += qty;
     current.gross += gross;
     current.net += net;
     current.cogs += cogs;
@@ -367,6 +374,10 @@ export async function getBusinessAnalytics(organizationId: string) {
     let identifiedTickets = 0;
     let morningSales = 0;
     let afternoonSales = 0;
+    let morningTickets = 0;
+    let afternoonTickets = 0;
+    let morningBeverageUnits = 0;
+    let afternoonBeverageUnits = 0;
 
     for (const receipt of receipts) {
       if (!receipt.receiptDate) continue;
@@ -391,8 +402,15 @@ export async function getBusinessAnalytics(organizationId: string) {
       ) {
         identifiedTickets += 1;
       }
-      if (local.hour < 16) morningSales += receiptSales;
-      else afternoonSales += receiptSales;
+      if (local.hour < 16) {
+        morningSales += receiptSales;
+        morningTickets += 1;
+        morningBeverageUnits += lineRollup?.beverageUnits ?? 0;
+      } else {
+        afternoonSales += receiptSales;
+        afternoonTickets += 1;
+        afternoonBeverageUnits += lineRollup?.beverageUnits ?? 0;
+      }
     }
 
     const contribution = sales - cogs;
@@ -417,6 +435,10 @@ export async function getBusinessAnalytics(organizationId: string) {
         tickets > 0 ? (identifiedTickets / tickets) * 100 : 0,
       morningSales,
       afternoonSales,
+      morningTickets,
+      afternoonTickets,
+      morningBeverageUnits,
+      afternoonBeverageUnits,
     };
   }
 
