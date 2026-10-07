@@ -12,6 +12,12 @@ const number = new Intl.NumberFormat("es-MX", {
   maximumFractionDigits: 3,
 });
 
+const money = new Intl.NumberFormat("es-MX", {
+  style: "currency",
+  currency: "MXN",
+  maximumFractionDigits: 2,
+});
+
 export default async function LoyverseRecipesPage({
   searchParams,
 }: PageProps) {
@@ -98,6 +104,68 @@ export default async function LoyverseRecipesPage({
             {recipe.sku && <p className="muted">SKU {recipe.sku}</p>}
 
             <div className="grid" style={{ marginTop: ".8rem" }}>
+              <article className="task">
+                <div>
+                  <strong>Precio</strong>
+                  <div className="metric">
+                    {recipe.salePrice != null
+                      ? money.format(recipe.salePrice)
+                      : "—"}
+                  </div>
+                </div>
+              </article>
+              <article className="task">
+                <div>
+                  <strong>COGS Loyverse</strong>
+                  <div className="metric">
+                    {recipe.loyverseCost != null
+                      ? money.format(recipe.loyverseCost)
+                      : "—"}
+                  </div>
+                </div>
+              </article>
+              <article className="task">
+                <div>
+                  <strong>Contribución</strong>
+                  <div className="metric">
+                    {recipe.contribution != null
+                      ? money.format(recipe.contribution)
+                      : "—"}
+                  </div>
+                  <div className="muted">
+                    {recipe.contributionPct != null
+                      ? recipe.contributionPct.toFixed(1) + "%"
+                      : "sin precio/costo"}
+                  </div>
+                </div>
+              </article>
+              <article className="task">
+                <div>
+                  <strong>Costo expandido</strong>
+                  <div className="metric">
+                    {recipe.expandedCost != null
+                      ? money.format(recipe.expandedCost)
+                      : "—"}
+                  </div>
+                  <div className="muted">
+                    Auditoría desde los insumos hoja.
+                  </div>
+                </div>
+              </article>
+            </div>
+
+            {recipe.loyverseCost != null &&
+              recipe.expandedCost != null &&
+              Math.abs(recipe.loyverseCost - recipe.expandedCost) > 0.02 && (
+                <p className="alert" style={{ marginTop: ".8rem" }}>
+                  Diferencia de costo: Loyverse{" "}
+                  {money.format(recipe.loyverseCost)} vs expansión{" "}
+                  {money.format(recipe.expandedCost)}. Conviene revisar costos
+                  o componentes.
+                </p>
+              )}
+
+            <div className="grid" style={{ marginTop: ".8rem" }}>
               <div>
                 <h3>Receta directa</h3>
                 <div className="stack">
@@ -119,6 +187,10 @@ export default async function LoyverseRecipesPage({
                           {" · "}
                           {component.category}
                           {component.sku ? " · SKU " + component.sku : ""}
+                          {component.unitCost != null
+                            ? " · costo unit. " +
+                              money.format(component.unitCost)
+                            : ""}
                         </div>
                       </div>
                     </div>
