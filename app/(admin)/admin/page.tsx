@@ -1,6 +1,7 @@
 import { requirePermission } from "@/src/infrastructure/auth/permissions";
 import Link from "next/link";
 const modules = [
+  ["Centro de decisiones", "Prioridades de ventas, inventario, compras, tueste y personal", "/admin/decision-center"],
   ["Checklist", "Plantillas, tareas, frecuencias, roles y SOPs", "/admin/checklists"],
   ["Recetas Loyverse", "Recetas madre, componentes y consumo real expandido", "/admin/loyverse/recipes"],
   ["Recetas técnicas QC", "Parámetros de extracción y control técnico", "/admin/recipes"],
