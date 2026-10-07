@@ -770,14 +770,14 @@ th, td { vertical-align: top; }
   margin-bottom: 1rem;
 }
 .receipt-paper {
-  width: min(100%, 80mm);
+  width: min(100%, 48mm);
   margin: 0 auto;
-  padding: 6mm 5mm;
+  padding: 3mm 2mm;
   background: white;
   color: #111;
   border: 1px solid var(--line);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 12px;
+  font-size: 9.5px;
 }
 .receipt-paper header,
 .receipt-paper footer {
@@ -823,7 +823,7 @@ th, td { vertical-align: top; }
   font-weight: 900;
 }
 .receipt-admin {
-  max-width: 80mm;
+  max-width: 58mm;
   margin: 1rem auto 0;
 }
 
@@ -840,7 +840,7 @@ th, td { vertical-align: top; }
 
 @media print {
   @page {
-    size: 80mm auto;
+    size: 58mm 210mm;
     margin: 0;
   }
   body {
@@ -853,15 +853,89 @@ th, td { vertical-align: top; }
     display: none !important;
   }
   .receipt-shell {
-    width: 80mm;
+    width: 48mm;
     margin: 0;
     padding: 0;
   }
   .receipt-paper {
-    width: 80mm;
+    width: 48mm;
     border: 0;
     margin: 0;
-    padding: 5mm 4mm;
+    padding: 2mm 1.5mm;
     box-shadow: none;
+  }
+}
+
+.receipt-paper,
+.receipt-paper * {
+  box-sizing: border-box;
+}
+.receipt-paper {
+  overflow: hidden;
+}
+.receipt-paper h1 {
+  font-size: 16px;
+}
+.receipt-paper,
+.receipt-meta,
+.receipt-line,
+.receipt-total {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.receipt-line > span:first-child {
+  min-width: 0;
+  padding-right: 1.5mm;
+}
+.receipt-line > span:last-child,
+.receipt-total > strong {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+.pos-customer-box {
+  padding: .65rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #faf7f1;
+}
+.pos-customer-box strong {
+  display: block;
+}
+.pos-command-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: .45rem;
+}
+.pos-command-button {
+  border: 1px solid var(--ink);
+  background: white;
+  color: var(--ink);
+  border-radius: 12px;
+  font-weight: 900;
+}
+.command-board {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  gap: .7rem;
+}
+.command-card {
+  display: grid;
+  gap: .6rem;
+}
+.command-lines {
+  display: grid;
+  gap: .2rem;
+}
+.command-status-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .4rem;
+}
+.command-status-actions button {
+  flex: 1 1 110px;
+}
+@media (max-width: 700px) {
+  .pos-command-actions {
+    grid-template-columns: 1fr;
   }
 }

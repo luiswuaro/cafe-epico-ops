@@ -46,6 +46,7 @@ export async function AppNav() {
     <nav className="nav" aria-label="Navegación principal">
       <Link href="/today">Hoy</Link>
       {canPos && <Link href="/pos">POS</Link>}
+      {canPos && <Link href="/pos/orders">Comandas</Link>}
       <Link href="/checklists">Checklist</Link>
       <Link href="/handoff">Entrega</Link>
       <Link href="/inventory">Inventario</Link>

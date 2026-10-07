@@ -1020,6 +1020,35 @@ export const auditEvents = pgTable("audit_events", {
 }, (t) => [index("audit_entity_idx").on(t.entityType, t.entityId, t.createdAt)]);
 
 
+export const posCustomers = pgTable("pos_customers", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  sourceExternalId: text("source_external_id"),
+  name: text("name").notNull(),
+  phone: text("phone"),
+  email: text("email"),
+  pointsBalance: numeric("points_balance", { precision: 14, scale: 2 }).notNull().default("0"),
+  isActive: boolean("is_active").notNull().default(true),
+  ...timestamps,
+}, (t) => [
+  uniqueIndex("pos_customers_source_uidx").on(t.organizationId, t.sourceExternalId),
+  index("pos_customers_org_name_idx").on(t.organizationId, t.name),
+]);
+
+export const posLoyaltyEntries = pgTable("pos_loyalty_entries", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  customerId: uuid("customer_id").notNull().references(() => posCustomers.id, { onDelete: "cascade" }),
+  orderId: uuid("order_id"),
+  entryType: varchar("entry_type", { length: 30 }).notNull(),
+  points: numeric("points", { precision: 14, scale: 2 }).notNull(),
+  note: text("note"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("pos_loyalty_customer_idx").on(t.customerId, t.createdAt),
+  index("pos_loyalty_order_idx").on(t.orderId),
+]);
+
 export const posOrders = pgTable("pos_orders", {
   id: uuid("id").primaryKey().defaultRandom(),
   organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
@@ -1031,14 +1060,17 @@ export const posOrders = pgTable("pos_orders", {
   serviceMode: varchar("service_mode", { length: 20 }).notNull(),
   tableLabel: text("table_label"),
   employeeId: uuid("employee_id").references(() => employees.id, { onDelete: "set null" }),
+  customerId: uuid("customer_id").references(() => posCustomers.id, { onDelete: "set null" }),
   businessDate: varchar("business_date", { length: 10 }).notNull(),
   subtotal: numeric("subtotal", { precision: 14, scale: 2 }).notNull(),
   total: numeric("total", { precision: 14, scale: 2 }).notNull(),
   note: text("note"),
+  loyaltyPointsPreview: numeric("loyalty_points_preview", { precision: 14, scale: 2 }).notNull().default("0"),
+  loyaltyEffectApplied: boolean("loyalty_effect_applied").notNull().default(false),
   inventoryEffectApplied: boolean("inventory_effect_applied").notNull().default(false),
   matchedExternalReceiptId: text("matched_external_receipt_id"),
   matchedAt: timestamp("matched_at", { withTimezone: true }),
-  paidAt: timestamp("paid_at", { withTimezone: true }).notNull().defaultNow(),
+  paidAt: timestamp("paid_at", { withTimezone: true }),
   cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
   cancelledByEmployeeId: uuid("cancelled_by_employee_id").references(() => employees.id, { onDelete: "set null" }),
   cancelReason: text("cancel_reason"),

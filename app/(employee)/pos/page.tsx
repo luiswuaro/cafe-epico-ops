@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { PosClient } from "./pos-client";
 import { getPosCatalog } from "@/src/application/pos/catalog";
+import { getPosCustomers } from "@/src/application/pos/customers";
 import {
   getRecentShadowOrders,
   getShadowOrderMirror,
@@ -48,9 +49,12 @@ export default async function PosPage({
   );
 
   const savedId = typeof params.saved === "string" ? params.saved : null;
+  const selectedCustomerId =
+    typeof params.customer === "string" ? params.customer : null;
 
-  const [catalog, recent, saved, canCancel] = await Promise.all([
+  const [catalog, customers, recent, saved, canCancel] = await Promise.all([
     getPosCatalog(employee.organizationId),
+    getPosCustomers(employee.organizationId),
     getRecentShadowOrders(
       employee.organizationId,
       employee.homeStoreId,
@@ -198,6 +202,12 @@ export default async function PosPage({
         </section>
       )}
 
+      <div className="pos-context-links">
+        <Link href="/pos/orders" className="button">
+          Ver comandas abiertas
+        </Link>
+      </div>
+
       <PosClient
         catalog={catalog.map((item) => ({
           id: item.id,
@@ -205,6 +215,14 @@ export default async function PosPage({
           category: item.category,
           price: item.price,
         }))}
+        customers={customers.map((customer) => ({
+          id: customer.id,
+          name: customer.name,
+          phone: customer.phone,
+          email: customer.email,
+          pointsBalance: Number(customer.pointsBalance),
+        }))}
+        selectedCustomerId={selectedCustomerId}
       />
 
       <section className="card pos-recent">

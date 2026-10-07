@@ -9,6 +9,7 @@ import {
 import { getDb } from "@/src/infrastructure/db/client";
 import {
   employees,
+  posCustomers,
   posOrderLines,
   posOrders,
   posPayments,
@@ -42,9 +43,12 @@ export default async function ReceiptPage({
     .select({
       order: posOrders,
       employeeName: employees.name,
+      customerName: posCustomers.name,
+      customerPoints: posCustomers.pointsBalance,
     })
     .from(posOrders)
     .leftJoin(employees, eq(employees.id, posOrders.employeeId))
+    .leftJoin(posCustomers, eq(posCustomers.id, posOrders.customerId))
     .where(
       and(
         eq(posOrders.id, id),
@@ -72,11 +76,14 @@ export default async function ReceiptPage({
     ),
   ]);
 
-  const paidAt = order.order.paidAt.toLocaleString("es-MX", {
-    timeZone: "America/Mexico_City",
-    dateStyle: "short",
-    timeStyle: "short",
-  });
+  const ticketDate = (order.order.paidAt ?? order.order.createdAt).toLocaleString(
+    "es-MX",
+    {
+      timeZone: "America/Mexico_City",
+      dateStyle: "short",
+      timeStyle: "short",
+    },
+  );
 
   return (
     <main className="receipt-shell">
@@ -95,9 +102,13 @@ export default async function ReceiptPage({
         </header>
 
         <div className="receipt-meta">
+          <span>Folio</span>
           <span>{order.order.folio}</span>
-          <span>{paidAt}</span>
+          <span>Fecha</span>
+          <span>{ticketDate}</span>
+          <span>Atendió</span>
           <span>{order.employeeName ?? "Empleado"}</span>
+          <span>Servicio</span>
           <span>
             {order.order.serviceMode === "TAKEAWAY"
               ? "Para llevar"
@@ -124,6 +135,18 @@ export default async function ReceiptPage({
         <div className="receipt-meta">
           <span>Pago</span>
           <span>{payments[0]?.method ?? "—"}</span>
+          {order.customerName && (
+            <>
+              <span>Cliente</span>
+              <span>{order.customerName}</span>
+              <span>Saldo puntos</span>
+              <span>{Number(order.customerPoints ?? 0).toFixed(2)}</span>
+              <span>Generaría 5%</span>
+              <span>
+                +{Number(order.order.loyaltyPointsPreview).toFixed(2)}
+              </span>
+            </>
+          )}
         </div>
 
         {order.order.note && <p>Nota: {order.order.note}</p>}
@@ -138,6 +161,7 @@ export default async function ReceiptPage({
 
         <footer>
           <p>Gracias por tu visita.</p>
+          <p>Puntos en simulación mientras POS esté en modo espejo.</p>
           <p>Documento de prueba interna · no es CFDI.</p>
         </footer>
       </article>

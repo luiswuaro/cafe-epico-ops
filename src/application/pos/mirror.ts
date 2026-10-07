@@ -193,6 +193,7 @@ export async function getRecentShadowOrders(
         eq(posOrders.organizationId, organizationId),
         eq(posOrders.storeId, storeId),
         eq(posOrders.mode, "SHADOW"),
+        eq(posOrders.status, "PAID"),
       ),
     )
     .orderBy(desc(posOrders.paidAt))

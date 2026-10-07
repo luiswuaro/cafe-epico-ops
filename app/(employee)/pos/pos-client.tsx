@@ -1,7 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { createShadowSale } from "./actions";
+import {
+  createPosCustomer,
+  createShadowCommand,
+  createShadowSale,
+} from "./actions";
 
 type CatalogItem = {
   id: string;
@@ -10,8 +14,18 @@ type CatalogItem = {
   price: number;
 };
 
+type Customer = {
+  id: string;
+  name: string;
+  phone: string | null;
+  email: string | null;
+  pointsBalance: number;
+};
+
 type Props = {
   catalog: CatalogItem[];
+  customers: Customer[];
+  selectedCustomerId?: string | null;
 };
 
 const money = new Intl.NumberFormat("es-MX", {
@@ -20,7 +34,11 @@ const money = new Intl.NumberFormat("es-MX", {
   maximumFractionDigits: 2,
 });
 
-export function PosClient({ catalog }: Props) {
+export function PosClient({
+  catalog,
+  customers,
+  selectedCustomerId = null,
+}: Props) {
   const [category, setCategory] = useState<"TODAS" | CatalogItem["category"]>(
     "CALIENTES",
   );
@@ -28,6 +46,8 @@ export function PosClient({ catalog }: Props) {
   const [cart, setCart] = useState<Record<string, number>>({});
   const [serviceMode, setServiceMode] =
     useState<"DINE_IN" | "TAKEAWAY">("DINE_IN");
+  const [customerId, setCustomerId] = useState(selectedCustomerId ?? "");
+
   const visible = useMemo(() => {
     const q = query.trim().toLocaleLowerCase("es-MX");
     return catalog.filter((item) => {
@@ -45,6 +65,12 @@ export function PosClient({ catalog }: Props) {
     (sum, line) => sum + line.price * line.quantity,
     0,
   );
+
+  const selectedCustomer =
+    customers.find((customer) => customer.id === customerId) ?? null;
+  const pointsPreview = selectedCustomer
+    ? Math.round(total * 0.05 * 100) / 100
+    : 0;
 
   const add = (id: string) =>
     setCart((current) => ({ ...current, [id]: (current[id] ?? 0) + 1 }));
@@ -166,6 +192,56 @@ export function PosClient({ catalog }: Props) {
           <strong>{money.format(total)}</strong>
         </div>
 
+        <div className="pos-customer-box">
+          <label>
+            Cliente / puntos
+            <select
+              value={customerId}
+              onChange={(event) => setCustomerId(event.target.value)}
+            >
+              <option value="">Sin cliente</option>
+              {customers.map((customer) => (
+                <option key={customer.id} value={customer.id}>
+                  {customer.name} · {customer.pointsBalance.toFixed(2)} pts
+                </option>
+              ))}
+            </select>
+          </label>
+
+          {selectedCustomer ? (
+            <p className="muted compact-copy">
+              Saldo actual:{" "}
+              <strong>{selectedCustomer.pointsBalance.toFixed(2)} pts</strong>
+              {" · "}
+              Esta compra generaría{" "}
+              <strong>{pointsPreview.toFixed(2)} pts</strong> al 5%.
+            </p>
+          ) : (
+            <p className="muted compact-copy">
+              Selecciona un cliente para calcular el 5% de puntos.
+            </p>
+          )}
+
+          <details>
+            <summary>+ Registrar cliente</summary>
+            <form action={createPosCustomer} className="stack">
+              <label>
+                Nombre
+                <input name="name" required minLength={2} />
+              </label>
+              <label>
+                Teléfono
+                <input name="phone" inputMode="tel" />
+              </label>
+              <label>
+                Correo
+                <input name="email" type="email" />
+              </label>
+              <button type="submit">Guardar cliente</button>
+            </form>
+          </details>
+        </div>
+
         <form action={createShadowSale} className="stack pos-checkout">
           <input
             type="hidden"
@@ -178,6 +254,8 @@ export function PosClient({ catalog }: Props) {
             )}
           />
           <input type="hidden" name="serviceMode" value={serviceMode} />
+          <input type="hidden" name="customerId" value={customerId} />
+
           {serviceMode === "DINE_IN" && (
             <label>
               Mesa / referencia
@@ -195,21 +273,36 @@ export function PosClient({ catalog }: Props) {
           </label>
 
           <label>
-            Nota
-            <input name="note" placeholder="Opcional" maxLength={300} />
+            Nota / instrucción de comanda
+            <input
+              name="note"
+              placeholder="Ej. sin azúcar, leche muy caliente..."
+              maxLength={300}
+            />
           </label>
 
-          <button
-            type="submit"
-            className="pos-pay-button"
-            disabled={cartLines.length === 0}
-          >
-            Registrar espejo · {money.format(total)}
-          </button>
+          <div className="pos-command-actions">
+            <button
+              type="submit"
+              formAction={createShadowCommand}
+              className="pos-command-button"
+              disabled={cartLines.length === 0}
+            >
+              Enviar comanda
+            </button>
+            <button
+              type="submit"
+              className="pos-pay-button"
+              disabled={cartLines.length === 0}
+            >
+              Registrar espejo · {money.format(total)}
+            </button>
+          </div>
         </form>
 
         <p className="pos-shadow-warning">
-          MODO ESPEJO: esta venta no descuenta inventario ni afecta caja.
+          MODO ESPEJO: comandas, puntos e inventario son simulación. Nada se
+          descuenta ni se acredita todavía.
         </p>
       </aside>
     </div>

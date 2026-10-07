@@ -3,6 +3,7 @@
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getPosCatalog, type PosServiceMode } from "@/src/application/pos/catalog";
 import { syncLoyverseReceipts } from "@/src/application/loyverse/sync";
@@ -11,6 +12,7 @@ import { assertEmployeePermission } from "@/src/infrastructure/auth/permissions"
 import { getDb } from "@/src/infrastructure/db/client";
 import {
   auditEvents,
+  posCustomers,
   posOrderLines,
   posOrders,
   posPayments,
@@ -28,6 +30,7 @@ const cartSchema = z
 
 const serviceModeSchema = z.enum(["DINE_IN", "TAKEAWAY"]);
 const paymentSchema = z.enum(["CASH", "CARD", "TRANSFER"]);
+const commandStatusSchema = z.enum(["SENT", "PREPARING", "READY"]);
 
 function businessDate(date = new Date()) {
   return new Intl.DateTimeFormat("en-CA", {
@@ -54,31 +57,20 @@ function folio(date: Date, clientOrderId: string) {
   return "SH-" + stamp + "-" + clientOrderId.slice(-4).toUpperCase();
 }
 
-export async function createShadowSale(formData: FormData) {
-  const { user, employee } = await getCurrentEmployee();
-  if (!employee.homeStoreId) {
-    throw new Error("El empleado no tiene sucursal asignada");
-  }
-
-  await assertEmployeePermission(
-    employee.id,
-    "pos.sell",
-    employee.homeStoreId,
-  );
-
+async function buildOrderInput(
+  formData: FormData,
+  organizationId: string,
+) {
   const rawCart = String(formData.get("cart") ?? "[]");
-  const rawClientOrderId = String(formData.get("clientOrderId") ?? "").trim();
   const serviceMode = serviceModeSchema.parse(
     String(formData.get("serviceMode") ?? ""),
   );
-  const paymentMethod = paymentSchema.parse(
-    String(formData.get("paymentMethod") ?? ""),
-  );
   const tableLabel = String(formData.get("tableLabel") ?? "").trim() || null;
   const note = String(formData.get("note") ?? "").trim() || null;
+  const customerId = String(formData.get("customerId") ?? "").trim() || null;
 
   const parsedCart = cartSchema.parse(JSON.parse(rawCart));
-  const catalog = await getPosCatalog(employee.organizationId);
+  const catalog = await getPosCatalog(organizationId);
   const catalogById = new Map(catalog.map((item) => [item.id, item]));
 
   const lines = parsedCart.map((line) => {
@@ -111,6 +103,54 @@ export async function createShadowSale(formData: FormData) {
   });
 
   const total = lines.reduce((sum, line) => sum + line.lineTotal, 0);
+
+  if (customerId) {
+    const [customer] = await getDb()
+      .select({ id: posCustomers.id })
+      .from(posCustomers)
+      .where(
+        and(
+          eq(posCustomers.id, customerId),
+          eq(posCustomers.organizationId, organizationId),
+          eq(posCustomers.isActive, true),
+        ),
+      )
+      .limit(1);
+
+    if (!customer) throw new Error("Cliente no válido");
+  }
+
+  return {
+    serviceMode,
+    tableLabel,
+    note,
+    customerId,
+    lines,
+    total,
+    loyaltyPointsPreview: customerId
+      ? Math.round(total * 0.05 * 100) / 100
+      : 0,
+  };
+}
+
+async function createShadowOrder(
+  formData: FormData,
+  status: "PAID" | "SENT",
+  paymentMethod?: "CASH" | "CARD" | "TRANSFER",
+) {
+  const { user, employee } = await getCurrentEmployee();
+  if (!employee.homeStoreId) {
+    throw new Error("El empleado no tiene sucursal asignada");
+  }
+
+  await assertEmployeePermission(
+    employee.id,
+    "pos.sell",
+    employee.homeStoreId,
+  );
+
+  const input = await buildOrderInput(formData, employee.organizationId);
+  const rawClientOrderId = String(formData.get("clientOrderId") ?? "").trim();
   const clientOrderId = rawClientOrderId || randomUUID();
   const now = new Date();
   const db = getDb();
@@ -126,9 +166,7 @@ export async function createShadowSale(formData: FormData) {
     )
     .limit(1);
 
-  if (existing) {
-    redirect("/pos?saved=" + existing.id + "&duplicate=1");
-  }
+  if (existing) return existing.id;
 
   const order = await db.transaction(async (tx) => {
     const [created] = await tx
@@ -139,21 +177,25 @@ export async function createShadowSale(formData: FormData) {
         clientOrderId,
         folio: folio(now, clientOrderId),
         mode: "SHADOW",
-        status: "PAID",
-        serviceMode,
-        tableLabel: serviceMode === "DINE_IN" ? tableLabel : null,
+        status,
+        serviceMode: input.serviceMode,
+        tableLabel:
+          input.serviceMode === "DINE_IN" ? input.tableLabel : null,
         employeeId: employee.id,
+        customerId: input.customerId,
         businessDate: businessDate(now),
-        subtotal: total.toFixed(2),
-        total: total.toFixed(2),
-        note,
+        subtotal: input.total.toFixed(2),
+        total: input.total.toFixed(2),
+        note: input.note,
+        loyaltyPointsPreview: input.loyaltyPointsPreview.toFixed(2),
+        loyaltyEffectApplied: false,
         inventoryEffectApplied: false,
-        paidAt: now,
+        paidAt: status === "PAID" ? now : null,
       })
       .returning();
 
     await tx.insert(posOrderLines).values(
-      lines.map((line) => ({
+      input.lines.map((line) => ({
         organizationId: employee.organizationId,
         orderId: created.id,
         catalogExternalId: line.item.id,
@@ -167,11 +209,166 @@ export async function createShadowSale(formData: FormData) {
       })),
     );
 
+    if (status === "PAID" && paymentMethod) {
+      await tx.insert(posPayments).values({
+        organizationId: employee.organizationId,
+        orderId: created.id,
+        method: paymentMethod,
+        amount: input.total.toFixed(2),
+      });
+    }
+
+    await tx.insert(auditEvents).values({
+      organizationId: employee.organizationId,
+      storeId: employee.homeStoreId,
+      actorUserId: user.id,
+      actorEmployeeId: employee.id,
+      action:
+        status === "PAID"
+          ? "POS_SHADOW_SALE_RECORDED"
+          : "POS_SHADOW_COMMAND_SENT",
+      entityType: "pos_order",
+      entityId: created.id,
+      afterData: {
+        folio: created.folio,
+        total: input.total,
+        serviceMode: input.serviceMode,
+        customerId: input.customerId,
+        loyaltyPointsPreview: input.loyaltyPointsPreview,
+        status,
+        inventoryEffectApplied: false,
+        loyaltyEffectApplied: false,
+      },
+    });
+
+    return created;
+  });
+
+  return order.id;
+}
+
+export async function createShadowSale(formData: FormData) {
+  const paymentMethod = paymentSchema.parse(
+    String(formData.get("paymentMethod") ?? ""),
+  );
+  const orderId = await createShadowOrder(
+    formData,
+    "PAID",
+    paymentMethod,
+  );
+  redirect("/pos?saved=" + orderId);
+}
+
+export async function createShadowCommand(formData: FormData) {
+  const orderId = await createShadowOrder(formData, "SENT");
+  redirect("/pos/orders?created=" + orderId);
+}
+
+export async function updateCommandStatus(formData: FormData) {
+  const { user, employee } = await getCurrentEmployee();
+  if (!employee.homeStoreId) throw new Error("Sin sucursal asignada");
+
+  await assertEmployeePermission(
+    employee.id,
+    "pos.sell",
+    employee.homeStoreId,
+  );
+
+  const orderId = String(formData.get("orderId") ?? "").trim();
+  const status = commandStatusSchema.parse(
+    String(formData.get("status") ?? ""),
+  );
+  const db = getDb();
+
+  const [order] = await db
+    .select()
+    .from(posOrders)
+    .where(
+      and(
+        eq(posOrders.id, orderId),
+        eq(posOrders.organizationId, employee.organizationId),
+        eq(posOrders.storeId, employee.homeStoreId),
+      ),
+    )
+    .limit(1);
+
+  if (!order) throw new Error("Comanda no encontrada");
+  if (!["SENT", "PREPARING", "READY"].includes(order.status)) {
+    throw new Error("La comanda ya no está abierta");
+  }
+
+  await db.transaction(async (tx) => {
+    await tx
+      .update(posOrders)
+      .set({ status, updatedAt: new Date() })
+      .where(eq(posOrders.id, order.id));
+
+    await tx.insert(auditEvents).values({
+      organizationId: employee.organizationId,
+      storeId: employee.homeStoreId,
+      actorUserId: user.id,
+      actorEmployeeId: employee.id,
+      action: "POS_COMMAND_STATUS_CHANGED",
+      entityType: "pos_order",
+      entityId: order.id,
+      beforeData: { status: order.status },
+      afterData: { status },
+    });
+  });
+
+  revalidatePath("/pos/orders");
+}
+
+export async function payShadowCommand(formData: FormData) {
+  const { user, employee } = await getCurrentEmployee();
+  if (!employee.homeStoreId) throw new Error("Sin sucursal asignada");
+
+  await assertEmployeePermission(
+    employee.id,
+    "pos.sell",
+    employee.homeStoreId,
+  );
+
+  const orderId = String(formData.get("orderId") ?? "").trim();
+  const paymentMethod = paymentSchema.parse(
+    String(formData.get("paymentMethod") ?? ""),
+  );
+  const db = getDb();
+
+  const [order] = await db
+    .select()
+    .from(posOrders)
+    .where(
+      and(
+        eq(posOrders.id, orderId),
+        eq(posOrders.organizationId, employee.organizationId),
+        eq(posOrders.storeId, employee.homeStoreId),
+      ),
+    )
+    .limit(1);
+
+  if (!order) throw new Error("Comanda no encontrada");
+  if (!["SENT", "PREPARING", "READY"].includes(order.status)) {
+    redirect("/pos?saved=" + order.id);
+  }
+
+  const now = new Date();
+
+  await db.transaction(async (tx) => {
+    await tx
+      .update(posOrders)
+      .set({
+        status: "PAID",
+        paidAt: now,
+        updatedAt: now,
+      })
+      .where(eq(posOrders.id, order.id));
+
     await tx.insert(posPayments).values({
       organizationId: employee.organizationId,
-      orderId: created.id,
+      orderId: order.id,
       method: paymentMethod,
-      amount: total.toFixed(2),
+      amount: order.total,
     });
 
     await tx.insert(auditEvents).values({
@@ -179,23 +376,62 @@ export async function createShadowSale(formData: FormData) {
       storeId: employee.homeStoreId,
       actorUserId: user.id,
       actorEmployeeId: employee.id,
-      action: "POS_SHADOW_SALE_RECORDED",
+      action: "POS_SHADOW_COMMAND_PAID",
       entityType: "pos_order",
-      entityId: created.id,
+      entityId: order.id,
+      beforeData: { status: order.status },
       afterData: {
-        folio: created.folio,
-        total,
-        serviceMode,
+        status: "PAID",
         paymentMethod,
-        lineCount: lines.length,
-        inventoryEffectApplied: false,
+        loyaltyPointsPreview: order.loyaltyPointsPreview,
+        loyaltyEffectApplied: false,
       },
     });
-
-    return created;
   });
 
   redirect("/pos?saved=" + order.id);
+}
+
+export async function createPosCustomer(formData: FormData) {
+  const { user, employee } = await getCurrentEmployee();
+  if (!employee.homeStoreId) throw new Error("Sin sucursal asignada");
+
+  await assertEmployeePermission(
+    employee.id,
+    "pos.sell",
+    employee.homeStoreId,
+  );
+
+  const name = String(formData.get("name") ?? "").trim();
+  const phone = String(formData.get("phone") ?? "").trim() || null;
+  const email = String(formData.get("email") ?? "").trim() || null;
+
+  if (name.length < 2) throw new Error("Escribe el nombre del cliente");
+
+  const db = getDb();
+  const [customer] = await db
+    .insert(posCustomers)
+    .values({
+      organizationId: employee.organizationId,
+      name,
+      phone,
+      email,
+      pointsBalance: "0",
+    })
+    .returning({ id: posCustomers.id });
+
+  await db.insert(auditEvents).values({
+    organizationId: employee.organizationId,
+    storeId: employee.homeStoreId,
+    actorUserId: user.id,
+    actorEmployeeId: employee.id,
+    action: "POS_CUSTOMER_CREATED",
+    entityType: "pos_customer",
+    entityId: customer.id,
+    afterData: { name, phone, email, pointsBalance: 0 },
+  });
+
+  redirect("/pos?customer=" + customer.id);
 }
 
 export async function cancelPosOrder(formData: FormData) {
@@ -232,9 +468,9 @@ export async function cancelPosOrder(formData: FormData) {
   if (order.status === "CANCELLED") {
     redirect("/pos?saved=" + order.id);
   }
-  if (order.inventoryEffectApplied) {
+  if (order.inventoryEffectApplied || order.loyaltyEffectApplied) {
     throw new Error(
-      "Esta venta ya afectó inventario y todavía requiere el flujo de reversa administrativa.",
+      "Esta venta ya tiene efectos aplicados y requiere una reversa administrativa.",
     );
   }
 
@@ -264,13 +500,13 @@ export async function cancelPosOrder(formData: FormData) {
         status: "CANCELLED",
         reason,
         inventoryEffectApplied: order.inventoryEffectApplied,
+        loyaltyEffectApplied: order.loyaltyEffectApplied,
       },
     });
   });
 
   redirect("/pos?saved=" + order.id + "&cancelled=1");
 }
-
 
 export async function refreshShadowMirror(formData: FormData) {
   const { employee } = await getCurrentEmployee();
