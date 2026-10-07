@@ -22,7 +22,10 @@ export async function getEmployeeRecipeBook(organizationId: string) {
 
   for (const recipe of source.recipes) {
     if (!recipe.availableForSale) continue;
-    if (recipe.category.toUpperCase().includes("INSUMO")) continue;
+    const category = recipe.category.toUpperCase();
+    if (category.includes("INSUMO") || category.includes("ALIMENTO")) {
+      continue;
+    }
 
     const key = normalizeName(recipe.itemName);
     const list = groups.get(key) ?? [];
