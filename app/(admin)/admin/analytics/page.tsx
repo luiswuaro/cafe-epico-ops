@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { refreshAnalytics } from "./actions";
 import { getBusinessAnalytics } from "@/src/application/analytics/business";
 import { requirePermission } from "@/src/infrastructure/auth/permissions";
 
@@ -18,7 +19,12 @@ function change(value: number | null) {
   return `${value > 0 ? "+" : ""}${value.toFixed(1)}%`;
 }
 
-export default async function AnalyticsPage() {
+export default async function AnalyticsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const params = await searchParams;
   const { organizationId } = await requirePermission("admin.access");
   const data = await getBusinessAnalytics(organizationId);
 
@@ -35,6 +41,25 @@ export default async function AnalyticsPage() {
         <p className="muted">
           Datos del espejo de Loyverse. Corte operativo provisional:
           mañana &lt; 16:00 · tarde ≥ 16:00.
+        </p>
+      </section>
+
+      {params.refreshed === "1" && (
+        <p className="card status-ok">
+          Datos actualizados desde Loyverse.
+        </p>
+      )}
+      {typeof params.error === "string" && (
+        <p className="alert">Error al actualizar: {params.error}</p>
+      )}
+
+      <section className="card" style={{ marginBottom: "1rem" }}>
+        <form action={refreshAnalytics}>
+          <button type="submit">Actualizar ventas + clientes ahora</button>
+        </form>
+        <p className="muted" style={{ marginTop: ".5rem" }}>
+          Sincroniza recibos de los últimos 30 días y clientes antes de
+          recalcular el tablero.
         </p>
       </section>
 
