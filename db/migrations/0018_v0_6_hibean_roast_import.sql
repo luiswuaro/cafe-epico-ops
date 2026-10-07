@@ -21,7 +21,7 @@ create unique index if not exists roast_batches_source_uidx
   on public.roast_batches(organization_id,source_provider,source_external_id)
   where source_provider is not null and source_external_id is not null;
 
-create table if not exists public.roast_green_inventory_confirmations (
+create table if not exists roast_green_inventory_confirmations (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references public.organizations(id) on delete cascade,
   coffee_lot_id uuid not null references public.roast_coffee_lots(id) on delete cascade,
@@ -45,7 +45,7 @@ create index if not exists roast_green_inventory_confirmations_external_idx
     organization_id,provider,external_bean_id,confirmed_at desc
   );
 
-create table if not exists public.roast_import_drafts (
+create table if not exists roast_import_drafts (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references public.organizations(id) on delete cascade,
   created_by_employee_id uuid references public.employees(id) on delete set null,
