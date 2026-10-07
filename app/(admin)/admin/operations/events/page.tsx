@@ -30,6 +30,8 @@ export default async function OperationalEventsAdminPage() {
       itemNameSnapshot: operationalEvents.itemNameSnapshot,
       quantity: operationalEvents.quantity,
       unitLabel: operationalEvents.unitLabel,
+      displayQuantity: operationalEvents.displayQuantity,
+      displayUnit: operationalEvents.displayUnit,
       note: operationalEvents.note,
       occurredAt: operationalEvents.occurredAt,
       resolvedAt: operationalEvents.resolvedAt,
@@ -108,8 +110,13 @@ export default async function OperationalEventsAdminPage() {
                     <p>
                       Cantidad:{" "}
                       <strong>
-                        {Number(row.quantity).toFixed(3)}{" "}
-                        {row.unitLabel ?? ""}
+                        {row.displayQuantity != null
+                          ? Number(row.displayQuantity).toFixed(1) +
+                            " " +
+                            (row.displayUnit ?? "")
+                          : Number(row.quantity).toFixed(3) +
+                            " " +
+                            (row.unitLabel ?? "")}
                       </strong>
                     </p>
                   )}
