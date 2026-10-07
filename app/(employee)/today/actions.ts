@@ -103,6 +103,7 @@ export async function reportBarWaste(formData: FormData) {
   });
 
   revalidatePath("/today");
+  revalidatePath("/handoff");
   revalidatePath("/inventory");
   revalidatePath("/admin/decision-center");
   redirect("/today?saved=waste");
@@ -249,6 +250,7 @@ export async function reportQuickStockCount(formData: FormData) {
   });
 
   revalidatePath("/today");
+  revalidatePath("/handoff");
   revalidatePath("/inventory");
   revalidatePath("/admin/decision-center");
   redirect(
@@ -305,6 +307,7 @@ export async function reportBarIncident(formData: FormData) {
   });
 
   revalidatePath("/today");
+  revalidatePath("/handoff");
   revalidatePath("/admin/decision-center");
   redirect("/today?saved=incident");
 }
