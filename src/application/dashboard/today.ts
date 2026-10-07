@@ -147,6 +147,7 @@ export async function getTodayOperationalSummary(employee: {
       shift: inventory.shift.current,
       forecastSampleDays: inventory.shift.sampleDays,
       traffic: inventory.shift.traffic,
+      topProducts: inventory.shift.topProducts,
       stockRisks: inventory.shift.risks,
       unavailableProducts: inventory.unavailableProducts,
       activeRoast: activeRoast
