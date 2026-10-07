@@ -94,6 +94,7 @@ export default async function LoyverseInventoryMappingPage({
   const missing =
     typeof params.missing === "string" ? params.missing : null;
   const error = typeof params.error === "string" ? params.error : null;
+  const mapped = params.mapped === "1";
 
   const defaultExternalStore = data.externalStores[0]?.externalId ?? "";
 
@@ -113,6 +114,12 @@ export default async function LoyverseInventoryMappingPage({
       </section>
 
       {error && <p className="alert">{error}</p>}
+
+      {mapped && (
+        <p className="card status-ok">
+          Mapeo guardado correctamente.
+        </p>
+      )}
 
       {imported != null && (
         <p className="card status-ok">
