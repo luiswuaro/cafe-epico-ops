@@ -7,6 +7,9 @@ import { assertEmployeePermission } from "@/src/infrastructure/auth/permissions"
 import { getDb } from "@/src/infrastructure/db/client";
 import {
   espressoQualityChecks,
+  roastBarAssignments,
+  roastBatches,
+  roastCoffeeLots,
   recipes as recipesTable,
   recipeVersions,
 } from "@/src/infrastructure/db/schema";
@@ -53,6 +56,35 @@ export default async function EspressoQcPage({ searchParams }: PageProps) {
     (recipe) => EXTRACTION_NAMES.has(recipe.name),
   );
 
+  const [activeRoast] = await getDb()
+    .select({
+      batchCode: roastBatches.batchCode,
+      roastedAt: roastBatches.roastedAt,
+      lotName: roastCoffeeLots.name,
+    })
+    .from(roastBarAssignments)
+    .innerJoin(
+      roastBatches,
+      eq(roastBatches.id, roastBarAssignments.roastBatchId),
+    )
+    .innerJoin(
+      roastCoffeeLots,
+      eq(roastCoffeeLots.id, roastBatches.coffeeLotId),
+    )
+    .where(
+      and(
+        eq(
+          roastBarAssignments.organizationId,
+          employee.organizationId,
+        ),
+        eq(roastBarAssignments.storeId, employee.homeStoreId),
+        eq(roastBarAssignments.barRole, "ESPRESSO"),
+        eq(roastBarAssignments.isActive, true),
+      ),
+    )
+    .orderBy(desc(roastBarAssignments.startedAt))
+    .limit(1);
+
   const recent = await getDb()
     .select({
       id: espressoQualityChecks.id,
@@ -65,6 +97,8 @@ export default async function EspressoQcPage({ searchParams }: PageProps) {
       withinYieldSpec: espressoQualityChecks.withinYieldSpec,
       createdAt: espressoQualityChecks.createdAt,
       recipeName: recipesTable.name,
+      roastBatchCode: roastBatches.batchCode,
+      roastLotName: roastCoffeeLots.name,
     })
     .from(espressoQualityChecks)
     .leftJoin(
@@ -72,6 +106,14 @@ export default async function EspressoQcPage({ searchParams }: PageProps) {
       eq(recipeVersions.id, espressoQualityChecks.recipeVersionId),
     )
     .leftJoin(recipesTable, eq(recipesTable.id, recipeVersions.recipeId))
+    .leftJoin(
+      roastBatches,
+      eq(roastBatches.id, espressoQualityChecks.roastBatchId),
+    )
+    .leftJoin(
+      roastCoffeeLots,
+      eq(roastCoffeeLots.id, roastBatches.coffeeLotId),
+    )
     .where(
       and(
         eq(
@@ -103,6 +145,24 @@ export default async function EspressoQcPage({ searchParams }: PageProps) {
           están dentro de la especificación de la extracción elegida.
         </p>
       </section>
+
+      {activeRoast && (
+        <section className="card" style={{ marginBottom: "1rem" }}>
+          <p className="eyebrow">CAFÉ ACTIVO · ESPRESSO</p>
+          <h2>{activeRoast.lotName}</h2>
+          <p>
+            Batch <strong>{activeRoast.batchCode}</strong> · tostado{" "}
+            {activeRoast.roastedAt.toLocaleString("es-MX", {
+              timeZone: "America/Mexico_City",
+              dateStyle: "short",
+              timeStyle: "short",
+            })}
+          </p>
+          <p className="muted">
+            Este batch se asociará automáticamente al control que guardes.
+          </p>
+        </section>
+      )}
 
       <section className="grid">
         <article className="card">
@@ -304,6 +364,9 @@ export default async function EspressoQcPage({ searchParams }: PageProps) {
                           row.sensoryRating}
                         {row.sensoryNotes
                           ? ` · ${row.sensoryNotes}`
+                          : ""}
+                        {row.roastBatchCode
+                          ? ` · ${row.roastLotName ?? "Café"} / ${row.roastBatchCode}`
                           : ""}
                         {" · "}
                         {row.createdAt.toLocaleString("es-MX", {
