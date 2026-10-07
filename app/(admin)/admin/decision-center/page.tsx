@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { resolveOperationalIncident } from "./actions";
 import { getDecisionCenter } from "@/src/application/decision-center/read";
 import { requirePermission } from "@/src/infrastructure/auth/permissions";
 
@@ -200,6 +201,96 @@ export default async function DecisionCenterPage() {
                   </button>
                 </Link>
               </article>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="grid" style={{ marginTop: "1rem" }}>
+        <article className="card">
+          <p className="eyebrow">CONSUMO NO EXPLICADO</p>
+          <h2>Anomalías de inventario</h2>
+          <p className="muted">
+            Compara caída real de existencia contra consumo por ventas y merma
+            registrada. Es señal de auditoría, no prueba de pérdida.
+          </p>
+          {data.inventoryAnomalies.length === 0 ? (
+            <p className="status-ok">Sin anomalías relevantes detectadas.</p>
+          ) : (
+            <div className="stack">
+              {data.inventoryAnomalies.slice(0, 6).map((row) => (
+                <div className="task" key={row.variantExternalId}>
+                  <div style={{ flex: 1 }}>
+                    <strong>{row.itemName}</strong>
+                    <div className="muted">
+                      Esperado {row.expectedConsumption.toFixed(2)}{" "}
+                      {row.unitLabel} · observado{" "}
+                      {row.actualConsumption.toFixed(2)} {row.unitLabel}
+                    </div>
+                  </div>
+                  <div className="status-warn">
+                    +{row.variance.toFixed(2)} {row.unitLabel}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </article>
+
+        <article className="card">
+          <p className="eyebrow">DISPONIBILIDAD DEL MENÚ</p>
+          <h2>Productos bloqueados por insumos</h2>
+          {data.unavailableProducts.length === 0 ? (
+            <p className="status-ok">
+              No hay productos bloqueados por existencias en cero.
+            </p>
+          ) : (
+            <div className="stack">
+              {data.unavailableProducts.slice(0, 8).map((row) => (
+                <div className="task" key={row.variantExternalId}>
+                  <div>
+                    <strong>{row.itemName}</strong>
+                    <div className="status-warn">
+                      Falta: {row.blockers.join(", ")}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </article>
+      </section>
+
+      <section className="card" style={{ marginTop: "1rem" }}>
+        <p className="eyebrow">INCIDENCIAS ABIERTAS</p>
+        <h2>Lo reportado desde operación</h2>
+        {data.operationalEvents.length === 0 ? (
+          <p className="status-ok">No hay incidencias abiertas.</p>
+        ) : (
+          <div className="stack">
+            {data.operationalEvents.map((event) => (
+              <div className="task" key={event.id}>
+                <div style={{ flex: 1 }}>
+                  <strong>{event.itemNameSnapshot ?? event.eventType}</strong>{" "}
+                  {event.severity !== "NORMAL" && (
+                    <span className="status-warn">{event.severity}</span>
+                  )}
+                  <div>{event.note ?? "Sin nota"}</div>
+                  <div className="muted">
+                    {event.occurredAt.toLocaleString("es-MX", {
+                      timeZone: "America/Mexico_City",
+                      dateStyle: "short",
+                      timeStyle: "short",
+                    })}
+                  </div>
+                </div>
+                {event.eventType === "BAR_INCIDENT" && (
+                  <form action={resolveOperationalIncident}>
+                    <input type="hidden" name="eventId" value={event.id} />
+                    <button type="submit">Resolver</button>
+                  </form>
+                )}
+              </div>
             ))}
           </div>
         )}
