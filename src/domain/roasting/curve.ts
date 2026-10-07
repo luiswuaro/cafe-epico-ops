@@ -1,3 +1,5 @@
+import { parseHiBeanJsonRoot } from "@/src/domain/roasting/hibean";
+
 export type RoastCurvePoint = {
   tS: number;
   btC?: number;
@@ -14,10 +16,16 @@ export type RoastCurveEvent = {
 
 export type RoastCurveImport = {
   points: RoastCurvePoint[];
-  format: "JSON_CANONICAL" | "JSON_ARTISAN" | "JSON_GENERIC" | "CSV";
+  format:
+    | "JSON_CANONICAL"
+    | "JSON_ARTISAN"
+    | "JSON_HIBEAN"
+    | "JSON_GENERIC"
+    | "CSV";
   warnings: string[];
   events?: {
     charge?: RoastCurveEvent;
+    turningPoint?: RoastCurveEvent;
     yellowing?: RoastCurveEvent;
     firstCrack?: RoastCurveEvent;
     drop?: RoastCurveEvent;
@@ -25,6 +33,43 @@ export type RoastCurveImport = {
   metadata?: {
     title?: string;
     roaster?: string;
+    provider?: "HIBEAN";
+    externalRoastId?: string;
+    localRoastId?: string;
+    roastedAt?: string;
+    durationS?: number;
+    temperatureUnit?: string;
+    greenWeightG?: number;
+    roastedWeightG?: number;
+    bean?: {
+      cloudId?: string;
+      localId?: string;
+      name?: string;
+      origin?: string;
+      regionCode?: string;
+      harvestYear?: number;
+      altitudeRange?: string;
+      density?: number;
+      moistureContent?: number;
+      remainingInventoryG?: number;
+      inventoryEnabled?: boolean;
+      lowInventoryReminderG?: number;
+      varietyCode?: string;
+      processingMethodCode?: string;
+    };
+    environment?: {
+      temperatureC?: number;
+      humidityPct?: number;
+      pressureRaw?: number;
+    };
+    device?: {
+      cloudId?: string;
+      name?: string;
+      manufacturer?: string;
+      model?: string;
+    };
+    phaseList?: unknown[];
+    aiTelemetry?: Record<string, unknown>;
   };
 };
 
@@ -340,6 +385,21 @@ function parseJson(raw: string): RoastCurveImport | null {
 
   const root = objectRecord(decoded);
   if (!root) return null;
+
+  const hibean = parseHiBeanJsonRoot(root);
+  if (hibean) {
+    return {
+      points: cleanPoints(hibean.points),
+      format: "JSON_HIBEAN",
+      warnings: [],
+      events: hibean.events,
+      metadata: {
+        title: hibean.metadata.roastName,
+        roaster: hibean.metadata.device?.name,
+        ...hibean.metadata,
+      },
+    };
+  }
 
   for (const key of ["curveData", "points", "samples", "data"]) {
     const value = root[key];
