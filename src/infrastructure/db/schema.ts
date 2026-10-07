@@ -166,6 +166,24 @@ export const suppliers = pgTable("suppliers", {
   city: text("city"),
   contact: text("contact"),
   notes: text("notes"),
+  hibeanBeanCloudId: text("hibean_bean_cloud_id"),
+  hibeanBeanName: text("hibean_bean_name"),
+  hibeanGreenInventoryG: numeric("hibean_green_inventory_g", {
+    precision: 14,
+    scale: 2,
+  }),
+  hibeanInventoryReportedG: numeric("hibean_inventory_reported_g", {
+    precision: 14,
+    scale: 2,
+  }),
+  hibeanInventoryConfirmedAt: timestamp(
+    "hibean_inventory_confirmed_at",
+    { withTimezone: true },
+  ),
+  hibeanInventoryConfirmedByEmployeeId: uuid(
+    "hibean_inventory_confirmed_by_employee_id",
+  ).references(() => employees.id, { onDelete: "set null" }),
+  hibeanInventorySourceRoastId: text("hibean_inventory_source_roast_id"),
   isActive: boolean("is_active").notNull().default(true),
   ...timestamps,
 });
@@ -478,12 +496,107 @@ export const roastBatches = pgTable("roast_batches", {
   status: varchar("status", { length: 30 }).notNull().default("ROASTED"),
   inventoryPosted: boolean("inventory_posted").notNull().default(false),
   notes: text("notes"),
+  sourceProvider: varchar("source_provider", { length: 30 }),
+  sourceExternalId: text("source_external_id"),
+  sourceFileName: text("source_file_name"),
+  sourceMetadata: jsonb("source_metadata").$type<Record<string, unknown>>(),
   ...timestamps,
 }, (t) => [
   uniqueIndex("roast_batches_code_uidx").on(t.organizationId, t.batchCode),
   index("roast_batches_lot_date_idx").on(t.coffeeLotId, t.roastedAt),
   index("roast_batches_profile_idx").on(t.profileId, t.roastedAt),
 ]);
+
+export const roastGreenInventoryConfirmations = pgTable(
+  "roast_green_inventory_confirmations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    coffeeLotId: uuid("coffee_lot_id")
+      .notNull()
+      .references(() => roastCoffeeLots.id, { onDelete: "cascade" }),
+    provider: varchar("provider", { length: 30 }).notNull().default("HIBEAN"),
+    externalBeanId: text("external_bean_id"),
+    externalRoastId: text("external_roast_id"),
+    reportedQuantityG: numeric("reported_quantity_g", {
+      precision: 14,
+      scale: 2,
+    }).notNull(),
+    confirmedQuantityG: numeric("confirmed_quantity_g", {
+      precision: 14,
+      scale: 2,
+    }).notNull(),
+    corrected: boolean("corrected").notNull().default(false),
+    sourceFileName: text("source_file_name"),
+    confirmedByEmployeeId: uuid("confirmed_by_employee_id").references(
+      () => employees.id,
+      { onDelete: "set null" },
+    ),
+    confirmedAt: timestamp("confirmed_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    note: text("note"),
+  },
+  (t) => [
+    index("roast_green_inventory_confirmations_lot_idx").on(
+      t.coffeeLotId,
+      t.confirmedAt,
+    ),
+    index("roast_green_inventory_confirmations_external_idx").on(
+      t.organizationId,
+      t.provider,
+      t.externalBeanId,
+      t.confirmedAt,
+    ),
+  ],
+);
+
+export const roastImportDrafts = pgTable(
+  "roast_import_drafts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    createdByEmployeeId: uuid("created_by_employee_id").references(
+      () => employees.id,
+      { onDelete: "set null" },
+    ),
+    sourceProvider: varchar("source_provider", { length: 30 }).notNull(),
+    sourceFormat: varchar("source_format", { length: 40 }).notNull(),
+    sourceFileName: text("source_file_name").notNull(),
+    sourceSha256: varchar("source_sha256", { length: 64 }).notNull(),
+    sourceExternalRoastId: text("source_external_roast_id"),
+    sourceExternalBeanId: text("source_external_bean_id"),
+    rawPayload: jsonb("raw_payload").$type<Record<string, unknown>>().notNull(),
+    parsedPayload: jsonb("parsed_payload")
+      .$type<Record<string, unknown>>()
+      .notNull(),
+    matchedCoffeeLotId: uuid("matched_coffee_lot_id").references(
+      () => roastCoffeeLots.id,
+      { onDelete: "set null" },
+    ),
+    status: varchar("status", { length: 20 }).notNull().default("DRAFT"),
+    confirmedBatchId: uuid("confirmed_batch_id").references(
+      () => roastBatches.id,
+      { onDelete: "set null" },
+    ),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex("roast_import_drafts_hash_uidx").on(
+      t.organizationId,
+      t.sourceSha256,
+    ),
+    index("roast_import_drafts_status_idx").on(
+      t.organizationId,
+      t.status,
+      t.createdAt,
+    ),
+  ],
+);
 
 export const roastSensoryEvaluations = pgTable("roast_sensory_evaluations", {
   id: uuid("id").primaryKey().defaultRandom(),
