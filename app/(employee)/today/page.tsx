@@ -116,7 +116,9 @@ export default async function TodayPage({
           <p>
             {openingDone
               ? "Apertura completada."
-              : "Termina lo crítico antes de enfocarte en producción."}
+              : summary.opening.next
+                ? "Siguiente: " + summary.opening.next.title
+                : "Termina lo crítico antes de enfocarte en producción."}
           </p>
           <Link href="/checklists" className="button">
             {openingDone ? "Ver checklist" : "Continuar apertura"}
@@ -130,14 +132,22 @@ export default async function TodayPage({
               ? Number(cockpit.latestQc.brewTimeS).toFixed(1) + " s"
               : "PENDIENTE"}
           </div>
+          <p className="muted">Espresso estándar 1:2</p>
           {cockpit.latestQc ? (
             <>
               <p className={qcOk ? "status-ok" : "status-warn"}>
                 {qcOk ? "QC dentro de especificación" : "Revisar calibración"}
               </p>
               <p className="muted">
-                {cockpit.latestQc.doseG} g → {cockpit.latestQc.yieldG} g ·{" "}
-                {cockpit.latestQc.sensoryRating} · {time(cockpit.latestQc.createdAt)}
+                {cockpit.latestQc.doseG} g → {cockpit.latestQc.yieldG} g · ratio{" "}
+                1:
+                {(
+                  Number(cockpit.latestQc.yieldG) /
+                  Number(cockpit.latestQc.doseG)
+                ).toFixed(2)}
+                {" · "}
+                {cockpit.latestQc.sensoryRating} ·{" "}
+                {time(cockpit.latestQc.createdAt)}
               </p>
               <p className="muted">
                 Hoy: {cockpit.calibration.attemptsToday} intento(s) ·{" "}
@@ -156,16 +166,25 @@ export default async function TodayPage({
         </article>
 
         <article className="card">
-          <span className="pill">3 · DEMANDA DEL TURNO</span>
+          <span className="pill">3 · DEMANDA CERCANA</span>
           <div className="metric">
             {cockpit.traffic.nextPeak
               ? String(cockpit.traffic.nextPeak.hour).padStart(2, "0") +
                 ":00"
               : "—"}
           </div>
-          <p>próxima hora fuerte estimada.</p>
+          <p>
+            {cockpit.traffic.nextPeak
+              ? "hora más fuerte dentro de las próximas 3 horas."
+              : "sin pico relevante detectado en las próximas 3 horas."}
+          </p>
           <p className="muted">
-            Basado en {cockpit.sampleDays} día(s) comparable(s).
+            {cockpit.traffic.dayPeak
+              ? "Pico restante del día: " +
+                String(cockpit.traffic.dayPeak.hour).padStart(2, "0") +
+                ":00 · "
+              : ""}
+            basado en {cockpit.sampleDays} día(s) comparable(s).
           </p>
         </article>
 
@@ -175,15 +194,21 @@ export default async function TodayPage({
           <p>
             {cockpit.shiftRisks.length === 0
               ? "Sin faltantes previstos para el turno."
-              : "insumos podrían quedar cortos contra demanda estimada."}
+              : "insumos requieren revisión contra demanda estimada."}
           </p>
+          {cockpit.inventoryCorrectionCount > 0 && (
+            <p className="status-warn">
+              {cockpit.inventoryCorrectionCount} existencia(s) negativas en
+              Loyverse requieren conteo/corrección.
+            </p>
+          )}
           <Link href="/inventory">Abrir inventario →</Link>
         </article>
       </section>
 
       <section className="card" style={{ marginTop: "1rem" }}>
-        <p className="eyebrow">ANTES DEL RUSH</p>
-        <h2>Acciones sugeridas</h2>
+        <p className="eyebrow">PRIORIDADES DEL TURNO</p>
+        <h2>Qué hacer ahora</h2>
         <p className="muted">
           Son recomendaciones operativas basadas en QC, stock y demanda
           histórica comparable.
@@ -210,11 +235,7 @@ export default async function TodayPage({
                 </div>
                 {action.href && (
                   <Link href={action.href}>
-                    <button>
-                      {action.priority === "ACTION"
-                        ? "Resolver"
-                        : "Revisar"}
-                    </button>
+                    <button>Revisar</button>
                   </Link>
                 )}
               </div>
@@ -257,12 +278,15 @@ export default async function TodayPage({
                 </div>
                 <div
                   className={
-                    row.remainingAfterForecast < 0
+                    row.remainingAfterForecast < 0 ||
+                    row.inventoryNeedsCorrection
                       ? "status-warn"
                       : "status-ok"
                   }
                 >
-                  {number.format(row.inStock)} {row.unitLabel}
+                  {row.inventoryNeedsCorrection
+                    ? "revisar Loyverse"
+                    : number.format(row.inStock) + " " + row.unitLabel}
                 </div>
               </div>
             ))}
