@@ -15,15 +15,15 @@ export async function reportBarWaste(formData: FormData) {
   const variantExternalId = String(
     formData.get("variantExternalId") ?? "",
   ).trim();
-  const quantity = Number(formData.get("quantity"));
+  const displayQuantity = Number(formData.get("quantity"));
   const reason = String(formData.get("reason") ?? "OTRO").trim();
   const note = String(formData.get("note") ?? "").trim() || null;
 
   if (
     !variantExternalId ||
-    !Number.isFinite(quantity) ||
-    quantity <= 0 ||
-    quantity > 100000
+    !Number.isFinite(displayQuantity) ||
+    displayQuantity <= 0 ||
+    displayQuantity > 1000000
   ) {
     redirect("/today?error=waste");
   }
@@ -45,6 +45,15 @@ export async function reportBarWaste(formData: FormData) {
   );
   if (!row) redirect("/today?error=waste-item");
 
+  const displayFactor = row.displayFactor ?? 1;
+  if (!Number.isFinite(displayFactor) || displayFactor <= 0) {
+    redirect("/today?error=waste-unit");
+  }
+  const quantity = displayQuantity / displayFactor;
+  const displayUnit =
+    row.displayUnit ??
+    (row.unitLabel === "peso/volumen" ? "u. Loyverse" : row.unitLabel);
+
   const db = getDb();
   const [created] = await db
     .insert(operationalEvents)
@@ -61,8 +70,8 @@ export async function reportBarWaste(formData: FormData) {
       itemNameSnapshot: row.itemName,
       quantity: String(quantity),
       unitLabel: row.unitLabel,
-      displayQuantity: String(quantity),
-      displayUnit: row.unitLabel,
+      displayQuantity: String(displayQuantity),
+      displayUnit,
       note: reason + (note ? " · " + note : ""),
       resolvedAt: new Date(),
       resolvedByEmployeeId: employee.id,
@@ -81,7 +90,9 @@ export async function reportBarWaste(formData: FormData) {
       variantExternalId,
       itemName: row.itemName,
       quantity,
-      unitLabel: row.unitLabel,
+      nativeUnitLabel: row.unitLabel,
+      displayQuantity,
+      displayUnit,
       reason,
       note,
     },
