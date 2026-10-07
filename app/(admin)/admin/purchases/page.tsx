@@ -1,9 +1,10 @@
 import Link from "next/link";
 import {
+  addManualPurchaseLine,
   createSupplier,
   generateSuggestedPurchasePlan,
   saveLoyverseItemSetting,
-  togglePurchaseLine,
+  updatePurchaseLine,
   updatePurchasePlan,
 } from "./actions";
 import { getPurchasingAdminData } from "@/src/application/purchases/admin";
@@ -371,42 +372,225 @@ export default async function PurchasesAdminPage({
 
                   <div className="stack">
                     {plan.lines.map((line) => (
-                      <div className="task" key={line.id}>
-                        <div style={{ flex: 1 }}>
+                      <details className="task" key={line.id}>
+                        <summary style={{ cursor: "pointer" }}>
                           <strong>{line.itemNameSnapshot}</strong>
-                          <div className="muted">
-                            {line.packageCount
-                              ? line.packageCount +
-                                " × " +
-                                (line.packageNameSnapshot ?? "paquete")
-                              : (line.requestedNativeQuantity ?? "—") +
-                                " unidades Loyverse"}
-                            {line.estimatedTotal
-                              ? " · " +
-                                money.format(Number(line.estimatedTotal))
-                              : ""}
-                            {line.note ? " · " + line.note : ""}
-                          </div>
-                        </div>
-                        <form action={togglePurchaseLine}>
+                          {" · "}
+                          {line.status}
+                          {" · "}
+                          {line.packageCount
+                            ? line.packageCount +
+                              " × " +
+                              (line.packageNameSnapshot ?? "paquete")
+                            : (line.requestedNativeQuantity ?? "—") +
+                              " unidades"}
+                          {line.estimatedTotal
+                            ? " · " +
+                              money.format(Number(line.estimatedTotal))
+                            : ""}
+                        </summary>
+
+                        <form
+                          action={updatePurchaseLine}
+                          className="stack"
+                          style={{ marginTop: ".7rem", width: "100%" }}
+                        >
                           <input
                             type="hidden"
                             name="lineId"
                             value={line.id}
                           />
-                          <select
-                            name="status"
-                            defaultValue={line.status}
-                          >
-                            <option value="PENDING">Pendiente</option>
-                            <option value="BOUGHT">Comprado</option>
-                            <option value="SKIPPED">Omitido</option>
-                          </select>
-                          <button type="submit">Guardar</button>
+                          <div className="grid">
+                            <label>
+                              Proveedor
+                              <select
+                                name="supplierId"
+                                defaultValue={line.supplierId ?? ""}
+                              >
+                                <option value="">Sin proveedor</option>
+                                {data.suppliers
+                                  .filter((supplier) => supplier.isActive)
+                                  .map((supplier) => (
+                                    <option
+                                      value={supplier.id}
+                                      key={supplier.id}
+                                    >
+                                      {supplier.name}
+                                      {supplier.city
+                                        ? " · " + supplier.city
+                                        : ""}
+                                    </option>
+                                  ))}
+                              </select>
+                            </label>
+
+                            <label>
+                              Cantidad total
+                              <input
+                                name="requestedNativeQuantity"
+                                type="number"
+                                min="0"
+                                step="0.001"
+                                defaultValue={
+                                  line.requestedNativeQuantity ?? ""
+                                }
+                              />
+                            </label>
+
+                            <label>
+                              Cajas / paquetes
+                              <input
+                                name="packageCount"
+                                type="number"
+                                min="0"
+                                step="0.001"
+                                defaultValue={line.packageCount ?? ""}
+                              />
+                            </label>
+
+                            <label>
+                              Nombre empaque
+                              <input
+                                name="packageName"
+                                defaultValue={
+                                  line.packageNameSnapshot ?? ""
+                                }
+                              />
+                            </label>
+
+                            <label>
+                              Cantidad por empaque
+                              <input
+                                name="packageQuantity"
+                                type="number"
+                                min="0"
+                                step="0.001"
+                                defaultValue={
+                                  line.packageQuantitySnapshot ?? ""
+                                }
+                              />
+                            </label>
+
+                            <label>
+                              Costo unitario
+                              <input
+                                name="unitCost"
+                                type="number"
+                                min="0"
+                                step="0.0001"
+                                defaultValue={line.unitCostSnapshot ?? ""}
+                              />
+                            </label>
+
+                            <label>
+                              Precio por empaque
+                              <input
+                                name="packagePrice"
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                defaultValue={
+                                  line.packagePriceSnapshot ?? ""
+                                }
+                              />
+                            </label>
+
+                            <label>
+                              Gasto real de esta línea
+                              <input
+                                name="actualTotal"
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                defaultValue={line.actualTotal ?? ""}
+                              />
+                            </label>
+
+                            <label>
+                              Estado
+                              <select
+                                name="status"
+                                defaultValue={line.status}
+                              >
+                                <option value="PENDING">Pendiente</option>
+                                <option value="BOUGHT">Comprado</option>
+                                <option value="SKIPPED">Omitido</option>
+                              </select>
+                            </label>
+                          </div>
+
+                          <label>
+                            Nota
+                            <input
+                              name="note"
+                              defaultValue={line.note ?? ""}
+                            />
+                          </label>
+                          <button type="submit">
+                            Guardar ajuste de línea
+                          </button>
                         </form>
-                      </div>
+                      </details>
                     ))}
                   </div>
+
+                  <form
+                    action={addManualPurchaseLine}
+                    className="card stack"
+                    style={{ marginTop: "1rem" }}
+                  >
+                    <h3>Agregar compra manual</h3>
+                    <input type="hidden" name="planId" value={plan.id} />
+                    <div className="grid">
+                      <label>
+                        Artículo / insumo
+                        <input
+                          name="itemName"
+                          required
+                          placeholder="Ej. filtros V60"
+                        />
+                      </label>
+                      <label>
+                        Proveedor
+                        <select name="supplierId" defaultValue="">
+                          <option value="">Sin proveedor</option>
+                          {data.suppliers
+                            .filter((supplier) => supplier.isActive)
+                            .map((supplier) => (
+                              <option value={supplier.id} key={supplier.id}>
+                                {supplier.name}
+                              </option>
+                            ))}
+                        </select>
+                      </label>
+                      <label>
+                        Cantidad
+                        <input
+                          name="requestedNativeQuantity"
+                          type="number"
+                          min="0.001"
+                          step="0.001"
+                        />
+                      </label>
+                      <label>
+                        Costo unitario
+                        <input
+                          name="unitCost"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                        />
+                      </label>
+                    </div>
+                    <label>
+                      Nota
+                      <input
+                        name="note"
+                        placeholder="Ej. aprovechar viaje a Puebla"
+                      />
+                    </label>
+                    <button type="submit">Agregar a requisición</button>
+                  </form>
 
                   <form
                     action={updatePurchasePlan}
@@ -415,6 +599,38 @@ export default async function PurchasesAdminPage({
                   >
                     <input type="hidden" name="planId" value={plan.id} />
                     <div className="grid">
+                      <label>
+                        Nombre del plan
+                        <input
+                          name="title"
+                          required
+                          defaultValue={plan.title}
+                        />
+                      </label>
+                      <label>
+                        Destino
+                        <input
+                          name="destination"
+                          defaultValue={plan.destination ?? ""}
+                        />
+                      </label>
+                      <label>
+                        Fecha del viaje / compra
+                        <input
+                          name="plannedFor"
+                          type="date"
+                          defaultValue={
+                            plan.plannedFor
+                              ? new Intl.DateTimeFormat("en-CA", {
+                                  timeZone: "America/Mexico_City",
+                                  year: "numeric",
+                                  month: "2-digit",
+                                  day: "2-digit",
+                                }).format(plan.plannedFor)
+                              : ""
+                          }
+                        />
+                      </label>
                       <label>
                         Estado
                         <select name="status" defaultValue={plan.status}>
