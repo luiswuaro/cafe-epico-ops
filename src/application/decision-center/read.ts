@@ -8,7 +8,14 @@ import { operationalEvents } from "@/src/infrastructure/db/schema";
 
 type Decision = {
   level: "ACTION" | "WATCH" | "INFO";
-  area: "VENTAS" | "INVENTARIO" | "COMPRAS" | "TUESTE" | "PERSONAL" | "DATOS";
+  area:
+    | "VENTAS"
+    | "INVENTARIO"
+    | "COMPRAS"
+    | "TUESTE"
+    | "OPERACIÓN"
+    | "PERSONAL"
+    | "DATOS";
   title: string;
   detail: string;
   href: string;
@@ -217,7 +224,7 @@ export async function getDecisionCenter(organizationId: string) {
           : first.severity === "IMPORTANT"
             ? "WATCH"
             : "INFO",
-      area: "PERSONAL",
+      area: "OPERACIÓN",
       title:
         actionableEvents.length +
         " incidencia(s) operativa(s) abiertas",
