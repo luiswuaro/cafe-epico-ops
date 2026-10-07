@@ -5,6 +5,7 @@ import { and, eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { getPosCatalog, type PosServiceMode } from "@/src/application/pos/catalog";
+import { syncLoyverseReceipts } from "@/src/application/loyverse/sync";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
 import { assertEmployeePermission } from "@/src/infrastructure/auth/permissions";
 import { getDb } from "@/src/infrastructure/db/client";
@@ -268,4 +269,26 @@ export async function cancelPosOrder(formData: FormData) {
   });
 
   redirect("/pos?saved=" + order.id + "&cancelled=1");
+}
+
+
+export async function refreshShadowMirror(formData: FormData) {
+  const { employee } = await getCurrentEmployee();
+  if (!employee.homeStoreId) {
+    throw new Error("El empleado no tiene sucursal asignada");
+  }
+
+  await assertEmployeePermission(
+    employee.id,
+    "pos.mirror.read",
+    employee.homeStoreId,
+  );
+
+  const orderId = String(formData.get("orderId") ?? "").trim();
+  if (!orderId) throw new Error("Falta la orden a comparar");
+
+  const since = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
+  await syncLoyverseReceipts(since);
+
+  redirect("/pos?saved=" + orderId + "&synced=1");
 }

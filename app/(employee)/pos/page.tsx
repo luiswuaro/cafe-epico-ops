@@ -10,7 +10,7 @@ import {
   assertEmployeePermission,
   employeeHasPermission,
 } from "@/src/infrastructure/auth/permissions";
-import { cancelPosOrder } from "./actions";
+import { cancelPosOrder, refreshShadowMirror } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -141,11 +141,18 @@ export default async function PosPage({
               </div>
             </div>
           ) : (
-            <p className="muted">
-              Si la venta de Loyverse acaba de ocurrir, puede faltar que llegue
-              la sincronización. Recarga esta página después del sync y OPS
-              volverá a buscar por total, productos, servicio, pago y tiempo.
-            </p>
+            <div className="stack compact-stack">
+              <p className="muted">
+                La venta todavía no está en el espejo local de Loyverse.
+                Puedes traer los recibos recientes y volver a comparar ahora.
+              </p>
+              <form action={refreshShadowMirror}>
+                <input type="hidden" name="orderId" value={saved.order.id} />
+                <button type="submit">
+                  Sincronizar Loyverse y comparar
+                </button>
+              </form>
+            </div>
           )}
 
           <div className="pos-saved-lines">
