@@ -153,8 +153,19 @@ export async function getLoyverseInventoryView(
         numberOrNull(variantPayload.cost) ??
         numberOrNull(variantPayload.purchase_cost);
       const setting = settingByVariant.get(variant.externalId);
+      const packagePrice = numberOrNull(setting?.packagePrice);
+      const packageQuantityNative = numberOrNull(
+        setting?.packageQuantityNative,
+      );
+      const packageUnitCost =
+        packagePrice != null &&
+        packageQuantityNative != null &&
+        packageQuantityNative > 0
+          ? packagePrice / packageQuantityNative
+          : null;
       const purchaseCost =
         numberOrNull(setting?.unitCostOverride) ??
+        packageUnitCost ??
         loyversePurchaseCost;
       const lowStock = numberOrNull(storeConfig?.low_stock);
       const optimalStock = numberOrNull(storeConfig?.optimal_stock);
@@ -177,14 +188,14 @@ export async function getLoyverseInventoryView(
         costSource:
           numberOrNull(setting?.unitCostOverride) != null
             ? "OVERRIDE"
-            : "LOYVERSE",
+            : packageUnitCost != null
+              ? "PACKAGE"
+              : "LOYVERSE",
         supplierId: setting?.supplierId ?? null,
         supplierName: setting?.supplierName ?? null,
         packageName: setting?.packageName ?? null,
-        packageQuantityNative: numberOrNull(
-          setting?.packageQuantityNative,
-        ),
-        packagePrice: numberOrNull(setting?.packagePrice),
+        packageQuantityNative,
+        packagePrice,
         leadDays: setting?.leadDays ?? 0,
         safetyDays: setting?.safetyDays ?? 3,
         displayUnit: setting?.displayUnit ?? null,
