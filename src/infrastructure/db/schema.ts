@@ -163,6 +163,9 @@ export const suppliers = pgTable("suppliers", {
   id: uuid("id").primaryKey().defaultRandom(),
   organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
+  city: text("city"),
+  contact: text("contact"),
+  notes: text("notes"),
   isActive: boolean("is_active").notNull().default(true),
   ...timestamps,
 });
