@@ -57,6 +57,25 @@ function displayUnit(item: ItemRecord) {
   return asBool(item.payload.sold_by_weight) ? "peso/volumen" : "pz";
 }
 
+function nullableNumber(value: unknown) {
+  if (value == null || value === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function currentSalePrice(payload: Record<string, unknown>) {
+  const stores = Array.isArray(payload.stores) ? payload.stores : [];
+  for (const value of stores) {
+    const row =
+      value && typeof value === "object" && !Array.isArray(value)
+        ? (value as Record<string, unknown>)
+        : {};
+    const price = nullableNumber(row.price);
+    if (price != null) return price;
+  }
+  return nullableNumber(payload.default_price);
+}
+
 function availableForSale(variant: VariantRecord) {
   const stores = Array.isArray(variant.payload.stores)
     ? variant.payload.stores
@@ -143,6 +162,7 @@ export async function getLoyverseRecipeSource(organizationId: string) {
         category: "Sin resolver",
         isComposite: false,
         sku: null,
+        unitCost: null,
       };
     }
 
@@ -158,6 +178,7 @@ export async function getLoyverseRecipeSource(organizationId: string) {
         (categoryId ? "Categoría pendiente de sincronizar" : "Sin categoría"),
       isComposite: asBool(item.payload.is_composite),
       sku: variant.sku,
+      unitCost: nullableNumber(variant.payload.cost),
     };
   }
 
@@ -175,6 +196,7 @@ export async function getLoyverseRecipeSource(organizationId: string) {
         unitLabel: string;
         category: string;
         sku: string | null;
+        unitCost: number | null;
       }
     >,
   ) {
@@ -195,6 +217,7 @@ export async function getLoyverseRecipeSource(organizationId: string) {
         unitLabel: "unidad desconocida",
         category: "Sin resolver",
         sku: null,
+        unitCost: null,
       });
       return;
     }
@@ -215,6 +238,7 @@ export async function getLoyverseRecipeSource(organizationId: string) {
             ? "Categoría pendiente de sincronizar"
             : "Sin categoría"),
         sku: variant.sku,
+        unitCost: nullableNumber(variant.payload.cost),
       });
       return;
     }
@@ -250,6 +274,7 @@ export async function getLoyverseRecipeSource(organizationId: string) {
           unitLabel: string;
           category: string;
           sku: string | null;
+          unitCost: number | null;
         }
       >();
 
@@ -274,6 +299,8 @@ export async function getLoyverseRecipeSource(organizationId: string) {
             ? "Categoría pendiente de sincronizar"
             : "Sin categoría"),
         availableForSale: availableForSale(variant),
+        salePrice: currentSalePrice(variant.payload),
+        loyverseCost: nullableNumber(variant.payload.cost),
         directComponents,
         effectiveComponents: [...effective.values()].sort((a, b) =>
           a.sourceName.localeCompare(b.sourceName, "es"),
@@ -285,17 +312,45 @@ export async function getLoyverseRecipeSource(organizationId: string) {
       return byCategory || a.itemName.localeCompare(b.itemName, "es");
     });
 
+  const recipesWithCost = recipes.map((recipe) => {
+    const missingCost = recipe.effectiveComponents.some(
+      (component) => component.unitCost == null,
+    );
+    const expandedCost = recipe.effectiveComponents.reduce(
+      (sum, component) =>
+        sum + component.quantity * (component.unitCost ?? 0),
+      0,
+    );
+
+    return {
+      ...recipe,
+      expandedCost: missingCost ? null : expandedCost,
+      contribution:
+        recipe.salePrice != null && recipe.loyverseCost != null
+          ? recipe.salePrice - recipe.loyverseCost
+          : null,
+      contributionPct:
+        recipe.salePrice != null &&
+        recipe.salePrice > 0 &&
+        recipe.loyverseCost != null
+          ? ((recipe.salePrice - recipe.loyverseCost) /
+              recipe.salePrice) *
+            100
+          : null,
+    };
+  });
+
   return {
-    recipes,
-    totalDirectComponents: recipes.reduce(
+    recipes: recipesWithCost,
+    totalDirectComponents: recipesWithCost.reduce(
       (sum, recipe) => sum + recipe.directComponents.length,
       0,
     ),
-    totalEffectiveComponents: recipes.reduce(
+    totalEffectiveComponents: recipesWithCost.reduce(
       (sum, recipe) => sum + recipe.effectiveComponents.length,
       0,
     ),
-    categories: [...new Set(recipes.map((recipe) => recipe.category))].sort(
+    categories: [...new Set(recipesWithCost.map((recipe) => recipe.category))].sort(
       (a, b) => a.localeCompare(b, "es"),
     ),
   };
