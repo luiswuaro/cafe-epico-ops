@@ -44,6 +44,7 @@ function calibrationAdvice(input: {
 
 export function buildBaristaActionQueue(input: {
   currentHour: number;
+  handoffWindow: boolean;
   opening: {
     total: number;
     completed: number;
@@ -224,14 +225,13 @@ export function buildBaristaActionQueue(input: {
     });
   }
 
-  const handoffWindow = input.currentHour >= 15;
   if (
-    handoffWindow &&
+    input.handoffWindow &&
     input.handoff.total > 0 &&
     input.handoff.completed < input.handoff.total
   ) {
     actions.push({
-      priority: input.currentHour >= 16 ? "ACTION" : "WATCH",
+      priority: "WATCH",
       area: "ENTREGA",
       title: "Preparar entrega de turno",
       detail:
@@ -239,7 +239,7 @@ export function buildBaristaActionQueue(input: {
         (input.handoff.total - input.handoff.completed) +
         " tareas para dejar barra, faltantes e incidencias documentados.",
       href: "/handoff",
-      rank: input.currentHour >= 16 ? 25 : 65,
+      rank: 65,
     });
   }
 
