@@ -4,6 +4,7 @@ import { getDb } from "@/src/infrastructure/db/client";
 import {
   loyverseInventorySnapshots,
   loyverseItems,
+  operationalEvents,
   loyverseReceiptLines,
   loyverseReceipts,
   loyverseVariants,
@@ -116,7 +117,7 @@ export async function getInventoryIntelligence(
   const since35 = new Date(Date.now() - 35 * 86_400_000);
   const since14 = new Date(Date.now() - 14 * 86_400_000);
 
-  const [items, variants, receipts, lines, snapshots] =
+  const [items, variants, receipts, lines, snapshots, wasteEvents] =
     await Promise.all([
       db
         .select({
@@ -175,6 +176,20 @@ export async function getInventoryIntelligence(
               selectedStore.externalId,
             ),
             gte(loyverseInventorySnapshots.capturedAt, since35),
+          ),
+        ),
+      db
+        .select({
+          variantExternalId: operationalEvents.variantExternalId,
+          quantity: operationalEvents.quantity,
+          occurredAt: operationalEvents.occurredAt,
+        })
+        .from(operationalEvents)
+        .where(
+          and(
+            eq(operationalEvents.organizationId, organizationId),
+            eq(operationalEvents.eventType, "WASTE"),
+            gte(operationalEvents.occurredAt, since35),
           ),
         ),
     ]);
@@ -494,6 +509,8 @@ export async function getInventoryIntelligence(
     before: number;
     after: number;
     actualConsumption: number;
+    salesConsumption: number;
+    loggedWaste: number;
     expectedConsumption: number;
     variance: number;
     variancePct: number | null;
@@ -514,13 +531,25 @@ export async function getInventoryIntelligence(
       (after.at.getTime() - before.at.getTime()) / 3_600_000;
     if (intervalHours < 0.5 || intervalHours > 24 * 7) continue;
 
-    const expectedConsumption = (usageEvents.get(variantId) ?? [])
+    const salesConsumption = (usageEvents.get(variantId) ?? [])
       .filter(
         (event) =>
           event.at > before.at &&
           event.at <= after.at,
       )
       .reduce((sum, event) => sum + event.quantity, 0);
+    const loggedWaste = wasteEvents
+      .filter(
+        (event) =>
+          event.variantExternalId === variantId &&
+          event.occurredAt > before.at &&
+          event.occurredAt <= after.at,
+      )
+      .reduce(
+        (sum, event) => sum + Number(event.quantity ?? 0),
+        0,
+      );
+    const expectedConsumption = salesConsumption + loggedWaste;
     const actualConsumption = before.stock - after.stock;
     const variance = actualConsumption - expectedConsumption;
 
@@ -543,6 +572,8 @@ export async function getInventoryIntelligence(
       before: before.stock,
       after: after.stock,
       actualConsumption,
+      salesConsumption,
+      loggedWaste,
       expectedConsumption,
       variance,
       variancePct,
