@@ -52,11 +52,12 @@ export async function getProductivityReport(
     .orderBy(desc(checklistRunTasks.completedAt));
 
   const measured = rows.flatMap((row) => {
+    const targetSeconds = row.targetSeconds;
     if (
       !row.startedAt ||
       !row.completedAt ||
-      !row.targetSeconds ||
-      row.targetSeconds <= 0
+      targetSeconds == null ||
+      targetSeconds <= 0
     ) {
       return [];
     }
@@ -64,15 +65,16 @@ export async function getProductivityReport(
     const actualSeconds = elapsedSeconds(row.startedAt, row.completedAt);
     if (actualSeconds == null) return [];
 
-    const varianceSeconds = actualSeconds - row.targetSeconds;
-    const variancePercent = (varianceSeconds / row.targetSeconds) * 100;
+    const varianceSeconds = actualSeconds - targetSeconds;
+    const variancePercent = (varianceSeconds / targetSeconds) * 100;
 
     return [{
       ...row,
+      targetSeconds,
       actualSeconds,
       varianceSeconds,
       variancePercent,
-      onTarget: actualSeconds <= row.targetSeconds,
+      onTarget: actualSeconds <= targetSeconds,
     }];
   });
 
