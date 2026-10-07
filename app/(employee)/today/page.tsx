@@ -124,6 +124,25 @@ export default async function TodayPage() {
         </article>
 
         <article className="card">
+          <p className="eyebrow">DEMANDA PROBABLE · TURNO</p>
+          <h2>Qué se mueve más</h2>
+          {summary.bar.topProducts.length === 0 ? (
+            <p className="muted">
+              Aún no hay muestra histórica suficiente para este día.
+            </p>
+          ) : (
+            <div className="stack">
+              {summary.bar.topProducts.slice(0, 5).map((row) => (
+                <div className="task" key={row.name}>
+                  <strong>{row.name}</strong>
+                  <span>{row.expected.toFixed(1)} u. esperadas</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </article>
+
+        <article className="card">
           <p className="eyebrow">RIESGO DE STOCK · TURNO</p>
           <div className="metric">{summary.bar.stockRisks.length}</div>
           <p>insumos con cobertura ajustada para el turno.</p>
