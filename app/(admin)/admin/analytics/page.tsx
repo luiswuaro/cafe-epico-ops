@@ -73,12 +73,11 @@ export default async function AnalyticsPage() {
 
       <section className="grid" style={{ marginTop: "1rem" }}>
         {[
-          ["Mañana", data.shift.morning],
-          ["Tarde", data.shift.afternoon],
-        ].map(([label, raw]) => {
-          const row = raw as typeof data.shift.morning;
+          { label: "Mañana", row: data.shift.morning },
+          { label: "Tarde", row: data.shift.afternoon },
+        ].map(({ label, row }) => {
           return (
-            <article className="card" key={label as string}>
+            <article className="card" key={label}>
               <p className="eyebrow">TURNO · {label}</p>
               <div className="metric">{money.format(row.sales)}</div>
               <p>
