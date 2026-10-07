@@ -148,6 +148,28 @@ export async function getLoyverseRecipeSource(organizationId: string) {
   const settingByVariant = new Map(
     settings.map((setting) => [setting.variantExternalId, setting]),
   );
+  const configuredUnitCost = (variant: VariantRecord) => {
+    const setting = settingByVariant.get(variant.externalId);
+    const override = nullableNumber(setting?.unitCostOverride);
+    if (override != null) return override;
+
+    const packagePrice = nullableNumber(
+      (setting as { packagePrice?: unknown } | undefined)?.packagePrice,
+    );
+    const packageQuantity = nullableNumber(
+      (setting as { packageQuantityNative?: unknown } | undefined)
+        ?.packageQuantityNative,
+    );
+    if (
+      packagePrice != null &&
+      packageQuantity != null &&
+      packageQuantity > 0
+    ) {
+      return packagePrice / packageQuantity;
+    }
+
+    return nullableNumber(variant.payload.cost);
+  };
 
   const disposablePattern =
     /(VASO|TAPA|POPOTE|MANGA|FAJILLA|SERVILLETA|BOLSA|CUBIERTO|CHAROLA)/i;
@@ -237,9 +259,7 @@ export async function getLoyverseRecipeSource(organizationId: string) {
       isComposite: asBool(item.payload.is_composite),
       isDisposable: disposablePattern.test(sourceName),
       sku: variant.sku,
-      unitCost:
-        nullableNumber(setting?.unitCostOverride) ??
-        nullableNumber(variant.payload.cost),
+      unitCost: configuredUnitCost(variant),
     };
   }
 
@@ -299,10 +319,7 @@ export async function getLoyverseRecipeSource(organizationId: string) {
             ? "Categoría pendiente de sincronizar"
             : "Sin categoría"),
         sku: variant.sku,
-        unitCost:
-          nullableNumber(
-            settingByVariant.get(variant.externalId)?.unitCostOverride,
-          ) ?? nullableNumber(variant.payload.cost),
+        unitCost: configuredUnitCost(variant),
       });
       return;
     }
