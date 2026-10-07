@@ -1,3 +1,8 @@
+alter table public.suppliers
+  add column if not exists city text,
+  add column if not exists contact text,
+  add column if not exists notes text;
+
 create table if not exists public.loyverse_item_settings (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references public.organizations(id) on delete cascade,
