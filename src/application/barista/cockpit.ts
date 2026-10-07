@@ -158,9 +158,13 @@ export async function getBaristaCockpit(employee: {
         variantExternalId: row.variantExternalId,
         itemName: row.itemName,
         unitLabel: displayUnit(row),
+        soldByWeight: row.soldByWeight,
         inStock: displayQuantity(row, Math.max(0, row.inStock)),
         sourceInStock: displayQuantity(row, row.inStock),
         expected: expected * factor,
+        prepQuantity: row.soldByWeight
+          ? expected * factor
+          : Math.ceil(expected * factor),
         remainingAfterForecast:
           (Math.max(0, row.inStock) - expected) * factor,
         inventoryNeedsCorrection: row.inStock < 0,
@@ -169,7 +173,7 @@ export async function getBaristaCockpit(employee: {
     })
     .filter((row) => row.expected > 0.0005)
     .sort((a, b) => b.expected - a.expected)
-    .slice(0, 10);
+    .slice(0, 20);
 
   const wasteOptions = inventory.smartRows
     .filter((row) => row.inStock > 0 || row.avgDailyUsage14 > 0)
@@ -182,7 +186,8 @@ export async function getBaristaCockpit(employee: {
     .map((row) => ({
       variantExternalId: row.variantExternalId,
       itemName: row.itemName,
-      unitLabel: row.unitLabel,
+      unitLabel: displayUnit(row),
+      displayFactor: row.displayFactor ?? 1,
     }));
 
   const prepActions: Array<{
@@ -295,6 +300,14 @@ export async function getBaristaCockpit(employee: {
     topProducts: inventory.shift.topProducts,
     shiftRisks: inventory.shift.risks,
     shiftIngredients,
+    prepConsumables: shiftIngredients
+      .filter((row) => !row.soldByWeight)
+      .sort((a, b) => b.expected - a.expected)
+      .slice(0, 8),
+    prepIngredients: shiftIngredients
+      .filter((row) => row.soldByWeight)
+      .sort((a, b) => b.expected - a.expected)
+      .slice(0, 8),
     unavailableProducts: inventory.unavailableProducts,
     activeRoast: activeRoast
       ? {
