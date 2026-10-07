@@ -299,6 +299,21 @@ export async function getBusinessAnalytics(organizationId: string) {
       typeof payload.item_name === "string"
         ? payload.item_name
         : "Sin nombre";
+    const variant = line.variantExternalId
+      ? variantById.get(line.variantExternalId)
+      : null;
+    const item = variant?.itemExternalId
+      ? itemById.get(variant.itemExternalId)
+      : null;
+    const categoryId =
+      typeof item?.payload.category_id === "string"
+        ? item.payload.category_id
+        : "";
+    const categoryName = categoryById.get(categoryId) ?? "";
+    const lineIsFood =
+      isFood(name) ||
+      categoryName.toUpperCase().includes("ALIMENTO");
+
     const current = lineByReceipt.get(line.receiptExternalId) ?? {
       units: 0,
       beverageUnits: 0,
@@ -308,7 +323,7 @@ export async function getBusinessAnalytics(organizationId: string) {
       discounts: 0,
     };
     current.units += qty;
-    if (!isFood(name)) current.beverageUnits += qty;
+    if (!lineIsFood) current.beverageUnits += qty;
     current.gross += gross;
     current.net += net;
     current.cogs += cogs;
@@ -337,19 +352,9 @@ export async function getBusinessAnalytics(organizationId: string) {
     }
     product30.set(name, product);
 
-    const variant = line.variantExternalId
-      ? variantById.get(line.variantExternalId)
-      : null;
-    const item = variant?.itemExternalId
-      ? itemById.get(variant.itemExternalId)
-      : null;
-    const categoryId =
-      typeof item?.payload.category_id === "string"
-        ? item.payload.category_id
-        : "";
     const category =
-      categoryById.get(categoryId) ??
-      (isFood(name) ? "ALIMENTOS" : "SIN CATEGORÍA");
+      categoryName ||
+      (lineIsFood ? "ALIMENTOS" : "SIN CATEGORÍA");
     const cat = category30.get(category) ?? {
       qty: 0,
       sales: 0,
