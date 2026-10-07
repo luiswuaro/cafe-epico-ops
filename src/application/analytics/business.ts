@@ -627,6 +627,21 @@ export async function getBusinessAnalytics(organizationId: string) {
   };
 
   const period30 = periods.find((period) => period.key === "30d")!;
+  const loyaltyNewPerDay7 = loyalty.new7 / 7;
+  const loyaltyNewPerDay30 = loyalty.new30 / 30;
+  const loyaltyTrendPct =
+    loyaltyNewPerDay30 > 0
+      ? ((loyaltyNewPerDay7 - loyaltyNewPerDay30) /
+          loyaltyNewPerDay30) *
+        100
+      : loyaltyNewPerDay7 > 0
+        ? null
+        : 0;
+  const loyaltyProjection30 = loyaltyNewPerDay7 * 30;
+  const anonymousTickets30 = Math.max(
+    0,
+    period30.tickets - period30.identifiedTickets,
+  );
   const peakHour = hourly
     .filter((row) => row.tickets > 0)
     .sort((a, b) => b.sales - a.sales)[0] ?? null;
@@ -689,7 +704,14 @@ export async function getBusinessAnalytics(organizationId: string) {
       .sort((a, b) => b.sales - a.sales),
     topProducts,
     categories30,
-    loyalty,
+    loyalty: {
+      ...loyalty,
+      newPerDay7: loyaltyNewPerDay7,
+      newPerDay30: loyaltyNewPerDay30,
+      trendPct: loyaltyTrendPct,
+      projected30At7dPace: loyaltyProjection30,
+      anonymousTickets30,
+    },
     peakHour,
     suggestions,
   };
