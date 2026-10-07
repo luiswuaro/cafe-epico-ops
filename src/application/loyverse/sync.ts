@@ -1,11 +1,35 @@
 import { and, eq } from "drizzle-orm";
 import { getDb } from "@/src/infrastructure/db/client";
-import { loyverseCategories, loyverseCustomers, loyverseInventoryLevels, loyverseItems, loyverseReceiptLines, loyverseReceipts, loyverseStores, loyverseVariants, organizations } from "@/src/infrastructure/db/schema";
+import { loyverseCategories, loyverseCustomers, loyverseInventoryLevels, loyverseInventorySnapshots, loyverseItems, loyverseReceiptLines, loyverseReceipts, loyverseStores, loyverseVariants, organizations } from "@/src/infrastructure/db/schema";
 import { LoyverseClient } from "@/src/infrastructure/loyverse/client";
 
 const asDate = (value: unknown) => typeof value === "string" && value ? new Date(value) : null;
 const asString = (value: unknown) => typeof value === "string" ? value : "";
 const asNumber = (value: unknown) => typeof value === "number" ? value : Number(value ?? 0);
+const nullableNumber = (value: unknown) => {
+  if (value == null || value === "") return null;
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+const record = (value: unknown) =>
+  value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+const variantInventoryMeta = (
+  payload: Record<string, unknown> | undefined,
+  storeExternalId: string,
+) => {
+  const stores = Array.isArray(payload?.stores) ? payload.stores : [];
+  const store = stores
+    .map(record)
+    .find((row) => row.store_id === storeExternalId);
+
+  return {
+    unitCost: nullableNumber(payload?.cost),
+    lowStock: nullableNumber(store?.low_stock),
+    optimalStock: nullableNumber(store?.optimal_stock),
+  };
+};
 
 async function context() {
   const token = process.env.LOYVERSE_ACCESS_TOKEN;
@@ -82,16 +106,104 @@ export async function syncLoyverseItems(updatedAtMin?: string) {
 }
 
 export async function syncLoyverseInventory(updatedAtMin?: string) {
-  const { db, orgId, client } = await context(); let count = 0;
-  for await (const levels of client.paginate<Record<string, unknown>>("/inventory", "inventory_levels", { updated_at_min: updatedAtMin })) {
+  const { db, orgId, client } = await context();
+  let count = 0;
+
+  for await (const levels of client.paginate<Record<string, unknown>>(
+    "/inventory",
+    "inventory_levels",
+    { updated_at_min: updatedAtMin },
+  )) {
     for (const level of levels) {
-      const variantExternalId = asString(level.variant_id), storeExternalId = asString(level.store_id);
+      const variantExternalId = asString(level.variant_id);
+      const storeExternalId = asString(level.store_id);
       if (!variantExternalId || !storeExternalId) continue;
-      await db.insert(loyverseInventoryLevels).values({ organizationId: orgId, variantExternalId, storeExternalId, inStock: String(asNumber(level.in_stock)), externalUpdatedAt: asDate(level.updated_at) })
-        .onConflictDoUpdate({ target: [loyverseInventoryLevels.organizationId, loyverseInventoryLevels.variantExternalId, loyverseInventoryLevels.storeExternalId], set: { inStock: String(asNumber(level.in_stock)), externalUpdatedAt: asDate(level.updated_at), syncedAt: new Date() } });
+
+      const inStock = asNumber(level.in_stock);
+      const externalUpdatedAt = asDate(level.updated_at);
+
+      const [[previous], [variant]] = await Promise.all([
+        db
+          .select({
+            inStock: loyverseInventoryLevels.inStock,
+          })
+          .from(loyverseInventoryLevels)
+          .where(
+            and(
+              eq(loyverseInventoryLevels.organizationId, orgId),
+              eq(
+                loyverseInventoryLevels.variantExternalId,
+                variantExternalId,
+              ),
+              eq(
+                loyverseInventoryLevels.storeExternalId,
+                storeExternalId,
+              ),
+            ),
+          )
+          .limit(1),
+        db
+          .select({ payload: loyverseVariants.payload })
+          .from(loyverseVariants)
+          .where(
+            and(
+              eq(loyverseVariants.organizationId, orgId),
+              eq(loyverseVariants.externalId, variantExternalId),
+            ),
+          )
+          .limit(1),
+      ]);
+
+      const meta = variantInventoryMeta(
+        variant?.payload,
+        storeExternalId,
+      );
+      const changed =
+        !previous ||
+        Math.abs(Number(previous.inStock) - inStock) > 0.0005;
+
+      await db
+        .insert(loyverseInventoryLevels)
+        .values({
+          organizationId: orgId,
+          variantExternalId,
+          storeExternalId,
+          inStock: String(inStock),
+          externalUpdatedAt,
+        })
+        .onConflictDoUpdate({
+          target: [
+            loyverseInventoryLevels.organizationId,
+            loyverseInventoryLevels.variantExternalId,
+            loyverseInventoryLevels.storeExternalId,
+          ],
+          set: {
+            inStock: String(inStock),
+            externalUpdatedAt,
+            syncedAt: new Date(),
+          },
+        });
+
+      if (changed) {
+        await db.insert(loyverseInventorySnapshots).values({
+          organizationId: orgId,
+          variantExternalId,
+          storeExternalId,
+          inStock: String(inStock),
+          unitCost:
+            meta.unitCost == null ? null : String(meta.unitCost),
+          lowStock:
+            meta.lowStock == null ? null : String(meta.lowStock),
+          optimalStock:
+            meta.optimalStock == null ? null : String(meta.optimalStock),
+          externalUpdatedAt,
+        });
+      }
+
       count++;
     }
   }
+
   return count;
 }
 
