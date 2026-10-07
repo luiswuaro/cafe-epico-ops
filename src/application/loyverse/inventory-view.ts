@@ -3,9 +3,11 @@ import { getDb } from "@/src/infrastructure/db/client";
 import {
   loyverseCategories,
   loyverseInventoryLevels,
+  loyverseItemSettings,
   loyverseItems,
   loyverseStores,
   loyverseVariants,
+  suppliers,
 } from "@/src/infrastructure/db/schema";
 
 function bool(value: unknown) {
@@ -30,7 +32,7 @@ export async function getLoyverseInventoryView(
 ) {
   const db = getDb();
 
-  const [stores, items, variants, levels, categories] = await Promise.all([
+  const [stores, items, variants, levels, categories, settings] = await Promise.all([
     db
       .select({
         externalId: loyverseStores.externalId,
@@ -77,6 +79,24 @@ export async function getLoyverseInventoryView(
       })
       .from(loyverseCategories)
       .where(eq(loyverseCategories.organizationId, organizationId)),
+    db
+      .select({
+        variantExternalId: loyverseItemSettings.variantExternalId,
+        displayUnit: loyverseItemSettings.displayUnit,
+        displayFactor: loyverseItemSettings.displayFactor,
+        unitCostOverride: loyverseItemSettings.unitCostOverride,
+        packageName: loyverseItemSettings.packageName,
+        packageQuantityNative: loyverseItemSettings.packageQuantityNative,
+        packagePrice: loyverseItemSettings.packagePrice,
+        leadDays: loyverseItemSettings.leadDays,
+        safetyDays: loyverseItemSettings.safetyDays,
+        supplierId: loyverseItemSettings.supplierId,
+        supplierName: suppliers.name,
+        notes: loyverseItemSettings.notes,
+      })
+      .from(loyverseItemSettings)
+      .leftJoin(suppliers, eq(suppliers.id, loyverseItemSettings.supplierId))
+      .where(eq(loyverseItemSettings.organizationId, organizationId)),
   ]);
 
   const selectedStore =
@@ -99,6 +119,9 @@ export async function getLoyverseInventoryView(
   );
   const categoryById = new Map(
     categories.map((category) => [category.externalId, category.name]),
+  );
+  const settingByVariant = new Map(
+    settings.map((setting) => [setting.variantExternalId, setting]),
   );
 
   const rows = levels
@@ -126,9 +149,13 @@ export async function getLoyverseInventoryView(
         );
 
       const soldByWeight = bool(payload.sold_by_weight);
+      const loyversePurchaseCost =
+        numberOrNull(variantPayload.cost) ??
+        numberOrNull(variantPayload.purchase_cost);
+      const setting = settingByVariant.get(variant.externalId);
       const purchaseCost =
-        numberOrNull(variantPayload.purchase_cost) ??
-        numberOrNull(variantPayload.cost);
+        numberOrNull(setting?.unitCostOverride) ??
+        loyversePurchaseCost;
       const lowStock = numberOrNull(storeConfig?.low_stock);
       const optimalStock = numberOrNull(storeConfig?.optimal_stock);
       const inStock = Number(level.inStock);
@@ -146,6 +173,23 @@ export async function getLoyverseInventoryView(
         soldByWeight,
         unitLabel: soldByWeight ? "peso/volumen" : "pz",
         purchaseCost,
+        loyversePurchaseCost,
+        costSource:
+          numberOrNull(setting?.unitCostOverride) != null
+            ? "OVERRIDE"
+            : "LOYVERSE",
+        supplierId: setting?.supplierId ?? null,
+        supplierName: setting?.supplierName ?? null,
+        packageName: setting?.packageName ?? null,
+        packageQuantityNative: numberOrNull(
+          setting?.packageQuantityNative,
+        ),
+        packagePrice: numberOrNull(setting?.packagePrice),
+        leadDays: setting?.leadDays ?? 0,
+        safetyDays: setting?.safetyDays ?? 3,
+        displayUnit: setting?.displayUnit ?? null,
+        displayFactor: numberOrNull(setting?.displayFactor) ?? 1,
+        purchaseNotes: setting?.notes ?? null,
         lowStock,
         optimalStock,
         low:
