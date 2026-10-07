@@ -853,6 +853,28 @@ export const loyverseInventoryMappings = pgTable("loyverse_inventory_mappings", 
   index("loyverse_inventory_mapping_location_idx").on(t.locationId),
 ]);
 
+export const operationalEvents = pgTable("operational_events", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  storeId: uuid("store_id").references(() => stores.id, { onDelete: "set null" }),
+  employeeId: uuid("employee_id").references(() => employees.id, { onDelete: "set null" }),
+  eventType: varchar("event_type", { length: 30 }).notNull(),
+  severity: varchar("severity", { length: 20 }).notNull().default("NORMAL"),
+  variantExternalId: text("variant_external_id"),
+  itemNameSnapshot: text("item_name_snapshot"),
+  quantity: numeric("quantity", { precision: 18, scale: 3 }),
+  unitLabel: varchar("unit_label", { length: 30 }),
+  note: text("note"),
+  occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
+  resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+  resolvedByEmployeeId: uuid("resolved_by_employee_id").references(() => employees.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("operational_events_org_date_idx").on(t.organizationId, t.occurredAt),
+  index("operational_events_store_open_idx").on(t.storeId, t.resolvedAt, t.occurredAt),
+  index("operational_events_variant_idx").on(t.organizationId, t.variantExternalId, t.occurredAt),
+]);
+
 export const webhookEvents = pgTable("webhook_events", {
   id: uuid("id").primaryKey().defaultRandom(),
   organizationId: uuid("organization_id").references(() => organizations.id, { onDelete: "cascade" }),
