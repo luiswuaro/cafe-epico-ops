@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, gte, isNull } from "drizzle-orm";
 import { getInventoryIntelligence } from "@/src/application/loyverse/inventory-intelligence";
 import { getDb } from "@/src/infrastructure/db/client";
 import {
@@ -9,13 +9,21 @@ import {
   roastCoffeeLots,
 } from "@/src/infrastructure/db/schema";
 
-function localHour() {
-  const parts = new Intl.DateTimeFormat("en-US", {
+function localParts() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Mexico_City",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
     hour: "2-digit",
     hourCycle: "h23",
   }).formatToParts(new Date());
-  return Number(parts.find((part) => part.type === "hour")?.value ?? "0");
+  const get = (type: string) =>
+    parts.find((part) => part.type === type)?.value ?? "";
+  return {
+    date: `${get("year")}-${get("month")}-${get("day")}`,
+    hour: Number(get("hour")),
+  };
 }
 
 function ageDays(date: Date) {
@@ -31,8 +39,10 @@ export async function getBaristaCockpit(employee: {
 
   const db = getDb();
   const inventory = await getInventoryIntelligence(employee.organizationId);
+  const local = localParts();
+  const dayStart = new Date(local.date + "T00:00:00-06:00");
 
-  const [[activeRoast], [latestQc], incidents] = await Promise.all([
+  const [[activeRoast], qcsToday, incidents] = await Promise.all([
     db
       .select({
         batchId: roastBatches.id,
@@ -81,10 +91,11 @@ export async function getBaristaCockpit(employee: {
             employee.organizationId,
           ),
           eq(espressoQualityChecks.storeId, employee.homeStoreId),
+          gte(espressoQualityChecks.createdAt, dayStart),
         ),
       )
       .orderBy(desc(espressoQualityChecks.createdAt))
-      .limit(1),
+      .limit(30),
     db
       .select({
         id: operationalEvents.id,
@@ -106,8 +117,11 @@ export async function getBaristaCockpit(employee: {
       .limit(5),
   ]);
 
-  const hour = localHour();
-  const currentShift = hour < 16 ? "MORNING" : "AFTERNOON";
+  const currentShift = local.hour < 16 ? "MORNING" : "AFTERNOON";
+  const latestQc = qcsToday[0] ?? null;
+  const qcPassedToday = qcsToday.filter(
+    (row) => row.withinTimeSpec && row.withinYieldSpec === true,
+  ).length;
 
   const shiftIngredients = inventory.smartRows
     .map((row) => {
@@ -143,6 +157,85 @@ export async function getBaristaCockpit(employee: {
       unitLabel: row.unitLabel,
     }));
 
+  const prepActions: Array<{
+    priority: "ACTION" | "WATCH" | "INFO";
+    title: string;
+    detail: string;
+    href?: string;
+  }> = [];
+
+  if (!latestQc) {
+    prepActions.push({
+      priority: "ACTION",
+      title: "Calibrar espresso",
+      detail: "Todavía no hay QC registrado hoy.",
+      href: "/quality/espresso",
+    });
+  } else if (
+    !latestQc.withinTimeSpec ||
+    latestQc.withinYieldSpec !== true
+  ) {
+    prepActions.push({
+      priority: "ACTION",
+      title: "Repetir calibración",
+      detail:
+        "El último control quedó fuera de especificación. Corrige una variable a la vez y vuelve a medir.",
+      href: "/quality/espresso",
+    });
+  }
+
+  for (const risk of inventory.shift.risks.slice(0, 4)) {
+    prepActions.push({
+      priority: risk.status,
+      title: "Reponer " + risk.itemName,
+      detail:
+        "Stock " +
+        risk.inStock.toFixed(2) +
+        " " +
+        risk.unitLabel +
+        " vs consumo esperado del turno " +
+        risk.expectedShift.toFixed(2) +
+        ".",
+      href: "/inventory",
+    });
+  }
+
+  if (inventory.shift.traffic.nextPeak) {
+    const peak = inventory.shift.traffic.nextPeak;
+    prepActions.push({
+      priority: "INFO",
+      title:
+        "Preparar estación antes de " +
+        String(peak.hour).padStart(2, "0") +
+        ":00",
+      detail:
+        "Es la siguiente hora con mayor tráfico esperado para este día de la semana.",
+    });
+  }
+
+  if (inventory.shift.topProducts.length > 0) {
+    prepActions.push({
+      priority: "INFO",
+      title: "Priorizar mise en place",
+      detail: inventory.shift.topProducts
+        .slice(0, 4)
+        .map(
+          (row) =>
+            row.name + " ≈ " + row.expected.toFixed(1),
+        )
+        .join(" · "),
+    });
+  }
+
+  if (!activeRoast) {
+    prepActions.push({
+      priority: "WATCH",
+      title: "Café espresso sin batch asignado",
+      detail:
+        "Los controles de espresso no podrán relacionarse con un tueste específico.",
+    });
+  }
+
   return {
     currentShift,
     sampleDays: inventory.shift.sampleDays,
@@ -157,7 +250,16 @@ export async function getBaristaCockpit(employee: {
           ageDays: ageDays(activeRoast.roastedAt),
         }
       : null,
-    latestQc: latestQc ?? null,
+    latestQc,
+    calibration: {
+      attemptsToday: qcsToday.length,
+      passedToday: qcPassedToday,
+      passRate:
+        qcsToday.length > 0
+          ? (qcPassedToday / qcsToday.length) * 100
+          : null,
+    },
+    prepActions: prepActions.slice(0, 8),
     incidents,
     wasteOptions,
   };
