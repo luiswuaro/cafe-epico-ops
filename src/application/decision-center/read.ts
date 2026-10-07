@@ -50,6 +50,9 @@ export async function getDecisionCenter(organizationId: string) {
           eventType: operationalEvents.eventType,
           severity: operationalEvents.severity,
           itemNameSnapshot: operationalEvents.itemNameSnapshot,
+          variantExternalId: operationalEvents.variantExternalId,
+          displayQuantity: operationalEvents.displayQuantity,
+          displayUnit: operationalEvents.displayUnit,
           note: operationalEvents.note,
           occurredAt: operationalEvents.occurredAt,
         })
@@ -64,6 +67,7 @@ export async function getDecisionCenter(organizationId: string) {
               "SERVICE",
               "OTHER",
               "BAR_INCIDENT",
+              "STOCK_COUNT",
             ]),
           ),
         )
@@ -242,9 +246,14 @@ export async function getDecisionCenter(organizationId: string) {
   }
 
   const actionableEvents = openEvents.filter((event) =>
-    ["EQUIPMENT", "STOCK", "SERVICE", "OTHER", "BAR_INCIDENT"].includes(
-      event.eventType,
-    ),
+    [
+      "EQUIPMENT",
+      "STOCK",
+      "SERVICE",
+      "OTHER",
+      "BAR_INCIDENT",
+      "STOCK_COUNT",
+    ].includes(event.eventType),
   );
   if (actionableEvents.length > 0) {
     const first = actionableEvents[0];
