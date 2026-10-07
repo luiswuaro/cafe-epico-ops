@@ -17,7 +17,7 @@ cross join (
     ('Chocolate','CHOCOLATE','BASE','g'),
     ('Leche condensada','LECHE-COND','BASE','g'),
     ('Agua mineral','AGUA-MINERAL','BEBIDAS','ml'),
-    ('Agua tónica','AGUA-TONICA','BEBIDAS','ml'),
+    ('Agua tónica','AGUA-TONICA','BEBIDAS','pz'),
     ('Jarabe de horchata','JARABE-HORCHATA','JARABES','ml'),
     ('Matcha','MATCHA','POLVOS','g'),
     ('Taro','TARO','POLVOS','g'),
