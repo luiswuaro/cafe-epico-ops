@@ -35,6 +35,61 @@ export default async function PurchasesAdminPage({
     (row) => row.suggestedPurchase > 0.0005,
   );
 
+  const supplierById = new Map(
+    data.suppliers.map((supplier) => [supplier.id, supplier]),
+  );
+  const tripGroups = new Map<
+    string,
+    {
+      supplier: string;
+      city: string;
+      items: number;
+      packages: number;
+      estimatedCost: number;
+      unknownCostItems: number;
+      earliestOrderDate: string | null;
+    }
+  >();
+
+  for (const row of suggestions) {
+    const supplier = row.supplierId
+      ? supplierById.get(row.supplierId)
+      : null;
+    const supplierName = supplier?.name ?? "Sin proveedor";
+    const city = supplier?.city ?? "Sin zona";
+    const key = supplierName + "|" + city;
+    const current = tripGroups.get(key) ?? {
+      supplier: supplierName,
+      city,
+      items: 0,
+      packages: 0,
+      estimatedCost: 0,
+      unknownCostItems: 0,
+      earliestOrderDate: null,
+    };
+    current.items += 1;
+    current.packages += row.suggestedPackages ?? 0;
+    if (row.suggestedCost == null) {
+      current.unknownCostItems += 1;
+    } else {
+      current.estimatedCost += row.suggestedCost;
+    }
+    if (
+      row.orderDate &&
+      (!current.earliestOrderDate ||
+        row.orderDate < current.earliestOrderDate)
+    ) {
+      current.earliestOrderDate = row.orderDate;
+    }
+    tripGroups.set(key, current);
+  }
+
+  const tripSummary = [...tripGroups.values()].sort(
+    (a, b) =>
+      a.city.localeCompare(b.city, "es") ||
+      b.estimatedCost - a.estimatedCost,
+  );
+
   return (
     <main className="shell">
       <section className="hero">
@@ -102,6 +157,51 @@ export default async function PurchasesAdminPage({
             Crear plan con {suggestions.length} sugerencias
           </button>
         </form>
+      </section>
+
+      <section className="card" style={{ marginTop: "1rem" }}>
+        <p className="eyebrow">RUTA DE COMPRA</p>
+        <h2>Dinero y paradas sugeridas</h2>
+        <p className="muted">
+          Agrupa la reposición por proveedor y zona para preparar una salida de
+          compras sin recorrer la lista insumo por insumo.
+        </p>
+        {tripSummary.length === 0 ? (
+          <p className="status-ok">No hay compras sugeridas por ahora.</p>
+        ) : (
+          <div className="stack">
+            {tripSummary.map((group) => (
+              <div
+                className="task"
+                key={group.supplier + group.city}
+              >
+                <div style={{ flex: 1 }}>
+                  <strong>{group.supplier}</strong>
+                  <div className="muted">
+                    {group.city} · {group.items} insumo(s)
+                    {group.packages > 0
+                      ? " · " + group.packages + " paquete(s)"
+                      : ""}
+                  </div>
+                  <div className="muted">
+                    Comprar a más tardar:{" "}
+                    {group.earliestOrderDate ?? "sin fecha calculable"}
+                  </div>
+                </div>
+                <div style={{ textAlign: "right" }}>
+                  <div className="metric" style={{ fontSize: "1.35rem" }}>
+                    {money.format(group.estimatedCost)}
+                  </div>
+                  {group.unknownCostItems > 0 && (
+                    <div className="status-warn">
+                      + {group.unknownCostItems} sin costo
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
       <section className="card" style={{ marginTop: "1rem" }}>
