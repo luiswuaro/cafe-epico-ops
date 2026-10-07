@@ -2,9 +2,10 @@ import { requirePermission } from "@/src/infrastructure/auth/permissions";
 import Link from "next/link";
 const modules = [
   ["Checklist", "Plantillas, tareas, frecuencias, roles y SOPs", "/admin/checklists"],
-  ["Recetas", "Versionado, componentes, presentación, QC y costos", "/recipes"],
+  ["Recetas", "Versionado, componentes, presentación, QC y costos", "/admin/recipes"],
   ["SOPs", "Procedimientos versionados", "/sops"],
-  ["Inventario", "Teórico, físico, movimientos y desviaciones", "#"],
+  ["Inventario", "Editar insumos, unidades, categorías y estado", "/admin/inventory/catalog"],
+  ["Analítica", "Ventas, turnos, lealtad, tendencias y sugerencias", "/admin/analytics"],
   ["Loyverse", "Estado de sincronización, webhooks y reconciliación", "/admin/loyverse"],
   ["Mapeo inventario Loyverse", "Unidades, conversiones e importación de existencias", "/admin/loyverse/inventory"],
   ["Recetas fuente Loyverse", "Composiciones del POS para comparar contra receta técnica", "/admin/loyverse/recipes"],
