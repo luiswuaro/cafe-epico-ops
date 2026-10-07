@@ -1,114 +1,161 @@
 import Link from "next/link";
 import { getLoyverseRecipeSource } from "@/src/application/loyverse/recipes";
-import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
 import { requirePermission } from "@/src/infrastructure/auth/permissions";
 
 export const dynamic = "force-dynamic";
+
+type PageProps = {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+};
 
 const number = new Intl.NumberFormat("es-MX", {
   maximumFractionDigits: 3,
 });
 
-export default async function LoyverseRecipesPage() {
+export default async function LoyverseRecipesPage({
+  searchParams,
+}: PageProps) {
+  const params = await searchParams;
   const { organizationId } = await requirePermission("integration.read");
-  const { employee } = await getCurrentEmployee();
+  const data = await getLoyverseRecipeSource(organizationId);
+  const requestedCategory =
+    typeof params.category === "string" ? params.category : null;
 
-  if (!employee.homeStoreId) {
-    return (
-      <main className="shell">
-        <p className="alert">Empleado sin sucursal asignada.</p>
-      </main>
-    );
-  }
-
-  const data = await getLoyverseRecipeSource(
-    organizationId,
-    employee.homeStoreId,
-  );
+  const recipes = requestedCategory
+    ? data.recipes.filter((recipe) => recipe.category === requestedCategory)
+    : data.recipes;
 
   return (
     <main className="shell">
       <section className="hero">
-        <p className="eyebrow">ADMIN · LOYVERSE · RECETAS FUENTE</p>
-        <h1>Composiciones tal como están en Loyverse</h1>
+        <p className="eyebrow">LOYVERSE · RECETAS</p>
+        <h1>Recetas comerciales</h1>
         <p className="muted">
-          Esta vista lee artículos compuestos directamente del espejo de
-          Loyverse. Sirve para auditar cantidades y compararlas contra la
-          receta técnica de Café Épico; no publica ni reemplaza recetas
-          técnicas automáticamente.
+          Loyverse es la fuente maestra. Ops respeta recetas anidadas: una
+          bebida puede usar otra receta como componente y aquí también puedes
+          ver el consumo final expandido hasta insumos base.
         </p>
       </section>
 
       <section className="grid">
         <article className="card">
-          <span className="pill">COMPUESTOS</span>
+          <span className="pill">RECETAS</span>
           <div className="metric">{data.recipes.length}</div>
-          <p>recetas/composiciones detectadas en Loyverse.</p>
+          <p>artículos compuestos detectados.</p>
         </article>
         <article className="card">
-          <span className="pill">COMPONENTES</span>
-          <div className="metric">{data.totalComponents}</div>
-          <p>líneas de composición leídas.</p>
+          <span className="pill">COMPONENTES DIRECTOS</span>
+          <div className="metric">{data.totalDirectComponents}</div>
+          <p>líneas exactamente como están armadas en Loyverse.</p>
         </article>
         <article className="card">
-          <span className="pill">MAPEADOS</span>
-          <div className="metric">{data.mappedComponents}</div>
-          <p>
-            componentes ya convertibles a g, ml o pz de Café Épico Ops.
-          </p>
+          <span className="pill">CONSUMOS EXPANDIDOS</span>
+          <div className="metric">{data.totalEffectiveComponents}</div>
+          <p>insumos finales después de resolver recetas madre.</p>
         </article>
       </section>
 
+      <section className="card" style={{ marginTop: "1rem" }}>
+        <p className="eyebrow">FILTRAR POR CATEGORÍA</p>
+        <div style={{ display: "flex", gap: ".5rem", flexWrap: "wrap" }}>
+          <Link
+            href="/admin/loyverse/recipes"
+            className={!requestedCategory ? "button" : undefined}
+          >
+            Todas
+          </Link>
+          {data.categories.map((category) => (
+            <Link
+              key={category}
+              href={
+                "/admin/loyverse/recipes?category=" +
+                encodeURIComponent(category)
+              }
+              className={requestedCategory === category ? "button" : undefined}
+            >
+              {category}
+            </Link>
+          ))}
+        </div>
+      </section>
+
       <p className="card" style={{ marginTop: "1rem" }}>
-        Para que una cantidad de Loyverse se convierta a la unidad interna,
-        primero vincula su insumo en{" "}
-        <Link href="/admin/loyverse/inventory">
-          Mapeo de inventario Loyverse
-        </Link>
-        .
+        <strong>Cómo leerlo:</strong> “Directo” es lo que capturaste en
+        Loyverse. “Consumo real” abre recetas madre recursivamente. Ejemplo:
+        LATTE P/LL puede consumir LATTE AQUI + desechables; a su vez LATTE AQUI
+        consume ESPRESSO DOBLE + leche, y ESPRESSO DOBLE finalmente consume
+        café + agua.
       </p>
 
       <section className="stack" style={{ marginTop: "1rem" }}>
-        {data.recipes.map((recipe) => (
+        {recipes.map((recipe) => (
           <article className="card" key={recipe.externalId}>
-            <h2>{recipe.itemName}</h2>
-            <p className="muted">
-              {recipe.mappedComponents} / {recipe.components.length} componentes
-              con conversión interna.
+            <p className="eyebrow">
+              {recipe.category}
+              {recipe.availableForSale ? " · VENTA" : " · INSUMO/BASE"}
             </p>
+            <h2>{recipe.itemName}</h2>
+            {recipe.sku && <p className="muted">SKU {recipe.sku}</p>}
 
-            <div className="stack">
-              {recipe.components.map((component, index) => (
-                <div
-                  className="task"
-                  key={`${component.variantExternalId}-${index}`}
-                >
-                  <div style={{ flex: 1 }}>
-                    <strong>{component.sourceName}</strong>
-                    <div className="muted">
-                      Loyverse: {number.format(component.quantity)}
-                      {component.sourceUnit
-                        ? ` ${component.sourceUnit}`
-                        : " unidades fuente"}
+            <div className="grid" style={{ marginTop: ".8rem" }}>
+              <div>
+                <h3>Receta directa</h3>
+                <div className="stack">
+                  {recipe.directComponents.map((component, index) => (
+                    <div
+                      className="task"
+                      key={component.variantExternalId + "-" + index}
+                    >
+                      <div style={{ flex: 1 }}>
+                        <strong>{component.sourceName}</strong>
+                        {component.isComposite && (
+                          <span className="pill" style={{ marginLeft: ".4rem" }}>
+                            RECETA MADRE
+                          </span>
+                        )}
+                        <div className="muted">
+                          {number.format(component.quantity)}{" "}
+                          {component.unitLabel}
+                          {" · "}
+                          {component.category}
+                          {component.sku ? " · SKU " + component.sku : ""}
+                        </div>
+                      </div>
                     </div>
-                    {component.mapped ? (
-                      <div className="status-ok">
-                        → {component.inventoryItemName}:{" "}
-                        {number.format(component.canonicalQuantity ?? 0)}{" "}
-                        {component.canonicalUnit}
-                      </div>
-                    ) : (
-                      <div className="status-warn">
-                        Sin mapeo · todavía no puede convertirse
-                      </div>
-                    )}
-                  </div>
+                  ))}
                 </div>
-              ))}
+              </div>
+
+              <div>
+                <h3>Consumo real expandido</h3>
+                <div className="stack">
+                  {recipe.effectiveComponents.map((component) => (
+                    <div className="task" key={component.variantExternalId}>
+                      <div style={{ flex: 1 }}>
+                        <strong>{component.sourceName}</strong>
+                        <div className="muted">
+                          {number.format(component.quantity)}{" "}
+                          {component.unitLabel}
+                          {" · "}
+                          {component.category}
+                          {component.sku ? " · SKU " + component.sku : ""}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           </article>
         ))}
       </section>
+
+      {recipes.length === 0 && (
+        <p className="card muted">
+          No hay recetas en esta categoría o todavía falta sincronizar
+          artículos/categorías desde Loyverse.
+        </p>
+      )}
 
       <p style={{ marginTop: "1rem" }}>
         <Link href="/admin/loyverse">← Volver a Loyverse</Link>
