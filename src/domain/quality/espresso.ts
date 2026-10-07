@@ -68,6 +68,39 @@ export function parseExtractionQualitySpec(
   };
 }
 
+function sameNumber(a: number | undefined, b: number) {
+  return a != null && Math.abs(a - b) < 0.000001;
+}
+
+export function assertCafeEpicoExtractionSpec(
+  recipeName: string,
+  spec: ExtractionQualitySpec,
+) {
+  const valid =
+    recipeName === "Ristretto base 1:1"
+      ? sameNumber(spec.ratio_min, 1) &&
+        sameNumber(spec.ratio_max, 1.5) &&
+        spec.time_min_s === 15 &&
+        spec.time_max_s === 25
+      : recipeName === "Espresso base 1:2"
+        ? sameNumber(spec.target_ratio, 2) &&
+          sameNumber(spec.yield_tolerance_g, 2) &&
+          spec.time_min_s === 22 &&
+          spec.time_max_s === 35
+        : recipeName === "Lungo base 1:2.5"
+          ? sameNumber(spec.target_ratio, 2.5) &&
+            sameNumber(spec.yield_tolerance_g, 2) &&
+            spec.time_min_s === 30 &&
+            spec.time_max_s === 40
+          : true;
+
+  if (!valid) {
+    throw new Error(
+      `La especificación activa de ${recipeName} no coincide con el estándar operativo de Café Épico`,
+    );
+  }
+}
+
 export function evaluateExtraction(
   doseG: number,
   yieldG: number,

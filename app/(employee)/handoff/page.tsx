@@ -5,6 +5,11 @@ import {
 } from "@/app/actions/checklists";
 import { getOrCreateChecklistRun } from "@/src/application/checklists/run";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
+import {
+  elapsedSeconds,
+  formatDurationSeconds,
+  timingMetrics,
+} from "@/src/domain/checklists/timing";
 
 export const dynamic = "force-dynamic";
 
@@ -29,15 +34,27 @@ function formatTime(date: Date | null) {
 }
 
 function formatDuration(startedAt: Date | null, completedAt: Date | null) {
-  if (!startedAt || !completedAt) return "duración no medida";
-  const seconds = Math.max(
-    0,
-    Math.round((completedAt.getTime() - startedAt.getTime()) / 1000),
-  );
-  if (seconds < 60) return `${seconds} s`;
-  const minutes = Math.floor(seconds / 60);
-  const remainder = seconds % 60;
-  return remainder > 0 ? `${minutes} min ${remainder} s` : `${minutes} min`;
+  const seconds = elapsedSeconds(startedAt, completedAt);
+  return seconds == null ? "duración no medida" : formatDurationSeconds(seconds);
+}
+
+function timingLabel(
+  targetSeconds: number | null,
+  startedAt: Date | null,
+  completedAt: Date | null,
+) {
+  if (!targetSeconds) return null;
+
+  const metrics = timingMetrics(targetSeconds, startedAt, completedAt);
+  if (metrics.actualSeconds == null) {
+    return `Objetivo ${formatDurationSeconds(targetSeconds)}`;
+  }
+
+  const sign =
+    metrics.variancePercent != null && metrics.variancePercent > 0 ? "+" : "";
+  return `Objetivo ${formatDurationSeconds(targetSeconds)} · real ${formatDurationSeconds(
+    metrics.actualSeconds,
+  )} · ${sign}${metrics.variancePercent?.toFixed(0) ?? "0"}%`;
 }
 
 export default async function HandoffPage() {
@@ -80,6 +97,13 @@ export default async function HandoffPage() {
                 <div className="muted">{task.descriptionSnapshot}</div>
               )}
 
+              {task.targetDurationSecondsSnapshot && (
+                <div className="muted">
+                  Objetivo:{" "}
+                  {formatDurationSeconds(task.targetDurationSecondsSnapshot)}
+                </div>
+              )}
+
               {task.sopVersionId && (
                 <div style={{ marginTop: ".4rem" }}>
                   <Link
@@ -105,7 +129,11 @@ export default async function HandoffPage() {
                   </div>
                   <div className="muted">
                     Terminó {formatTime(task.completedAt)} ·{" "}
-                    {formatDuration(task.startedAt, task.completedAt)}
+                    {timingLabel(
+                      task.targetDurationSecondsSnapshot,
+                      task.startedAt,
+                      task.completedAt,
+                    ) ?? formatDuration(task.startedAt, task.completedAt)}
                   </div>
                   {task.comment && (
                     <div className="muted">Nota: {task.comment}</div>

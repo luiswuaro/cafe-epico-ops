@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { markEmployeeMessageRead } from "@/app/actions/messages";
 import { getTodayOperationalSummary } from "@/src/application/dashboard/today";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
 
@@ -21,6 +22,45 @@ export default async function TodayPage() {
           Apertura, espresso, inventario y entrega conectados a datos reales.
         </p>
       </section>
+
+      {summary.messages.length > 0 && (
+        <section className="stack" style={{ marginBottom: "1rem" }}>
+          {summary.messages.map((message) => (
+            <article
+              className={
+                message.priority === "IMPORTANT"
+                  ? "alert"
+                  : "card"
+              }
+              key={message.id}
+            >
+              <p className="eyebrow">
+                {message.priority === "IMPORTANT"
+                  ? "NOTA IMPORTANTE"
+                  : "NOTA DE OPERACIÓN"}
+              </p>
+              <h2>{message.title}</h2>
+              <p style={{ whiteSpace: "pre-wrap" }}>{message.body}</p>
+              <p className="muted">
+                Enviada{" "}
+                {message.createdAt.toLocaleString("es-MX", {
+                  timeZone: "America/Mexico_City",
+                  dateStyle: "short",
+                  timeStyle: "short",
+                })}
+              </p>
+              <form action={markEmployeeMessageRead}>
+                <input
+                  type="hidden"
+                  name="messageId"
+                  value={message.id}
+                />
+                <button type="submit">Marcar como leída</button>
+              </form>
+            </article>
+          ))}
+        </section>
+      )}
 
       <section className="grid">
         <article className="card">

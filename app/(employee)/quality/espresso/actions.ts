@@ -6,12 +6,14 @@ import { z } from "zod";
 import {
   auditEvents,
   espressoQualityChecks,
+  recipes,
   recipeVersions,
 } from "@/src/infrastructure/db/schema";
 import { getDb } from "@/src/infrastructure/db/client";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
 import { assertEmployeePermission } from "@/src/infrastructure/auth/permissions";
 import {
+  assertCafeEpicoExtractionSpec,
   evaluateExtraction,
   parseExtractionQualitySpec,
 } from "@/src/domain/quality/espresso";
@@ -63,8 +65,10 @@ export async function recordEspressoQualityCheck(formData: FormData) {
     .select({
       id: recipeVersions.id,
       qualitySpec: recipeVersions.qualitySpec,
+      recipeName: recipes.name,
     })
     .from(recipeVersions)
+    .innerJoin(recipes, eq(recipes.id, recipeVersions.recipeId))
     .where(
       and(
         eq(recipeVersions.id, parsed.data.recipeVersionId),
@@ -81,6 +85,7 @@ export async function recordEspressoQualityCheck(formData: FormData) {
   let evaluation;
   try {
     const spec = parseExtractionQualitySpec(recipeVersion.qualitySpec);
+    assertCafeEpicoExtractionSpec(recipeVersion.recipeName, spec);
     evaluation = evaluateExtraction(
       parsed.data.doseG,
       parsed.data.yieldG,

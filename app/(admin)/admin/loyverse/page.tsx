@@ -88,6 +88,29 @@ export default async function LoyverseAdminPage({ searchParams }: PageProps) {
         })}
       </section>
 
+      <section className="grid" style={{ marginTop: "1rem" }}>
+        <article className="card">
+          <h2>Inventario</h2>
+          <p className="muted">
+            Vincula unidades y luego sincroniza + importa el teórico con un
+            solo botón.
+          </p>
+          <Link href="/admin/loyverse/inventory">
+            Abrir mapeo e importación →
+          </Link>
+        </article>
+        <article className="card">
+          <h2>Recetas fuente</h2>
+          <p className="muted">
+            Revisa artículos compuestos y cantidades tal como están guardados
+            en Loyverse.
+          </p>
+          <Link href="/admin/loyverse/recipes">
+            Ver composiciones →
+          </Link>
+        </article>
+      </section>
+
       <p style={{ marginTop: "1rem" }}>
         <Link href="/admin">← Volver a Admin</Link>
       </p>

@@ -3,6 +3,7 @@ import { requirePermission } from "@/src/infrastructure/auth/permissions";
 import {
   createChecklistTask,
   toggleChecklistTask,
+  updateChecklistTaskTarget,
 } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -118,6 +119,21 @@ export default async function AdminChecklistsPage() {
             </label>
 
             <label>
+              Tiempo objetivo (min)
+              <input
+                name="targetMinutes"
+                type="number"
+                min="0.1"
+                max="480"
+                step="0.1"
+                placeholder="Ej. 8"
+              />
+              <span className="muted">
+                Opcional. Se usará para medir eficiencia contra el tiempo real.
+              </span>
+            </label>
+
+            <label>
               Frecuencia
               <select name="frequency" defaultValue="ALWAYS">
                 <option value="ALWAYS">
@@ -225,8 +241,46 @@ export default async function AdminChecklistsPage() {
                   <div className="muted">
                     {scheduleLabel(task.rrule ?? null)}
                   </div>
+                  <div className="muted">
+                    Objetivo:{" "}
+                    {task.targetDurationSeconds
+                      ? `${(task.targetDurationSeconds / 60).toFixed(
+                          task.targetDurationSeconds % 60 === 0 ? 0 : 1,
+                        )} min`
+                      : "sin definir"}
+                  </div>
+                  <form
+                    action={updateChecklistTaskTarget}
+                    style={{
+                      display: "flex",
+                      gap: ".5rem",
+                      alignItems: "end",
+                      marginTop: ".5rem",
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <input type="hidden" name="taskId" value={task.id} />
+                    <label style={{ margin: 0 }}>
+                      Objetivo min
+                      <input
+                        name="targetMinutes"
+                        type="number"
+                        min="0.1"
+                        max="480"
+                        step="0.1"
+                        defaultValue={
+                          task.targetDurationSeconds
+                            ? task.targetDurationSeconds / 60
+                            : ""
+                        }
+                        placeholder="Sin objetivo"
+                      />
+                    </label>
+                    <button type="submit">Guardar objetivo</button>
+                  </form>
                   <div
                     className={task.active ? "status-ok" : "status-warn"}
+                    style={{ marginTop: ".5rem" }}
                   >
                     {task.active ? "Activa" : "Desactivada"}
                   </div>

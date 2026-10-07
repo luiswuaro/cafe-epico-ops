@@ -90,6 +90,23 @@ export const employees = pgTable("employees", {
   ...timestamps,
 }, (t) => [index("employees_org_idx").on(t.organizationId)]);
 
+export const employeeMessages = pgTable("employee_messages", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  storeId: uuid("store_id").references(() => stores.id, { onDelete: "set null" }),
+  recipientEmployeeId: uuid("recipient_employee_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  senderEmployeeId: uuid("sender_employee_id").references(() => employees.id, { onDelete: "set null" }),
+  title: text("title").notNull(),
+  body: text("body").notNull(),
+  priority: varchar("priority", { length: 20 }).notNull().default("NORMAL"),
+  readAt: timestamp("read_at", { withTimezone: true }),
+  dismissedAt: timestamp("dismissed_at", { withTimezone: true }),
+  ...timestamps,
+}, (t) => [
+  index("employee_messages_recipient_idx").on(t.recipientEmployeeId, t.readAt, t.createdAt),
+  index("employee_messages_org_idx").on(t.organizationId, t.createdAt),
+]);
+
 export const roles = pgTable("roles", {
   id: uuid("id").primaryKey().defaultRandom(),
   organizationId: uuid("organization_id").references(() => organizations.id, { onDelete: "cascade" }),
@@ -285,6 +302,7 @@ export const checklistTasks = pgTable("checklist_tasks", {
   inputType: checklistInputTypeEnum("input_type").notNull().default("BOOLEAN"),
   minValue: numeric("min_value", { precision: 18, scale: 3 }),
   maxValue: numeric("max_value", { precision: 18, scale: 3 }),
+  targetDurationSeconds: integer("target_duration_seconds"),
   config: jsonb("config").$type<Record<string, unknown>>().notNull().default({}),
   assignedRoleId: uuid("assigned_role_id").references(() => roles.id, { onDelete: "set null" }),
   sopId: uuid("sop_id").references(() => sops.id, { onDelete: "set null" }),
@@ -327,6 +345,7 @@ export const checklistRunTasks = pgTable("checklist_run_tasks", {
   descriptionSnapshot: text("description_snapshot"),
   requiredSnapshot: boolean("required_snapshot").notNull(),
   inputTypeSnapshot: checklistInputTypeEnum("input_type_snapshot").notNull(),
+  targetDurationSecondsSnapshot: integer("target_duration_seconds_snapshot"),
   sopVersionId: uuid("sop_version_id").references(() => sopVersions.id, { onDelete: "set null" }),
   status: checklistTaskStatusEnum("status").notNull().default("PENDING"),
   startedByEmployeeId: uuid("started_by_employee_id").references(() => employees.id, { onDelete: "set null" }),
