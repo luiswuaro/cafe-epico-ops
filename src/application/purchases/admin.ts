@@ -36,6 +36,7 @@ export async function getPurchasingAdminData(organizationId: string) {
         variantExternalId: purchasePlanLines.variantExternalId,
         itemNameSnapshot: purchasePlanLines.itemNameSnapshot,
         supplierId: purchasePlanLines.supplierId,
+        supplierName: suppliers.name,
         requestedNativeQuantity: purchasePlanLines.requestedNativeQuantity,
         packageCount: purchasePlanLines.packageCount,
         packageNameSnapshot: purchasePlanLines.packageNameSnapshot,
@@ -48,6 +49,7 @@ export async function getPurchasingAdminData(organizationId: string) {
         note: purchasePlanLines.note,
       })
       .from(purchasePlanLines)
+      .leftJoin(suppliers, eq(suppliers.id, purchasePlanLines.supplierId))
       .where(eq(purchasePlanLines.organizationId, organizationId)),
   ]);
 
