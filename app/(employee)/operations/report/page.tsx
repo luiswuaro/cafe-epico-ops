@@ -64,19 +64,37 @@ export default async function OperationalReportPage({
             Insumo relacionado
             <select name="variantExternalId" defaultValue="">
               <option value="">Sin insumo</option>
-              {inventory.rows.map((row) => (
-                <option
-                  key={row.variantExternalId}
-                  value={row.variantExternalId}
-                >
-                  {row.itemName} · stock {row.inStock} {row.unitLabel}
-                </option>
-              ))}
+              {inventory.rows.map((row) => {
+                const dryPattern =
+                  /(CAFE|CAFÉ|MATCHA|TARO|CACAO|POLVO|AZUCAR|AZÚCAR|CANELA|HIELO)/i;
+                const unit =
+                  row.displayUnit ??
+                  (row.soldByWeight
+                    ? dryPattern.test(row.itemName)
+                      ? "g"
+                      : "ml"
+                    : "pz");
+                const factor =
+                  row.displayUnit && row.displayFactor > 0
+                    ? row.displayFactor
+                    : row.soldByWeight
+                      ? 1000
+                      : 1;
+                return (
+                  <option
+                    key={row.variantExternalId}
+                    value={row.variantExternalId}
+                  >
+                    {row.itemName} · stock{" "}
+                    {(row.inStock * factor).toFixed(1)} {unit}
+                  </option>
+                );
+              })}
             </select>
           </label>
 
           <label>
-            Cantidad
+            Cantidad · usa la unidad mostrada en el insumo (g / ml / pz)
             <input
               name="quantity"
               type="number"
