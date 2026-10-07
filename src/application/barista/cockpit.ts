@@ -10,8 +10,11 @@ import { getInventoryIntelligence } from "@/src/application/loyverse/inventory-i
 import { getDb } from "@/src/infrastructure/db/client";
 import {
   espressoQualityChecks,
+  loyverseCategories,
+  loyverseItems,
   loyverseReceiptLines,
   loyverseReceipts,
+  loyverseVariants,
   operationalEvents,
   roastBarAssignments,
   roastBatches,
@@ -59,6 +62,7 @@ export async function getBaristaCockpit(employee: {
     qcsToday,
     incidents,
     barEventsToday,
+    loyverseCategoriesToday,
     soldRowsToday,
   ] = await Promise.all([
     db
@@ -169,10 +173,23 @@ export async function getBaristaCockpit(employee: {
       )
       .orderBy(desc(operationalEvents.occurredAt))
       .limit(150),
+    db
+      .select({
+        externalId: loyverseCategories.externalId,
+        name: loyverseCategories.name,
+      })
+      .from(loyverseCategories)
+      .where(
+        eq(
+          loyverseCategories.organizationId,
+          employee.organizationId,
+        ),
+      ),
     loyverseStoreExternalId
       ? db
           .select({
             quantity: loyverseReceiptLines.quantity,
+            itemPayload: loyverseItems.payload,
           })
           .from(loyverseReceiptLines)
           .innerJoin(
@@ -185,6 +202,32 @@ export async function getBaristaCockpit(employee: {
               eq(
                 loyverseReceipts.externalId,
                 loyverseReceiptLines.receiptExternalId,
+              ),
+            ),
+          )
+          .innerJoin(
+            loyverseVariants,
+            and(
+              eq(
+                loyverseVariants.organizationId,
+                loyverseReceiptLines.organizationId,
+              ),
+              eq(
+                loyverseVariants.externalId,
+                loyverseReceiptLines.variantExternalId,
+              ),
+            ),
+          )
+          .innerJoin(
+            loyverseItems,
+            and(
+              eq(
+                loyverseItems.organizationId,
+                loyverseVariants.organizationId,
+              ),
+              eq(
+                loyverseItems.externalId,
+                loyverseVariants.loyverseItemExternalId,
               ),
             ),
           )
@@ -364,6 +407,19 @@ export async function getBaristaCockpit(employee: {
     const row = event.variantExternalId
       ? smartByVariant.get(event.variantExternalId)
       : null;
+    const eventHasHumanUnit =
+      event.displayUnit != null &&
+      event.displayUnit !== "peso/volumen" &&
+      event.displayUnit !== "u. Loyverse";
+    const eventDisplayUnit = eventHasHumanUnit
+      ? event.displayUnit!
+      : row
+        ? displayUnit(row)
+        : event.unitLabel ?? "u.";
+    const eventDisplayQuantity =
+      eventHasHumanUnit && event.displayQuantity != null
+        ? Number(event.displayQuantity)
+        : Number(event.quantity ?? 0) * (row?.displayFactor ?? 1);
     const unitCost = row?.purchaseCost ?? null;
     const nativeQuantity = Number(event.quantity ?? 0);
     const eventCost =
@@ -384,29 +440,45 @@ export async function getBaristaCockpit(employee: {
     const key =
       (event.itemName ?? event.variantExternalId ?? "Sin identificar") +
       "::" +
-      (event.displayUnit ?? event.unitLabel ?? "u.");
+      eventDisplayUnit;
     const current = lossByItem.get(key) ?? {
       itemName:
         event.itemName ?? event.variantExternalId ?? "Sin identificar",
-      displayUnit: event.displayUnit ?? event.unitLabel ?? "u.",
+      displayUnit: eventDisplayUnit,
       displayQuantity: 0,
       events: 0,
       remakes: 0,
       estimatedCost: 0,
     };
-    current.displayQuantity += Number(
-      event.displayQuantity ?? event.quantity ?? 0,
-    );
+    current.displayQuantity += eventDisplayQuantity;
     current.events += 1;
     current.remakes += event.eventType === "REMAKE" ? 1 : 0;
     current.estimatedCost += eventCost;
     lossByItem.set(key, current);
   }
 
-  const soldUnitsToday = soldRowsToday.reduce(
-    (sum, row) => sum + Number(row.quantity ?? 0),
-    0,
+  const categoryNameById = new Map(
+    loyverseCategoriesToday.map((row) => [row.externalId, row.name]),
   );
+  const excludedFromBeverageRate = new Set([
+    "ALIMENTOS",
+    "INSUMOS",
+    "EXTRAS",
+    "CAFE A GRANEL",
+  ]);
+  const soldUnitsToday = soldRowsToday.reduce((sum, row) => {
+    const payload = row.itemPayload as Record<string, unknown>;
+    const categoryId =
+      typeof payload.category_id === "string"
+        ? payload.category_id
+        : null;
+    const categoryName =
+      categoryId == null ? null : categoryNameById.get(categoryId) ?? null;
+    if (!categoryName || excludedFromBeverageRate.has(categoryName)) {
+      return sum;
+    }
+    return sum + Number(row.quantity ?? 0);
+  }, 0);
   const remakeRate =
     soldUnitsToday > 0
       ? (remakeEvents.length / soldUnitsToday) * 100
