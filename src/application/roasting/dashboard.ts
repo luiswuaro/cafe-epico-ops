@@ -517,6 +517,115 @@ export async function getRoastingDashboard(organizationId: string) {
     }
   }
 
+  const restBuckets = [
+    { key: "0-2", min: 0, max: 3 },
+    { key: "3-5", min: 3, max: 6 },
+    { key: "6-9", min: 6, max: 10 },
+    { key: "10-14", min: 10, max: 15 },
+    { key: "15+", min: 15, max: Number.POSITIVE_INFINITY },
+  ].map((bucket) => {
+    const rows = qcRows.filter((row) => {
+      if (!row.roastBatchId) return false;
+      const batch = batchById.get(row.roastBatchId);
+      if (!batch) return false;
+      const age =
+        (row.createdAt.getTime() - batch.roastedAt.getTime()) /
+        86_400_000;
+      return age >= bucket.min && age < bucket.max;
+    });
+    const passed = rows.filter(
+      (row) => row.withinTimeSpec && row.withinYieldSpec === true,
+    ).length;
+    const sensoryCorrect = rows.filter(
+      (row) => row.sensoryRating === "CORRECTO",
+    ).length;
+    return {
+      key: bucket.key,
+      samples: rows.length,
+      passRate:
+        rows.length > 0 ? (passed / rows.length) * 100 : null,
+      sensoryCorrectRate:
+        rows.length > 0 ? (sensoryCorrect / rows.length) * 100 : null,
+    };
+  });
+
+  const empiricalRest = restBuckets
+    .filter(
+      (bucket) =>
+        bucket.samples >= 3 &&
+        bucket.passRate != null &&
+        bucket.sensoryCorrectRate != null,
+    )
+    .map((bucket) => ({
+      ...bucket,
+      score:
+        (bucket.passRate ?? 0) * 0.7 +
+        (bucket.sensoryCorrectRate ?? 0) * 0.3,
+    }))
+    .sort((a, b) => b.score - a.score)[0] ?? null;
+
+  if (empiricalRest) {
+    recommendations.push({
+      level: "INFO",
+      title: "Ventana empírica de espresso: " + empiricalRest.key + " días",
+      detail:
+        "Con " +
+        empiricalRest.samples +
+        " controles vinculados, esta ventana tiene " +
+        empiricalRest.passRate!.toFixed(0) +
+        "% de QC técnico aprobado y " +
+        empiricalRest.sensoryCorrectRate!.toFixed(0) +
+        "% marcado sensorialmente como correcto.",
+    });
+  }
+
+  const profilePerformance = profiles.map((profile) => {
+    const rows = enrichedBatches.filter(
+      (batch) => batch.profileId === profile.id,
+    );
+    const dtrDeviations = rows
+      .map((batch) => {
+        const actual = n(batch.dtrPct);
+        const target = n(profile.targetDtrPct);
+        return actual != null && target != null
+          ? Math.abs(actual - target)
+          : null;
+      })
+      .filter((value): value is number => value != null);
+    const lossDeviations = rows
+      .map((batch) => {
+        const actual = n(batch.weightLossPct);
+        const target = n(profile.targetWeightLossPct);
+        return actual != null && target != null
+          ? Math.abs(actual - target)
+          : null;
+      })
+      .filter((value): value is number => value != null);
+    const withinCount = rows.filter(
+      (batch) =>
+        batch.profileCheckCount > 0 &&
+        batch.profilePassCount === batch.profileCheckCount,
+    ).length;
+
+    return {
+      id: profile.id,
+      name: profile.name,
+      samples: rows.length,
+      fullComplianceRate:
+        rows.length > 0 ? (withinCount / rows.length) * 100 : null,
+      meanAbsDtrDeviation:
+        dtrDeviations.length > 0
+          ? dtrDeviations.reduce((sum, value) => sum + value, 0) /
+            dtrDeviations.length
+          : null,
+      meanAbsLossDeviation:
+        lossDeviations.length > 0
+          ? lossDeviations.reduce((sum, value) => sum + value, 0) /
+            lossDeviations.length
+          : null,
+    };
+  });
+
   const thirtyDaysAgo = Date.now() - 30 * 86_400_000;
   const recentBatches = enrichedBatches.filter(
     (batch) => batch.roastedAt.getTime() >= thirtyDaysAgo,
@@ -549,6 +658,9 @@ export async function getRoastingDashboard(organizationId: string) {
       avgDailyUsage14: row.avgDailyUsage14,
     })),
     recommendations: recommendations.slice(0, 12),
+    restPerformance: restBuckets,
+    empiricalRest,
+    profilePerformance,
     summary: {
       batches30: recentBatches.length,
       green30,
