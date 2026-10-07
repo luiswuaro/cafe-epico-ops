@@ -1,13 +1,7 @@
 import Link from "next/link";
-import {
-  adjustInventoryBalance,
-  createInventoryItem,
-  reportShortage,
-  resolveShortage,
-  setOpeningInventoryBalance,
-} from "./actions";
-import { getInventoryOverview } from "@/src/application/inventory/overview";
-import { listActiveInventoryItems } from "@/src/application/inventory/items";
+import { refreshLoyverseInventorySource } from "./loyverse-actions";
+import { reportShortage, resolveShortage } from "./actions";
+import { getLoyverseInventoryView } from "@/src/application/loyverse/inventory-view";
 import { listOpenShortages } from "@/src/application/inventory/shortages";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
 import {
@@ -25,26 +19,16 @@ const number = new Intl.NumberFormat("es-MX", {
   maximumFractionDigits: 3,
 });
 
-function inventoryStatus(
-  physical: number | null,
-  deviation: number | null,
-) {
-  if (physical == null || deviation == null) {
-    return { label: "SIN CONTEO", className: "muted" };
-  }
-  if (Math.abs(deviation) < 0.0005) {
-    return { label: "CUADRA", className: "status-ok" };
-  }
-  if (deviation < 0) {
-    return { label: "FALTA", className: "status-warn" };
-  }
-  return { label: "SOBRA", className: "status-warn" };
-}
+const money = new Intl.NumberFormat("es-MX", {
+  style: "currency",
+  currency: "MXN",
+  maximumFractionDigits: 2,
+});
 
 export default async function InventoryPage({ searchParams }: PageProps) {
   const params = await searchParams;
-  const requestedLocationId =
-    typeof params.location === "string" ? params.location : undefined;
+  const requestedStore =
+    typeof params.store === "string" ? params.store : undefined;
 
   const { employee } = await getCurrentEmployee();
   if (!employee.homeStoreId) {
@@ -61,296 +45,171 @@ export default async function InventoryPage({ searchParams }: PageProps) {
     employee.homeStoreId,
   );
 
-  const [shortages, items, canResolve, canManageItems, canAdjust, overview] =
-    await Promise.all([
-      listOpenShortages(employee.organizationId, employee.homeStoreId),
-      listActiveInventoryItems(employee.organizationId),
-      employeeHasPermission(
-        employee.id,
-        "inventory.shortage.resolve",
-        employee.homeStoreId,
-      ),
-      employeeHasPermission(
-        employee.id,
-        "inventory.item.manage",
-        employee.homeStoreId,
-      ),
-      employeeHasPermission(
-        employee.id,
-        "inventory.adjust",
-        employee.homeStoreId,
-      ),
-      getInventoryOverview(
-        employee.organizationId,
-        employee.homeStoreId,
-        requestedLocationId,
-      ),
-    ]);
+  const [inventory, shortages, canResolve, canSync] = await Promise.all([
+    getLoyverseInventoryView(employee.organizationId, requestedStore),
+    listOpenShortages(employee.organizationId, employee.homeStoreId),
+    employeeHasPermission(
+      employee.id,
+      "inventory.shortage.resolve",
+      employee.homeStoreId,
+    ),
+    employeeHasPermission(
+      employee.id,
+      "integration.manage",
+      employee.homeStoreId,
+    ),
+  ]);
 
-  const initializableRows = overview.rows.filter(
-    (row) => !row.hasTheoreticalBalance && !row.isLoyverseMapped,
-  );
-  const adjustableRows = overview.rows.filter(
-    (row) => row.hasTheoreticalBalance,
-  );
-  const adjusted =
-    typeof params.adjusted === "string" ? params.adjusted : null;
+  const groups = new Map<string, typeof inventory.rows>();
+  for (const row of inventory.rows) {
+    const current = groups.get(row.category) ?? [];
+    current.push(row);
+    groups.set(row.category, current);
+  }
+
   const error = typeof params.error === "string" ? params.error : null;
+  const refreshed = params.refreshed === "1";
 
   return (
     <main className="shell">
       <section className="hero">
-        <p className="eyebrow">INVENTARIO OPERATIVO</p>
+        <p className="eyebrow">INVENTARIO · FUENTE LOYVERSE</p>
         <h1>Inventario</h1>
         <p className="muted">
-          Teórico = movimientos registrados. Físico = último conteo cerrado.
-          La diferencia nunca se corrige sola.
-        </p>
-        <p style={{ marginTop: "1rem" }}>
-          <Link href="/inventory/counts" className="button">
-            Hacer conteo físico
-          </Link>
+          La existencia que ves aquí viene directamente del POS. Para cambiar
+          cantidades, costos o artículos se usa Loyverse; Café Épico Ops solo
+          los refleja y analiza.
         </p>
       </section>
 
-      {adjusted != null && (
+      {refreshed && (
         <p className="card status-ok">
-          Ajuste guardado. Movimiento aplicado: {adjusted}.
+          Loyverse actualizado · {String(params.items ?? "0")} artículos ·{" "}
+          {String(params.levels ?? "0")} niveles de inventario.
         </p>
       )}
 
-      {error === "loyverse-mapped-opening" && (
-        <p className="alert">
-          Ese insumo está conectado a Loyverse. No uses Inventario inicial;
-          sincroniza/importa Loyverse o usa Ajustar saldo teórico si necesitas
-          corregir una ubicación.
-        </p>
-      )}
+      {error && <p className="alert">No se pudo actualizar: {error}</p>}
 
-      {error === "adjustment-invalid" && (
-        <p className="alert">
-          Ajuste inválido. Revisa cantidad objetivo y escribe una razón.
-        </p>
-      )}
+      <section className="grid">
+        <article className="card">
+          <span className="pill">FUENTE MAESTRA</span>
+          <div className="metric">Loyverse</div>
+          <p>
+            {inventory.rows.length} artículos con control de stock en{" "}
+            <strong>{inventory.selectedStore?.name ?? "sin tienda"}</strong>.
+          </p>
+        </article>
 
-      {error === "adjustment-target" && (
-        <p className="alert">
-          No se encontró el insumo o la ubicación seleccionada.
-        </p>
-      )}
+        <article className="card">
+          <span className="pill">ÚLTIMA LECTURA</span>
+          <div className="metric">
+            {inventory.lastSyncedAt
+              ? inventory.lastSyncedAt.toLocaleTimeString("es-MX", {
+                  timeZone: "America/Mexico_City",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })
+              : "—"}
+          </div>
+          <p className="muted">
+            {inventory.lastSyncedAt
+              ? inventory.lastSyncedAt.toLocaleDateString("es-MX", {
+                  timeZone: "America/Mexico_City",
+                })
+              : "Todavía no hay una sincronización de inventario."}
+          </p>
+        </article>
+      </section>
 
-      <section className="card">
-        <div style={{ display: "flex", gap: ".5rem", flexWrap: "wrap" }}>
-          {overview.locations.map((location) => (
+      <section className="card" style={{ marginTop: "1rem" }}>
+        <div
+          style={{
+            display: "flex",
+            gap: ".75rem",
+            flexWrap: "wrap",
+            alignItems: "center",
+          }}
+        >
+          {inventory.stores.map((store) => (
             <Link
-              key={location.id}
-              href={`/inventory?location=${location.id}`}
+              key={store.externalId}
+              href={"/inventory?store=" + store.externalId}
               className={
-                overview.selectedLocation?.id === location.id
+                inventory.selectedStore?.externalId === store.externalId
                   ? "button"
                   : undefined
               }
             >
-              {location.name}
+              {store.name}
             </Link>
           ))}
+
+          {canSync && (
+            <form action={refreshLoyverseInventorySource}>
+              <button type="submit">Actualizar desde Loyverse ahora</button>
+            </form>
+          )}
         </div>
+        <p className="muted" style={{ marginTop: ".6rem" }}>
+          Ya no se usa “inventario inicial”, mapeo ni ajustes de existencia en
+          Ops. Si corriges una cantidad en Loyverse, pulsa actualizar y aquí se
+          refleja.
+        </p>
       </section>
 
-      {overview.selectedLocation && (
-        <section className="grid" style={{ marginTop: "1rem" }}>
-          <section className="card">
-            <p className="eyebrow">CONTROL · {overview.selectedLocation.name}</p>
-            <h2>Teórico vs físico</h2>
-            <p className="muted">
-              El físico corresponde al último conteo cerrado de esta ubicación.
-            </p>
-
-            <div className="stack" style={{ marginTop: "1rem" }}>
-              {overview.rows.map((row) => {
-                const status = inventoryStatus(row.physical, row.deviation);
-                return (
-                  <div className="task" key={row.id}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div>
-                        <strong>{row.name}</strong>{" "}
-                        <span className={status.className}>{status.label}</span>
-                      </div>
-                      <div className="muted">
-                        {row.category} · {row.canonicalUnit}
-                      </div>
-                      <div style={{ marginTop: ".35rem" }}>
-                        Teórico:{" "}
-                        <strong>
-                          {number.format(row.theoretical)} {row.canonicalUnit}
-                        </strong>
-                        {" · "}
-                        Físico:{" "}
-                        <strong>
-                          {row.physical == null
-                            ? "—"
-                            : `${number.format(row.physical)} ${row.canonicalUnit}`}
-                        </strong>
-                        {" · "}
-                        Δ:{" "}
-                        <strong>
-                          {row.deviation == null
-                            ? "—"
-                            : `${row.deviation > 0 ? "+" : ""}${number.format(
-                                row.deviation,
-                              )} ${row.canonicalUnit}`}
-                        </strong>
-                      </div>
-                      <div className="muted">
-                        {row.countedAt
-                          ? `Último físico: ${row.countedAt.toLocaleString(
-                              "es-MX",
-                              {
-                                timeZone: "America/Mexico_City",
-                                dateStyle: "short",
-                                timeStyle: "short",
-                              },
-                            )}`
-                          : "Aún no existe conteo físico cerrado"}
-                        {row.deviationPct == null
-                          ? ""
-                          : ` · desviación ${(
-                              row.deviationPct * 100
-                            ).toFixed(1)}%`}
-                      </div>
-                      <div style={{ marginTop: ".35rem" }}>
-                        <Link href={`/inventory/items/${row.id}`}>
-                          Ver histórico y consumo →
-                        </Link>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-
-          {canAdjust && (
+      <section className="stack" style={{ marginTop: "1rem" }}>
+        {[...groups.entries()].map(([category, rows]) => (
+          <article className="card" key={category}>
+            <p className="eyebrow">{category}</p>
             <div className="stack">
-              <form action={adjustInventoryBalance} className="card stack">
-                <p className="eyebrow">OWNER · CORRECCIÓN</p>
-                <h2>Ajustar saldo teórico</h2>
-                <p className="muted">
-                  Indica cuánto debe quedar realmente en esta ubicación. El
-                  sistema calcula el movimiento positivo o negativo y conserva
-                  el historial.
-                </p>
-                <input
-                  type="hidden"
-                  name="locationId"
-                  value={overview.selectedLocation.id}
-                />
-                <label>
-                  Insumo
-                  <select name="inventoryItemId" required defaultValue="">
-                    <option value="" disabled>
-                      Selecciona…
-                    </option>
-                    {adjustableRows.map((row) => (
-                      <option value={row.id} key={row.id}>
-                        {row.name} · actual {number.format(row.theoretical)}{" "}
-                        {row.canonicalUnit}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  Debe quedar en
-                  <input
-                    name="targetQuantity"
-                    type="number"
-                    inputMode="decimal"
-                    min="0"
-                    step="0.001"
-                    required
-                  />
-                </label>
-                <label>
-                  Razón del ajuste
-                  <input
-                    name="note"
-                    minLength={3}
-                    maxLength={500}
-                    required
-                    placeholder="Ej. Duplicado por saldo inicial manual"
-                  />
-                </label>
-                <button type="submit" disabled={adjustableRows.length === 0}>
-                  Guardar corrección
-                </button>
-              </form>
-
-              <form action={setOpeningInventoryBalance} className="card stack">
-              <p className="eyebrow">OWNER · SOLO ARRANQUE</p>
-              <h2>Inventario inicial</h2>
-              <p className="muted">
-                Úsalo una sola vez por insumo y ubicación. Después, el teórico
-                cambia únicamente mediante movimientos.
-              </p>
-              <input
-                type="hidden"
-                name="locationId"
-                value={overview.selectedLocation.id}
-              />
-              <label>
-                Insumo
-                <select name="inventoryItemId" required defaultValue="">
-                  <option value="" disabled>
-                    Selecciona…
-                  </option>
-                  {initializableRows.map((row) => (
-                    <option value={row.id} key={row.id}>
-                      {row.name} · {row.canonicalUnit}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Cantidad física de arranque
-                <input
-                  name="quantity"
-                  type="number"
-                  inputMode="decimal"
-                  min="0"
-                  step="0.001"
-                  required
-                />
-              </label>
-              <label>
-                Nota
-                <input
-                  name="note"
-                  maxLength={500}
-                  placeholder="Ej. Conteo inicial 06/oct"
-                />
-              </label>
-              <button type="submit" disabled={initializableRows.length === 0}>
-                Registrar saldo inicial
-              </button>
-              {initializableRows.length === 0 && (
-                <p className="status-ok">
-                  No hay insumos sin saldo inicial manual elegibles en esta
-                  ubicación.
-                </p>
-              )}
-              <p className="muted">
-                Los insumos vinculados a Loyverse no aparecen aquí para evitar
-                duplicar existencias.
-              </p>
-            </form>
+              {rows.map((row) => (
+                <div className="task" key={row.variantExternalId}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div>
+                      <strong>{row.itemName}</strong>{" "}
+                      {row.low && (
+                        <span className="status-warn">STOCK BAJO</span>
+                      )}
+                    </div>
+                    <div className="muted">
+                      {row.sku ? "SKU " + row.sku + " · " : ""}
+                      {row.soldByWeight
+                        ? "Loyverse: peso/volumen"
+                        : "Loyverse: pieza"}
+                    </div>
+                    <div style={{ marginTop: ".35rem" }}>
+                      Existencia:{" "}
+                      <strong>
+                        {number.format(row.inStock)} {row.unitLabel}
+                      </strong>
+                      {row.lowStock != null
+                        ? " · mínimo " + number.format(row.lowStock)
+                        : ""}
+                      {row.optimalStock != null
+                        ? " · óptimo " + number.format(row.optimalStock)
+                        : ""}
+                    </div>
+                    {row.purchaseCost != null && (
+                      <div className="muted">
+                        Costo registrado: {money.format(row.purchaseCost)}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
-          )}
-        </section>
-      )}
+          </article>
+        ))}
+      </section>
 
       <section className="grid" style={{ marginTop: "1rem" }}>
         <form action={reportShortage} className="card stack">
-          <h2>Reportar faltante</h2>
+          <h2>Reportar faltante operativo</h2>
+          <p className="muted">
+            Esto deja una nota interna para seguimiento; no modifica la
+            existencia de Loyverse.
+          </p>
           <label>
             Insumo / producto
             <input
@@ -389,11 +248,7 @@ export default async function InventoryPage({ searchParams }: PageProps) {
           </label>
           <label>
             Nota
-            <input
-              name="note"
-              maxLength={500}
-              placeholder="Proveedor, presentación o detalle opcional"
-            />
+            <input name="note" maxLength={500} />
           </label>
           <button type="submit">Registrar faltante</button>
         </form>
@@ -407,24 +262,15 @@ export default async function InventoryPage({ searchParams }: PageProps) {
               {shortages.map((item) => (
                 <div className="task" key={item.id}>
                   <div style={{ flex: 1 }}>
-                    <div>
-                      <strong>{item.itemName}</strong>{" "}
-                      {item.priority === "URGENT" && (
-                        <span className="status-warn">URGENTE</span>
-                      )}
-                    </div>
+                    <strong>{item.itemName}</strong>{" "}
+                    {item.priority === "URGENT" && (
+                      <span className="status-warn">URGENTE</span>
+                    )}
                     <div className="muted">
                       {item.quantityNeeded
-                        ? `${item.quantityNeeded} ${item.unit ?? ""}`
+                        ? item.quantityNeeded + " " + (item.unit ?? "")
                         : "Cantidad no especificada"}
-                      {item.note ? ` · ${item.note}` : ""}
-                    </div>
-                    <div className="muted">
-                      {item.createdAt.toLocaleString("es-MX", {
-                        timeZone: "America/Mexico_City",
-                        dateStyle: "short",
-                        timeStyle: "short",
-                      })}
+                      {item.note ? " · " + item.note : ""}
                     </div>
                   </div>
                   {canResolve && (
@@ -442,79 +288,6 @@ export default async function InventoryPage({ searchParams }: PageProps) {
             </div>
           )}
         </section>
-      </section>
-
-      <section className="grid" style={{ marginTop: "1rem" }}>
-        <section className="card">
-          <h2>Catálogo interno · {items.length}</h2>
-          <p className="muted">
-            Son insumos físicos de operación; no son los artículos de venta de
-            Loyverse.
-          </p>
-          <div className="stack">
-            {items.map((item) => (
-              <div className="task" key={item.id}>
-                <div style={{ flex: 1 }}>
-                  <strong>{item.name}</strong>
-                  <div className="muted">
-                    {item.category} · {item.canonicalUnit}
-                    {item.sku ? ` · SKU ${item.sku}` : ""}
-                    {item.minimumStock
-                      ? ` · mínimo ${item.minimumStock} ${item.canonicalUnit}`
-                      : ""}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {canManageItems && (
-          <form action={createInventoryItem} className="card stack">
-            <h2>Agregar insumo</h2>
-            <label>
-              Nombre
-              <input
-                name="name"
-                maxLength={150}
-                placeholder="Ej. Leche deslactosada"
-                required
-              />
-            </label>
-            <label>
-              SKU interno
-              <input name="sku" maxLength={100} placeholder="Opcional" />
-            </label>
-            <label>
-              Categoría
-              <input
-                name="category"
-                maxLength={80}
-                placeholder="Ej. LECHE"
-                required
-              />
-            </label>
-            <label>
-              Unidad canónica
-              <select name="canonicalUnit" defaultValue="ml" required>
-                <option value="g">g</option>
-                <option value="ml">ml</option>
-                <option value="pz">pz</option>
-              </select>
-            </label>
-            <label>
-              Stock mínimo
-              <input
-                name="minimumStock"
-                type="number"
-                min="0"
-                step="0.001"
-                placeholder="Opcional"
-              />
-            </label>
-            <button type="submit">Crear insumo</button>
-          </form>
-        )}
       </section>
     </main>
   );
