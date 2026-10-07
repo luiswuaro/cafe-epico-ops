@@ -55,6 +55,7 @@ export default async function LoyverseAdminPage({ searchParams }: PageProps) {
         <article className="card">
           <span className="pill">ESPEJO ACTUAL</span>
           <p>Tiendas: <strong>{status.counts.stores}</strong></p>
+          <p>Categorías: <strong>{status.counts.categories}</strong></p>
           <p>Artículos: <strong>{status.counts.items}</strong></p>
           <p>Variantes: <strong>{status.counts.variants}</strong></p>
           <p>Niveles inventario: <strong>{status.counts.inventoryLevels}</strong></p>
