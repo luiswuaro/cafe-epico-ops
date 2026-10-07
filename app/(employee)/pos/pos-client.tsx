@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { createShadowSale } from "./actions";
 
 type CatalogItem = {
@@ -28,12 +28,6 @@ export function PosClient({ catalog }: Props) {
   const [cart, setCart] = useState<Record<string, number>>({});
   const [serviceMode, setServiceMode] =
     useState<"DINE_IN" | "TAKEAWAY">("DINE_IN");
-  const [clientOrderId, setClientOrderId] = useState("");
-
-  useEffect(() => {
-    if (!clientOrderId) setClientOrderId(window.crypto.randomUUID());
-  }, [clientOrderId]);
-
   const visible = useMemo(() => {
     const q = query.trim().toLocaleLowerCase("es-MX");
     return catalog.filter((item) => {
@@ -184,8 +178,6 @@ export function PosClient({ catalog }: Props) {
             )}
           />
           <input type="hidden" name="serviceMode" value={serviceMode} />
-          <input type="hidden" name="clientOrderId" value={clientOrderId} />
-
           {serviceMode === "DINE_IN" && (
             <label>
               Mesa / referencia
@@ -210,7 +202,7 @@ export function PosClient({ catalog }: Props) {
           <button
             type="submit"
             className="pos-pay-button"
-            disabled={cartLines.length === 0 || !clientOrderId}
+            disabled={cartLines.length === 0}
           >
             Registrar espejo · {money.format(total)}
           </button>
