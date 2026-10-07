@@ -543,6 +543,30 @@ export const loyverseInventoryLevels = pgTable("loyverse_inventory_levels", {
   syncedAt: timestamp("synced_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [primaryKey({ columns: [t.organizationId, t.variantExternalId, t.storeExternalId] })]);
 
+export const loyverseInventorySnapshots = pgTable("loyverse_inventory_snapshots", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  variantExternalId: text("variant_external_id").notNull(),
+  storeExternalId: text("store_external_id").notNull(),
+  inStock: numeric("in_stock", { precision: 18, scale: 3 }).notNull(),
+  unitCost: numeric("unit_cost", { precision: 14, scale: 4 }),
+  lowStock: numeric("low_stock", { precision: 18, scale: 3 }),
+  optimalStock: numeric("optimal_stock", { precision: 18, scale: 3 }),
+  externalUpdatedAt: timestamp("external_updated_at", { withTimezone: true }),
+  capturedAt: timestamp("captured_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("loyverse_inventory_snapshots_lookup_idx").on(
+    t.organizationId,
+    t.storeExternalId,
+    t.variantExternalId,
+    t.capturedAt,
+  ),
+  index("loyverse_inventory_snapshots_captured_idx").on(
+    t.organizationId,
+    t.capturedAt,
+  ),
+]);
+
 export const loyverseReceipts = pgTable("loyverse_receipts", {
   id: uuid("id").primaryKey().defaultRandom(),
   organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
