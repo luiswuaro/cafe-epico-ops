@@ -295,6 +295,7 @@ export async function getBaristaCockpit(employee: {
 
   return {
     currentShift,
+    currentHour: local.hour,
     sampleDays: inventory.shift.sampleDays,
     traffic: inventory.shift.traffic,
     topProducts: inventory.shift.topProducts,
