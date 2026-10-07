@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, or } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { getDb } from "@/src/infrastructure/db/client";
 import {
   checklistRuns,
@@ -46,16 +46,6 @@ export async function getShiftReports(
           eq(checklistRuns.shiftType, filter),
         );
 
-  const condition = employeeId
-    ? and(
-        shiftCondition,
-        or(
-          eq(checklistRuns.startedByEmployeeId, employeeId),
-          eq(checklistRuns.completedByEmployeeId, employeeId),
-        ),
-      )
-    : shiftCondition;
-
   const runs = await db
     .select({
       id: checklistRuns.id,
@@ -74,9 +64,9 @@ export async function getShiftReports(
       checklistTemplates,
       eq(checklistTemplates.id, checklistRuns.checklistTemplateId),
     )
-    .where(condition)
+    .where(shiftCondition)
     .orderBy(desc(checklistRuns.businessDate), desc(checklistRuns.startedAt))
-    .limit(limit);
+    .limit(employeeId ? Math.max(limit * 3, 60) : limit);
 
   if (runs.length === 0) return [];
 
@@ -114,6 +104,20 @@ export async function getShiftReports(
     ),
   );
 
+  const selectedRuns = employeeId
+    ? runs.filter(
+        (run) =>
+          run.startedByEmployeeId === employeeId ||
+          run.completedByEmployeeId === employeeId ||
+          tasks.some(
+            (task) =>
+              task.checklistRunId === run.id &&
+              (task.startedByEmployeeId === employeeId ||
+                task.completedByEmployeeId === employeeId),
+          ),
+      )
+    : runs;
+
   const employeeRows =
     employeeIds.length > 0
       ? await db
@@ -126,7 +130,7 @@ export async function getShiftReports(
     employeeRows.map((employee) => [employee.id, employee.name]),
   );
 
-  return runs.map((run) => {
+  return selectedRuns.slice(0, limit).map((run) => {
     const runTasks = tasks
       .filter((task) => task.checklistRunId === run.id)
       .map((task) => ({

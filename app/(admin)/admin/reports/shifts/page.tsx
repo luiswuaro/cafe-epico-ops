@@ -93,8 +93,9 @@ export default async function ShiftReportsPage({
         <p className="eyebrow">ADMIN · REPORTES</p>
         <h1>Turnos y tareas</h1>
         <p className="muted">
-          Historial de apertura y entrega con notas, valores, hora de
-          finalización y duración real cuando la tarea fue iniciada con timer.
+          Historial de apertura y entrega con notas, valores, hora de inicio y
+          fin, y tiempo transcurrido entre “Iniciar” y “Completar”. No funciona
+          como reloj checador de jornada laboral.
         </p>
       </section>
 
@@ -228,12 +229,12 @@ export default async function ShiftReportsPage({
                 <div>
                   <strong>{report.status}</strong>
                   <div className="muted">
-                    Inicio {formatTime(report.startedAt)}
+                    Checklist inició {formatTime(report.startedAt)}
                     {" · "}
-                    cierre {formatTime(report.completedAt)}
+                    cerró {formatTime(report.completedAt)}
                   </div>
                   <div className="muted">
-                    Duración del turno: {formatDuration(report.durationSeconds)}
+                    Duración del checklist: {formatDuration(report.durationSeconds)}
                   </div>
                   <div className="muted">
                     Avance {report.completedTasks}/{report.taskCount} ·{" "}
