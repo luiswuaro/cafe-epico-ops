@@ -227,7 +227,9 @@ export async function getDecisionCenter(organizationId: string) {
         thirty.captureRate.toFixed(1) +
         "% de tickets identificados en 30 días. Altas recientes: " +
         analytics.loyalty.new7 +
-        " en 7 días.",
+        " en 7 días; al ritmo actual serían ~" +
+        analytics.loyalty.projected30At7dPace.toFixed(0) +
+        " altas en 30 días.",
       href: "/admin/analytics",
     });
   }
