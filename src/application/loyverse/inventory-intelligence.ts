@@ -313,18 +313,51 @@ export async function getInventoryIntelligence(
 
       const daysCover =
         avgDaily > 0 ? Math.max(0, row.inStock) / avgDaily : null;
+      const planningDays = Math.max(
+        7,
+        row.leadDays + row.safetyDays + 2,
+      );
       const targetStock =
         row.optimalStock != null && row.optimalStock > 0
           ? row.optimalStock
-          : Math.max(avgDaily * 7, row.lowStock ?? 0);
-      const suggestedPurchase = Math.max(
+          : Math.max(avgDaily * planningDays, row.lowStock ?? 0);
+      const rawSuggestedPurchase = Math.max(
         0,
         targetStock - Math.max(0, row.inStock),
       );
-      const suggestedCost =
-        row.purchaseCost != null
-          ? suggestedPurchase * row.purchaseCost
+      const suggestedPackages =
+        row.packageQuantityNative != null &&
+        row.packageQuantityNative > 0 &&
+        rawSuggestedPurchase > 0
+          ? Math.ceil(
+              rawSuggestedPurchase / row.packageQuantityNative,
+            )
           : null;
+      const suggestedPurchase =
+        suggestedPackages != null && row.packageQuantityNative != null
+          ? suggestedPackages * row.packageQuantityNative
+          : rawSuggestedPurchase;
+      const suggestedCost =
+        suggestedPackages != null && row.packagePrice != null
+          ? suggestedPackages * row.packagePrice
+          : row.purchaseCost != null
+            ? suggestedPurchase * row.purchaseCost
+            : null;
+      const orderInDays =
+        daysCover == null
+          ? null
+          : Math.max(
+              0,
+              Math.floor(
+                daysCover - row.leadDays - row.safetyDays,
+              ),
+            );
+      const orderDate =
+        orderInDays == null
+          ? null
+          : new Date(
+              Date.now() + orderInDays * 86_400_000,
+            ).toISOString().slice(0, 10);
 
       const status =
         avgDaily <= 0
@@ -342,8 +375,12 @@ export async function getInventoryIntelligence(
         expectedTomorrow: forecast.total,
         expectedTomorrowMorning: forecast.morning,
         expectedTomorrowAfternoon: forecast.afternoon,
+        planningDays,
         suggestedPurchase,
+        suggestedPackages,
         suggestedCost,
+        orderInDays,
+        orderDate,
         status,
       };
     })
