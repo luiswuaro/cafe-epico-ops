@@ -2,12 +2,23 @@
 
 import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { z } from "zod";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
 import { assertEmployeePermission } from "@/src/infrastructure/auth/permissions";
 import { getDb } from "@/src/infrastructure/db/client";
-import { auditEvents, inventoryItems, inventoryLocations, inventoryMovements, shortageReports } from "@/src/infrastructure/db/schema";
-import { postInventoryMovement } from "@/src/application/inventory/post-movement";
+import {
+  auditEvents,
+  inventoryItems,
+  inventoryLocations,
+  inventoryMovements,
+  loyverseInventoryMappings,
+  shortageReports,
+} from "@/src/infrastructure/db/schema";
+import {
+  getTheoreticalBalance,
+  postInventoryMovement,
+} from "@/src/application/inventory/post-movement";
 
 const reportSchema = z.object({
   itemName: z.string().trim().min(1).max(150),
@@ -213,14 +224,14 @@ export async function createInventoryItem(formData: FormData) {
 }
 
 
-const openingBalanceSchema = z.object({
+const balanceAdjustmentSchema = z.object({
   locationId: z.string().uuid(),
   inventoryItemId: z.string().uuid(),
-  quantity: z.coerce.number().min(0).max(1_000_000_000),
-  note: z.string().trim().max(500).optional(),
+  targetQuantity: z.coerce.number().min(0).max(1_000_000_000),
+  note: z.string().trim().min(3).max(500),
 });
 
-export async function setOpeningInventoryBalance(formData: FormData) {
+export async function adjustInventoryBalance(formData: FormData) {
   const { user, employee } = await getCurrentEmployee();
   if (!employee.homeStoreId) throw new Error("Employee has no home store");
 
@@ -230,18 +241,19 @@ export async function setOpeningInventoryBalance(formData: FormData) {
     employee.homeStoreId,
   );
 
-  const parsed = openingBalanceSchema.safeParse({
+  const parsed = balanceAdjustmentSchema.safeParse({
     locationId: String(formData.get("locationId") ?? ""),
     inventoryItemId: String(formData.get("inventoryItemId") ?? ""),
-    quantity: formData.get("quantity"),
-    note: String(formData.get("note") ?? "") || undefined,
+    targetQuantity: formData.get("targetQuantity"),
+    note: String(formData.get("note") ?? ""),
   });
 
-  if (!parsed.success) throw new Error("Inventario inicial inválido");
+  if (!parsed.success) {
+    redirect("/inventory?error=adjustment-invalid");
+  }
 
   const db = getDb();
-
-  const [[location], [item], [existingMovement]] = await Promise.all([
+  const [[location], [item]] = await Promise.all([
     db
       .select({ id: inventoryLocations.id })
       .from(inventoryLocations)
@@ -270,19 +282,192 @@ export async function setOpeningInventoryBalance(formData: FormData) {
       )
       .limit(1),
     db
-      .select({ id: inventoryMovements.id })
-      .from(inventoryMovements)
+      .select({ id: loyverseInventoryMappings.id })
+      .from(loyverseInventoryMappings)
       .where(
         and(
-          eq(inventoryMovements.storeId, employee.homeStoreId),
-          eq(inventoryMovements.locationId, parsed.data.locationId),
-          eq(inventoryMovements.inventoryItemId, parsed.data.inventoryItemId),
+          eq(
+            loyverseInventoryMappings.organizationId,
+            employee.organizationId,
+          ),
+          eq(loyverseInventoryMappings.storeId, employee.homeStoreId),
+          eq(
+            loyverseInventoryMappings.inventoryItemId,
+            parsed.data.inventoryItemId,
+          ),
+          eq(loyverseInventoryMappings.isActive, true),
         ),
       )
       .limit(1),
   ]);
 
+  if (!location || !item) {
+    redirect("/inventory?error=adjustment-target");
+  }
+
+  const current = Number(
+    await getTheoreticalBalance(
+      employee.homeStoreId,
+      parsed.data.locationId,
+      parsed.data.inventoryItemId,
+    ),
+  );
+  const delta = parsed.data.targetQuantity - current;
+
+  if (Math.abs(delta) < 0.0005) {
+    redirect(
+      `/inventory?location=${parsed.data.locationId}&adjusted=0`,
+    );
+  }
+
+  const movement = await postInventoryMovement({
+    organizationId: employee.organizationId,
+    storeId: employee.homeStoreId,
+    locationId: parsed.data.locationId,
+    inventoryItemId: parsed.data.inventoryItemId,
+    movementType: "MANUAL_ADJUSTMENT",
+    quantityDelta: delta.toFixed(3),
+    sourceType: "MANUAL_BALANCE_CORRECTION",
+    occurredAt: new Date(),
+    employeeId: employee.id,
+    note: parsed.data.note,
+  });
+
+  await db.insert(auditEvents).values({
+    organizationId: employee.organizationId,
+    storeId: employee.homeStoreId,
+    actorUserId: user.id,
+    actorEmployeeId: employee.id,
+    action: "INVENTORY_BALANCE_ADJUSTED",
+    entityType: "inventory_movement",
+    entityId: movement.id,
+    beforeData: {
+      inventoryItemId: item.id,
+      locationId: location.id,
+      quantity: current,
+      unit: item.canonicalUnit,
+    },
+    afterData: {
+      inventoryItemId: item.id,
+      itemName: item.name,
+      locationId: location.id,
+      targetQuantity: parsed.data.targetQuantity,
+      delta,
+      unit: item.canonicalUnit,
+      note: parsed.data.note,
+    },
+  });
+
+  revalidatePath("/inventory");
+  revalidatePath("/inventory/counts");
+  redirect(
+    `/inventory?location=${parsed.data.locationId}&adjusted=${encodeURIComponent(
+      delta.toFixed(3),
+    )}`,
+  );
+}
+
+const openingBalanceSchema = z.object({
+  locationId: z.string().uuid(),
+  inventoryItemId: z.string().uuid(),
+  quantity: z.coerce.number().min(0).max(1_000_000_000),
+  note: z.string().trim().max(500).optional(),
+});
+
+export async function setOpeningInventoryBalance(formData: FormData) {
+  const { user, employee } = await getCurrentEmployee();
+  if (!employee.homeStoreId) throw new Error("Employee has no home store");
+
+  await assertEmployeePermission(
+    employee.id,
+    "inventory.adjust",
+    employee.homeStoreId,
+  );
+
+  const parsed = openingBalanceSchema.safeParse({
+    locationId: String(formData.get("locationId") ?? ""),
+    inventoryItemId: String(formData.get("inventoryItemId") ?? ""),
+    quantity: formData.get("quantity"),
+    note: String(formData.get("note") ?? "") || undefined,
+  });
+
+  if (!parsed.success) throw new Error("Inventario inicial inválido");
+
+  const db = getDb();
+
+  const [[location], [item], [existingMovement], [activeMapping]] =
+    await Promise.all([
+      db
+        .select({ id: inventoryLocations.id })
+        .from(inventoryLocations)
+        .where(
+          and(
+            eq(inventoryLocations.id, parsed.data.locationId),
+            eq(inventoryLocations.organizationId, employee.organizationId),
+            eq(inventoryLocations.storeId, employee.homeStoreId),
+            eq(inventoryLocations.isActive, true),
+          ),
+        )
+        .limit(1),
+      db
+        .select({
+          id: inventoryItems.id,
+          name: inventoryItems.name,
+          canonicalUnit: inventoryItems.canonicalUnit,
+        })
+        .from(inventoryItems)
+        .where(
+          and(
+            eq(inventoryItems.id, parsed.data.inventoryItemId),
+            eq(inventoryItems.organizationId, employee.organizationId),
+            eq(inventoryItems.isActive, true),
+          ),
+        )
+        .limit(1),
+      db
+        .select({ id: inventoryMovements.id })
+        .from(inventoryMovements)
+        .where(
+          and(
+            eq(inventoryMovements.storeId, employee.homeStoreId),
+            eq(inventoryMovements.locationId, parsed.data.locationId),
+            eq(
+              inventoryMovements.inventoryItemId,
+              parsed.data.inventoryItemId,
+            ),
+          ),
+        )
+        .limit(1),
+      db
+        .select({ id: loyverseInventoryMappings.id })
+        .from(loyverseInventoryMappings)
+        .where(
+          and(
+            eq(
+              loyverseInventoryMappings.organizationId,
+              employee.organizationId,
+            ),
+            eq(
+              loyverseInventoryMappings.storeId,
+              employee.homeStoreId,
+            ),
+            eq(
+              loyverseInventoryMappings.inventoryItemId,
+              parsed.data.inventoryItemId,
+            ),
+            eq(loyverseInventoryMappings.isActive, true),
+          ),
+        )
+        .limit(1),
+    ]);
+
   if (!location || !item) throw new Error("Insumo o ubicación inválida");
+
+  if (activeMapping) {
+    redirect(
+      `/inventory?location=${parsed.data.locationId}&error=loyverse-mapped-opening`,
+    );
+  }
 
   if (existingMovement) {
     throw new Error(

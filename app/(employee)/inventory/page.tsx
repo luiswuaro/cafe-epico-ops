@@ -1,5 +1,6 @@
 import Link from "next/link";
 import {
+  adjustInventoryBalance,
   createInventoryItem,
   reportShortage,
   resolveShortage,
@@ -87,8 +88,14 @@ export default async function InventoryPage({ searchParams }: PageProps) {
     ]);
 
   const initializableRows = overview.rows.filter(
-    (row) => !row.hasTheoreticalBalance,
+    (row) => !row.hasTheoreticalBalance && !row.isLoyverseMapped,
   );
+  const adjustableRows = overview.rows.filter(
+    (row) => row.hasTheoreticalBalance,
+  );
+  const adjusted =
+    typeof params.adjusted === "string" ? params.adjusted : null;
+  const error = typeof params.error === "string" ? params.error : null;
 
   return (
     <main className="shell">
@@ -105,6 +112,32 @@ export default async function InventoryPage({ searchParams }: PageProps) {
           </Link>
         </p>
       </section>
+
+      {adjusted != null && (
+        <p className="card status-ok">
+          Ajuste guardado. Movimiento aplicado: {adjusted}.
+        </p>
+      )}
+
+      {error === "loyverse-mapped-opening" && (
+        <p className="alert">
+          Ese insumo está conectado a Loyverse. No uses Inventario inicial;
+          sincroniza/importa Loyverse o usa Ajustar saldo teórico si necesitas
+          corregir una ubicación.
+        </p>
+      )}
+
+      {error === "adjustment-invalid" && (
+        <p className="alert">
+          Ajuste inválido. Revisa cantidad objetivo y escribe una razón.
+        </p>
+      )}
+
+      {error === "adjustment-target" && (
+        <p className="alert">
+          No se encontró el insumo o la ubicación seleccionada.
+        </p>
+      )}
 
       <section className="card">
         <div style={{ display: "flex", gap: ".5rem", flexWrap: "wrap" }}>
@@ -198,8 +231,62 @@ export default async function InventoryPage({ searchParams }: PageProps) {
           </section>
 
           {canAdjust && (
-            <form action={setOpeningInventoryBalance} className="card stack">
-              <p className="eyebrow">OWNER</p>
+            <div className="stack">
+              <form action={adjustInventoryBalance} className="card stack">
+                <p className="eyebrow">OWNER · CORRECCIÓN</p>
+                <h2>Ajustar saldo teórico</h2>
+                <p className="muted">
+                  Indica cuánto debe quedar realmente en esta ubicación. El
+                  sistema calcula el movimiento positivo o negativo y conserva
+                  el historial.
+                </p>
+                <input
+                  type="hidden"
+                  name="locationId"
+                  value={overview.selectedLocation.id}
+                />
+                <label>
+                  Insumo
+                  <select name="inventoryItemId" required defaultValue="">
+                    <option value="" disabled>
+                      Selecciona…
+                    </option>
+                    {adjustableRows.map((row) => (
+                      <option value={row.id} key={row.id}>
+                        {row.name} · actual {number.format(row.theoretical)}{" "}
+                        {row.canonicalUnit}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Debe quedar en
+                  <input
+                    name="targetQuantity"
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    step="0.001"
+                    required
+                  />
+                </label>
+                <label>
+                  Razón del ajuste
+                  <input
+                    name="note"
+                    minLength={3}
+                    maxLength={500}
+                    required
+                    placeholder="Ej. Duplicado por saldo inicial manual"
+                  />
+                </label>
+                <button type="submit" disabled={adjustableRows.length === 0}>
+                  Guardar corrección
+                </button>
+              </form>
+
+              <form action={setOpeningInventoryBalance} className="card stack">
+              <p className="eyebrow">OWNER · SOLO ARRANQUE</p>
               <h2>Inventario inicial</h2>
               <p className="muted">
                 Úsalo una sola vez por insumo y ubicación. Después, el teórico
@@ -247,10 +334,16 @@ export default async function InventoryPage({ searchParams }: PageProps) {
               </button>
               {initializableRows.length === 0 && (
                 <p className="status-ok">
-                  Todos los insumos ya tienen balance en esta ubicación.
+                  No hay insumos sin saldo inicial manual elegibles en esta
+                  ubicación.
                 </p>
               )}
+              <p className="muted">
+                Los insumos vinculados a Loyverse no aparecen aquí para evitar
+                duplicar existencias.
+              </p>
             </form>
+            </div>
           )}
         </section>
       )}
