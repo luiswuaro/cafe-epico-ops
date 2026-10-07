@@ -541,7 +541,7 @@ export const roastGreenInventoryConfirmations = pgTable(
     reportedQuantityG: numeric("reported_quantity_g", {
       precision: 14,
       scale: 2,
-    }).notNull(),
+    }),
     confirmedQuantityG: numeric("confirmed_quantity_g", {
       precision: 14,
       scale: 2,
