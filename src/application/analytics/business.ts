@@ -295,6 +295,10 @@ export async function getBusinessAnalytics(organizationId: string) {
     const net = num(payload.total_money ?? line.grossTotalMoney);
     const cogs = num(payload.cost_total ?? num(payload.cost) * qty);
     const discounts = num(payload.total_discount);
+    const name =
+      typeof payload.item_name === "string"
+        ? payload.item_name
+        : "Sin nombre";
     const current = lineByReceipt.get(line.receiptExternalId) ?? {
       units: 0,
       beverageUnits: 0,
@@ -310,11 +314,6 @@ export async function getBusinessAnalytics(organizationId: string) {
     current.cogs += cogs;
     current.discounts += discounts;
     lineByReceipt.set(line.receiptExternalId, current);
-
-    const name =
-      typeof payload.item_name === "string"
-        ? payload.item_name
-        : "Sin nombre";
     const product = product30.get(name) ?? {
       qty: 0,
       sales: 0,
