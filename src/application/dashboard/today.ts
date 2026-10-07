@@ -125,6 +125,23 @@ export async function getTodayOperationalSummary(employee: {
     espressoToday: {
       checks: espressoRows.length,
       consecutiveOutOfSpec,
+      passRate:
+        espressoRows.length > 0
+          ? (espressoRows.filter(
+              (row) =>
+                row.withinTimeSpec &&
+                row.withinYieldSpec === true,
+            ).length /
+              espressoRows.length) *
+            100
+          : null,
+      averageTimeS:
+        espressoRows.length > 0
+          ? espressoRows.reduce(
+              (sum, row) => sum + Number(row.brewTimeS),
+              0,
+            ) / espressoRows.length
+          : null,
     },
     bar: {
       shift: inventory.shift.current,
