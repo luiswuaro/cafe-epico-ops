@@ -741,7 +741,20 @@ export async function getInventoryIntelligence(
         b.tickets - a.tickets ||
         b.sales - a.sales,
     );
-  const nextPeak = upcomingTraffic[0] ?? null;
+  const dayPeak = upcomingTraffic[0] ?? null;
+  const nearTermTraffic = trafficByHour
+    .filter(
+      (row) =>
+        row.hour >= currentDay.hour &&
+        row.hour <= Math.min(22, currentDay.hour + 3) &&
+        row.tickets > 0,
+    )
+    .sort(
+      (a, b) =>
+        b.tickets - a.tickets ||
+        b.sales - a.sales,
+    );
+  const nextPeak = nearTermTraffic[0] ?? null;
   const currentHourForecast =
     trafficByHour.find((row) => row.hour === currentDay.hour) ?? null;
 
@@ -789,20 +802,34 @@ export async function getInventoryIntelligence(
           ? row.expectedTodayMorning
           : row.expectedTodayAfternoon;
       if (expected <= 0) return [];
-      const ratio = row.inStock / expected;
-      if (ratio >= 1.25) return [];
+      const operationalStock = Math.max(0, row.inStock);
+      const ratio = operationalStock / expected;
+      if (ratio >= 1.25 && row.inStock >= 0) return [];
       return [{
         variantExternalId: row.variantExternalId,
         itemName: row.itemName,
         unitLabel: row.unitLabel,
+        displayUnit: row.displayUnit,
+        displayFactor: row.displayFactor,
         inStock: row.inStock,
+        operationalStock,
+        inventoryNeedsCorrection: row.inStock < 0,
         expectedShift: expected,
+        shortage: Math.max(0, expected - operationalStock),
         coverageRatio: ratio,
         status:
-          ratio < 1 ? ("ACTION" as const) : ("WATCH" as const),
+          row.inStock < 0 || ratio < 1
+            ? ("ACTION" as const)
+            : ("WATCH" as const),
       }];
     })
-    .sort((a, b) => a.coverageRatio - b.coverageRatio);
+    .sort(
+      (a, b) =>
+        (a.status === "ACTION" ? 0 : 1) -
+          (b.status === "ACTION" ? 0 : 1) ||
+        b.expectedShift - a.expectedShift ||
+        b.shortage - a.shortage,
+    );
 
   const suggested = smartRows.filter(
     (row) => row.suggestedPurchase > 0.0005,
@@ -843,6 +870,7 @@ export async function getInventoryIntelligence(
       traffic: {
         currentHour: currentHourForecast,
         nextPeak,
+        dayPeak,
       },
       topProducts: topProductsForShift,
     },
