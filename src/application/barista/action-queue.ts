@@ -144,12 +144,12 @@ export function buildBaristaActionQueue(input: {
       priority: "ACTION",
       area: "INVENTARIO",
       title:
-        "Corregir " +
+        "Confirmar " +
         input.inventoryCorrectionCount +
-        " existencia(s) negativas",
+        " insumo(s) con inventario negativo",
       detail:
-        "Loyverse tiene cantidades menores a cero. Haz conteo físico antes de tratarlas como faltante real.",
-      href: "/today#conteo-rapido",
+        "Loyverse reporta una cantidad menor a cero. Confirma la existencia física antes de tratarla como faltante real.",
+      href: "/today?action=count#conteo-rapido",
       rank: 30,
     });
   }
@@ -161,9 +161,13 @@ export function buildBaristaActionQueue(input: {
     const unit =
       risk.displayUnit ??
       (risk.unitLabel === "peso/volumen"
-        ? "u. Loyverse"
+        ? "unidad sin configurar"
         : risk.unitLabel);
     const shortage = (risk.shortage ?? 0) * factor;
+    const hasOperationalUnit =
+      unit !== "u. Loyverse" &&
+      unit !== "peso/volumen" &&
+      unit !== "unidad sin configurar";
 
     actions.push({
       priority: risk.status,
@@ -171,11 +175,13 @@ export function buildBaristaActionQueue(input: {
       title: "Reponer " + risk.itemName,
       detail:
         (shortage > 0
-          ? "Faltan aproximadamente " +
-            shortage.toFixed(shortage < 10 ? 2 : 0) +
-            " " +
-            unit +
-            " para cubrir el turno."
+          ? hasOperationalUnit
+            ? "Faltan aproximadamente " +
+              shortage.toFixed(shortage < 10 ? 2 : 0) +
+              " " +
+              unit +
+              " para cubrir el turno."
+            : "La cobertura es insuficiente para el turno y la unidad operativa todavía no está configurada. Revísala en Inventario."
           : "La cobertura está cerca del consumo esperado del turno."),
       href: "/inventory",
       rank: risk.status === "ACTION" ? 35 : 55,
@@ -228,7 +234,7 @@ export function buildBaristaActionQueue(input: {
         " unidad(es) sincronizadas · " +
         input.lossSummary.remakeRate.toFixed(1) +
         "%. Revisa la causa antes de que se vuelva patrón.",
-      href: "/today#registro-merma",
+      href: "/today?action=waste#registro-merma",
       rank: 50,
     });
   }

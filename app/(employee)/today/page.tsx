@@ -37,6 +37,12 @@ function expectedRange(value: number) {
   return low === high ? String(low) : low + "–" + high;
 }
 
+function operationalUnit(unit: string) {
+  return unit === "u. Loyverse" || unit === "peso/volumen"
+    ? "unidad sin configurar"
+    : unit;
+}
+
 export default async function TodayPage({
   searchParams,
 }: {
@@ -63,9 +69,31 @@ export default async function TodayPage({
       : cockpit.currentHour >= 21;
   const selectedCountVariant =
     typeof params.count === "string" ? params.count : "";
+  const quickAction =
+    typeof params.action === "string" ? params.action : "";
   const suggestedCountRows = cockpit.countOptions
     .filter((row) => row.sourceQuantity < 0 && !row.countedToday)
     .slice(0, 6);
+
+  const blockedByIngredient = Array.from(
+    cockpit.unavailableProducts.reduce((groups, row) => {
+      for (const blocker of row.blockers) {
+        const products = groups.get(blocker) ?? [];
+        products.push(row.itemName);
+        groups.set(blocker, products);
+      }
+      return groups;
+    }, new Map<string, string[]>()),
+  )
+    .map(([ingredient, products]) => ({
+      ingredient,
+      products: Array.from(new Set(products)),
+    }))
+    .sort(
+      (a, b) =>
+        b.products.length - a.products.length ||
+        a.ingredient.localeCompare(b.ingredient, "es"),
+    );
 
   const actionQueue = buildBaristaActionQueue({
     currentHour: cockpit.currentHour,
@@ -247,8 +275,8 @@ export default async function TodayPage({
           </p>
           {cockpit.inventoryCorrectionCount > 0 && (
             <p className="status-warn">
-              {cockpit.inventoryCorrectionCount} existencia(s) negativas aún
-              requieren conteo físico.
+              {cockpit.inventoryCorrectionCount} insumo(s) requieren
+              confirmación física.
             </p>
           )}
           {cockpit.inventoryCorrectionSubmitted > 0 && (
@@ -260,7 +288,7 @@ export default async function TodayPage({
           <Link
             href={
               cockpit.inventoryCorrectionCount > 0
-                ? "/today#conteo-rapido"
+                ? "/today?action=count#conteo-rapido"
                 : "/inventory"
             }
           >
@@ -271,41 +299,48 @@ export default async function TodayPage({
         </article>
       </section>
 
-      <section className="card" style={{ marginTop: "1rem" }}>
-        <p className="eyebrow">COLA OPERATIVA</p>
-        <h2>Qué hacer ahora</h2>
-        <p className="muted">
-          Solo muestra pendientes que requieren una acción o revisión. Al
-          corregirse el dato, desaparecen automáticamente de esta lista.
+      <section className="card command-center" style={{ marginTop: "1rem" }}>
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">CENTRO DE MANDO · TURNO {shiftLabel}</p>
+            <h2>Qué hacer ahora</h2>
+          </div>
+          <span className="queue-count">
+            {actionQueue.length} pendiente{actionQueue.length === 1 ? "" : "s"}
+          </span>
+        </div>
+        <p className="muted compact-copy">
+          Prioridad calculada con apertura, QC, inventario, demanda,
+          incidencias y entrega. Al corregirse el dato, desaparece de aquí.
         </p>
         {actionQueue.length === 0 ? (
           <p className="status-ok">
-            No hay pendientes operativos relevantes con los datos actuales.
+            Sin acciones operativas relevantes con los datos actuales.
           </p>
         ) : (
-          <div className="stack">
+          <div className="queue-list">
             {actionQueue.map((action, index) => (
-              <div className="task" key={action.area + action.title + index}>
-                <div style={{ flex: 1 }}>
-                  <div>
-                    <span className="pill">{action.area}</span>{" "}
+              <div
+                className={"queue-row priority-" + action.priority.toLowerCase()}
+                key={action.area + action.title + index}
+              >
+                <span className="queue-index">
+                  {String(index + 1).padStart(2, "0")}
+                </span>
+                <div className="queue-body">
+                  <div className="queue-title">
+                    <span className="pill">{action.area}</span>
                     <strong>{action.title}</strong>
                   </div>
-                  <div
-                    className={
-                      action.priority === "ACTION"
-                        ? "status-warn"
-                        : "muted"
-                    }
-                  >
-                    {action.detail}
-                  </div>
+                  <div className="queue-detail">{action.detail}</div>
                 </div>
                 {action.href && (
-                  <Link href={action.href}>
-                    <button>
-                      {action.priority === "ACTION" ? "Atender" : "Revisar"}
-                    </button>
+                  <Link className="queue-action" href={action.href}>
+                    {index === 0 && action.priority === "ACTION"
+                      ? "Hacer ahora"
+                      : action.priority === "ACTION"
+                        ? "Atender"
+                        : "Revisar"}
                   </Link>
                 )}
               </div>
@@ -358,7 +393,7 @@ export default async function TodayPage({
                     </div>
                   </div>
                   <strong>
-                    {number.format(row.prepQuantity)} {row.unitLabel}
+                    {number.format(row.prepQuantity)} {operationalUnit(row.unitLabel)}
                   </strong>
                 </div>
               ))}
@@ -378,7 +413,7 @@ export default async function TodayPage({
                     <strong>{row.itemName}</strong>
                     <div className="muted">
                       Consumo estimado {number.format(row.expected)}{" "}
-                      {row.unitLabel}
+                      {operationalUnit(row.unitLabel)}
                     </div>
                   </div>
                   <div
@@ -391,7 +426,7 @@ export default async function TodayPage({
                   >
                     {row.inventoryNeedsCorrection
                       ? "conteo"
-                      : number.format(row.inStock) + " " + row.unitLabel}
+                      : number.format(row.inStock) + " " + operationalUnit(row.unitLabel)}
                   </div>
                 </div>
               ))}
@@ -405,20 +440,27 @@ export default async function TodayPage({
         <section className="grid" style={{ marginTop: "1rem" }}>
           {cockpit.unavailableProducts.length > 0 && (
             <article className="card">
-              <p className="eyebrow">NO PROMETER HOY</p>
-              <h2>Productos con demanda reciente bloqueados por stock</h2>
-              <p className="muted">
-                Prioriza productos vendidos recientemente; recetas internas y
-                productos sin movimiento reciente no aparecen aquí.
+              <p className="eyebrow">RIESGO DE MENÚ</p>
+              <h2>Productos comprometidos por inventario</h2>
+              <p className="muted compact-copy">
+                Agrupado por insumo para ver qué reposición recupera más
+                productos del menú.
               </p>
-              <div className="stack">
-                {cockpit.unavailableProducts.slice(0, 8).map((row) => (
-                  <div className="task" key={row.variantExternalId}>
+              <div className="stack compact-stack">
+                {blockedByIngredient.slice(0, 6).map((group) => (
+                  <div className="blocker-row" key={group.ingredient}>
                     <div>
-                      <strong>{row.itemName}</strong>
-                      <div className="status-warn">
-                        Falta: {row.blockers.join(", ")}
+                      <strong>{group.ingredient}</strong>
+                      <div className="muted">
+                        Afecta {group.products.length} producto
+                        {group.products.length === 1 ? "" : "s"}
                       </div>
+                    </div>
+                    <div className="blocker-products">
+                      {group.products.slice(0, 4).join(" · ")}
+                      {group.products.length > 4
+                        ? " · +" + (group.products.length - 4)
+                        : ""}
                     </div>
                   </div>
                 ))}
@@ -451,7 +493,7 @@ export default async function TodayPage({
 
       <section className="grid" style={{ marginTop: "1rem" }}>
         <article className="card">
-          <p className="eyebrow">CAFÉ ACTIVO</p>
+          <p className="eyebrow">CAFÉ EN TOLVA</p>
           {cockpit.activeRoast ? (
             <>
               <h2>{cockpit.activeRoast.lotName}</h2>
@@ -468,9 +510,9 @@ export default async function TodayPage({
             </>
           ) : (
             <>
-              <h2>Sin batch asignado</h2>
+              <h2>Sin batch confirmado en OPS</h2>
               <p className="status-warn">
-                Operación no puede relacionar QC con tueste.
+                Confirma el batch antes de interpretar QC contra reposo y tueste.
               </p>
             </>
           )}
@@ -568,7 +610,7 @@ export default async function TodayPage({
                 </div>
                 <div style={{ textAlign: "right" }}>
                   <strong>
-                    {number.format(row.displayQuantity)} {row.displayUnit}
+                    {number.format(row.displayQuantity)} {operationalUnit(row.displayUnit)}
                   </strong>
                   {row.estimatedCost > 0 && (
                     <div className="muted">
@@ -582,12 +624,32 @@ export default async function TodayPage({
         </section>
       )}
 
-      <section className="grid" style={{ marginTop: "1rem" }}>
-        <form
-          id="conteo-rapido"
-          action={reportQuickStockCount}
-          className="card stack"
-        >
+      <section className="card quick-actions" style={{ marginTop: "1rem" }}>
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">ACCIONES RÁPIDAS</p>
+            <h2>Registrar sin salir de Hoy</h2>
+          </div>
+          <div className="quick-action-links">
+            <Link href="/today?action=count#conteo-rapido">+ Conteo</Link>
+            <Link href="/today?action=waste#registro-merma">+ Merma</Link>
+            <Link href="/today?action=incident#incidencia-barra">+ Incidencia</Link>
+          </div>
+        </div>
+        <div className="quick-action-grid">
+          <details
+            className="quick-panel"
+            id="conteo-rapido"
+            open={quickAction === "count"}
+          >
+            <summary>
+              <span>Conteo físico</span>
+              <small>Confirmar existencia</small>
+            </summary>
+            <form
+              action={reportQuickStockCount}
+              className="stack quick-form"
+            >
           <p className="eyebrow">CONTEO RÁPIDO</p>
           <h2>Confirmar existencia física</h2>
           <p className="muted">
@@ -609,7 +671,7 @@ export default async function TodayPage({
                     className="button"
                     key={row.variantExternalId}
                     href={
-                      "/today?count=" +
+                      "/today?action=count&count=" +
                       encodeURIComponent(row.variantExternalId) +
                       "#conteo-rapido"
                     }
@@ -636,7 +698,8 @@ export default async function TodayPage({
                   value={row.variantExternalId}
                 >
                   {row.itemName} · Loyverse{" "}
-                  {number.format(row.sourceQuantity)} {row.unitLabel}
+                  {number.format(row.sourceQuantity)}{" "}
+                  {operationalUnit(row.unitLabel)}
                   {row.countedToday ? " · contado hoy" : ""}
                 </option>
               ))}
@@ -688,13 +751,22 @@ export default async function TodayPage({
               ))}
             </div>
           )}
-        </form>
+            </form>
+          </details>
 
-        <form
-          id="registro-merma"
-          action={reportBarWaste}
-          className="card stack"
-        >
+          <details
+            className="quick-panel"
+            id="registro-merma"
+            open={quickAction === "waste"}
+          >
+            <summary>
+              <span>Merma / remake</span>
+              <small>Registrar pérdida</small>
+            </summary>
+            <form
+              action={reportBarWaste}
+              className="stack quick-form"
+            >
           <p className="eyebrow">REGISTRO RÁPIDO</p>
           <h2>Merma / derrame / bebida rehecha</h2>
           <p className="muted">
@@ -712,7 +784,7 @@ export default async function TodayPage({
                   key={row.variantExternalId}
                   value={row.variantExternalId}
                 >
-                  {row.itemName} · {row.unitLabel}
+                  {row.itemName} · {operationalUnit(row.unitLabel)}
                 </option>
               ))}
             </select>
@@ -729,10 +801,9 @@ export default async function TodayPage({
             />
           </label>
           <p className="muted">
-            Cada insumo muestra su unidad operativa. Si aparece “u. Loyverse”,
-            todavía falta configurar su unidad legible en Inventario. Para una
-            bebida rehecha registra una sola vez el insumo principal perdido;
-            ese registro cuenta como 1 remake.
+            Usa la unidad indicada. Si aparece “unidad sin configurar”,
+            primero corrige la unidad operativa en Inventario. Un remake se
+            registra una sola vez con el insumo principal perdido.
           </p>
           <label>
             Motivo
@@ -750,9 +821,19 @@ export default async function TodayPage({
             <input name="note" maxLength={300} />
           </label>
           <button type="submit">Registrar merma</button>
-        </form>
+            </form>
+          </details>
 
-        <form action={reportBarIncident} className="card stack">
+          <details
+            className="quick-panel"
+            id="incidencia-barra"
+            open={quickAction === "incident"}
+          >
+            <summary>
+              <span>Incidencia</span>
+              <small>Escalar un problema</small>
+            </summary>
+            <form action={reportBarIncident} className="stack quick-form">
           <p className="eyebrow">ESCALAR PROBLEMA</p>
           <h2>Incidencia de barra</h2>
           <p className="muted">
@@ -790,11 +871,13 @@ export default async function TodayPage({
               placeholder="Describe qué pasó y qué falta hacer."
             />
           </label>
-          <button type="submit">Enviar incidencia</button>
-        </form>
+              <button type="submit">Enviar incidencia</button>
+            </form>
+          </details>
+        </div>
       </section>
 
-      <section className="grid" style={{ marginTop: "1rem" }}>
+      <section className="grid compact-footer-grid" style={{ marginTop: "1rem" }}>
         <article className="card">
           <span className="pill">ENTREGA</span>
           <div className="metric">
