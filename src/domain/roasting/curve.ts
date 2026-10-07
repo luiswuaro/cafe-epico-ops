@@ -7,10 +7,25 @@ export type RoastCurvePoint = {
   fanPct?: number;
 };
 
+export type RoastCurveEvent = {
+  tS: number;
+  btC?: number;
+};
+
 export type RoastCurveImport = {
   points: RoastCurvePoint[];
   format: "JSON_CANONICAL" | "JSON_ARTISAN" | "JSON_GENERIC" | "CSV";
   warnings: string[];
+  events?: {
+    charge?: RoastCurveEvent;
+    yellowing?: RoastCurveEvent;
+    firstCrack?: RoastCurveEvent;
+    drop?: RoastCurveEvent;
+  };
+  metadata?: {
+    title?: string;
+    roaster?: string;
+  };
 };
 
 function normalize(value: string) {
@@ -235,6 +250,67 @@ function parseParallelArrays(
   });
 }
 
+function eventFromIndex(
+  indexValue: unknown,
+  points: RoastCurvePoint[],
+) {
+  const index = Number(indexValue);
+  if (!Number.isInteger(index) || index < 0 || index >= points.length) {
+    return undefined;
+  }
+  const point = points[index];
+  return {
+    tS: point.tS,
+    ...(point.btC != null ? { btC: point.btC } : {}),
+  };
+}
+
+function artisanEvents(
+  root: Record<string, unknown>,
+  points: RoastCurvePoint[],
+) {
+  const timeindex = Array.isArray(root.timeindex)
+    ? root.timeindex
+    : null;
+  if (!timeindex) return undefined;
+
+  return {
+    charge: eventFromIndex(timeindex[0], points),
+    yellowing: eventFromIndex(timeindex[1], points),
+    firstCrack: eventFromIndex(timeindex[2], points),
+    drop: eventFromIndex(timeindex[6], points),
+  };
+}
+
+function genericEvents(root: Record<string, unknown>) {
+  const events = objectRecord(root.events);
+  if (!events) return undefined;
+
+  const readEvent = (patterns: RegExp[]) => {
+    const raw = firstValue(events, patterns);
+    const row = objectRecord(raw);
+    if (!row) return undefined;
+    const tS = parseTimeValue(
+      firstValue(row, [/^ts$/, /^time$/, /^seconds$/, /elapsed/]),
+    );
+    const btC = parseNumeric(
+      firstValue(row, [/^btc$/, /^bt$/, /bean temp/]),
+    );
+    if (tS == null) return undefined;
+    return {
+      tS,
+      ...(btC != null ? { btC } : {}),
+    };
+  };
+
+  return {
+    charge: readEvent([/^charge$/, /^carga$/]),
+    yellowing: readEvent([/^yellowing$/, /^dry$/, /amarilleo/]),
+    firstCrack: readEvent([/^first crack$/, /^fc$/, /^fcs$/]),
+    drop: readEvent([/^drop$/, /descarga/]),
+  };
+}
+
 function parseJson(raw: string): RoastCurveImport | null {
   let decoded: unknown;
   try {
@@ -291,13 +367,23 @@ function parseJson(raw: string): RoastCurveImport | null {
         "El archivo no incluía RoR utilizable; Ops lo estimó desde BT.",
       );
     }
+    const isArtisan =
+      Array.isArray(root.timex) || Array.isArray(root.temp2);
     return {
       points: artisanPoints,
-      format:
-        Array.isArray(root.timex) || Array.isArray(root.temp2)
-          ? "JSON_ARTISAN"
-          : "JSON_GENERIC",
+      format: isArtisan ? "JSON_ARTISAN" : "JSON_GENERIC",
       warnings,
+      events: isArtisan
+        ? artisanEvents(root, artisanPoints)
+        : genericEvents(root),
+      metadata: {
+        title:
+          typeof root.title === "string" ? root.title : undefined,
+        roaster:
+          typeof root.roastertype === "string"
+            ? root.roastertype
+            : undefined,
+      },
     };
   }
 
