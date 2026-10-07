@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { and, eq, isNull } from "drizzle-orm";
 import { PrintTicketButton } from "./print-button";
+import { DirectPrintTicketButton } from "./direct-print-button";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
 import {
   assertEmployeePermission,
@@ -165,6 +166,27 @@ export default async function ReceiptPage({
         >
           Volver
         </Link>
+        <DirectPrintTicketButton
+          ticket={{
+            folio: order.order.folio,
+            date: ticketDate,
+            employee: order.employeeName ?? "Empleado",
+            service:
+              order.order.serviceMode === "TAKEAWAY"
+                ? "Para llevar"
+                : order.order.tableLabel || "Aquí",
+            splitLabel: split?.label ?? null,
+            items: lines.map((line) => ({
+              quantity: Number(line.quantity),
+              name: line.nameSnapshot,
+              note: line.note,
+              total: money.format(Number(line.lineTotal)),
+            })),
+            total: money.format(total),
+            payment: paymentMethod || "-",
+            customer: order.customerName,
+          }}
+        />
         <PrintTicketButton />
       </div>
 

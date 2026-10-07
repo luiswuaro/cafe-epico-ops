@@ -40,7 +40,7 @@ export function PrintTicketButton() {
       className="button no-print"
       onClick={printTicket}
     >
-      Imprimir
+      Imprimir con navegador
     </button>
   );
 }

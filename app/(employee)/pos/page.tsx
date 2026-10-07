@@ -213,6 +213,9 @@ export default async function PosPage({
             ? "Caja abierta · " + money.format(cash.expectedCash)
             : "Abrir caja"}
         </Link>
+        <Link href="/pos/printer" className="button">
+          Impresora
+        </Link>
       </div>
 
       <PosClient

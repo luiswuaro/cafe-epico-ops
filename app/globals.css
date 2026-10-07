@@ -1285,3 +1285,21 @@ th, td { vertical-align: top; }
     align-items: baseline;
   }
 }
+
+/* Local ESC/POS bridge */
+.printer-bridge-status {
+  padding: .65rem .75rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #faf7f1;
+  font-weight: 800;
+}
+.receipt-toolbar {
+  flex-wrap: wrap;
+}
+@media (max-width: 700px) {
+  .receipt-toolbar > * {
+    flex: 1 1 100%;
+    text-align: center;
+  }
+}
