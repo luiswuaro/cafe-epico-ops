@@ -66,7 +66,20 @@ export default async function ChecklistsPage() {
   );
 
   const completed = tasks.filter((task) => task.status === "COMPLETED").length;
+  const inProgress = tasks.filter(
+    (task) => task.status !== "COMPLETED" && task.startedAt,
+  ).length;
   const done = tasks.length > 0 && completed === tasks.length;
+  const measured = tasks
+    .map((task) =>
+      timingMetrics(
+        task.targetDurationSecondsSnapshot,
+        task.startedAt,
+        task.completedAt,
+      ),
+    )
+    .filter((metric) => metric.actualSeconds != null && metric.targetSeconds != null);
+  const onTarget = measured.filter((metric) => metric.onTarget === true).length;
 
   return (
     <main className="shell">
@@ -77,6 +90,32 @@ export default async function ChecklistsPage() {
           {completed} / {tasks.length} tareas completadas.
         </p>
         {done && <p className="status-ok">Apertura completada.</p>}
+      </section>
+
+      <section className="grid checklist-kpis" style={{ marginBottom: "1rem" }}>
+        <article className="card">
+          <span className="pill">COMPLETADAS</span>
+          <div className="metric">{completed} / {tasks.length}</div>
+          <p>{done ? "Apertura lista." : "avance de apertura."}</p>
+        </article>
+        <article className="card">
+          <span className="pill">EN PROCESO</span>
+          <div className="metric">{inProgress}</div>
+          <p>tarea(s) con cronómetro activo.</p>
+        </article>
+        <article className="card">
+          <span className="pill">DENTRO DE OBJETIVO</span>
+          <div className="metric">
+            {measured.length > 0
+              ? Math.round((onTarget / measured.length) * 100) + "%"
+              : "—"}
+          </div>
+          <p>
+            {measured.length > 0
+              ? onTarget + " / " + measured.length + " tareas medidas."
+              : "Sin muestra medida todavía."}
+          </p>
+        </article>
       </section>
 
       <article className="card">

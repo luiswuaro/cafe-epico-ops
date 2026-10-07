@@ -204,3 +204,27 @@ select { width:100%; border:1px solid var(--line); border-radius:10px; padding:.
   .queue-action { grid-column: 2; justify-self: start; }
   .blocker-row { grid-template-columns: 1fr; gap: .25rem; }
 }
+
+
+/* Shift execution + handoff reporting */
+.checklist-kpis .card { min-height: 0; }
+.handoff-note textarea { min-height: 5.5rem; }
+.report-filters form {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) auto;
+  gap: .75rem;
+  align-items: end;
+}
+.latest-handoff { border-left: 4px solid var(--ink); }
+.handoff-note-preview {
+  margin-top: .7rem;
+  padding: .75rem .85rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #f8f3ea;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+@media (max-width: 760px) {
+  .report-filters form { grid-template-columns: 1fr; }
+}

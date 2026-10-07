@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { getChecklistAdminData } from "@/src/application/checklists/admin";
 import { requirePermission } from "@/src/infrastructure/auth/permissions";
 import {
@@ -52,11 +53,19 @@ export default async function AdminChecklistsPage() {
 
       <section className="grid">
         <article className="card">
-          <h2>Nueva tarea</h2>
-          <p className="muted">
-            Para agregar trabajo a Azucena, normalmente elige Apertura o Entrega
-            de turno y la frecuencia correspondiente.
-          </p>
+          <div className="section-heading">
+            <div>
+              <h2>Nueva tarea operativa</h2>
+              <p className="muted compact-copy">
+                Añádela a Apertura o Entrega, define frecuencia y un tiempo
+                objetivo si quieres medir eficiencia. Aparecerá en la siguiente
+                corrida aplicable; el histórico no se altera.
+              </p>
+            </div>
+            <Link className="pill" href="/admin/reports/shifts">
+              Ver ejecución
+            </Link>
+          </div>
 
           <form action={createChecklistTask} className="stack">
             <label>
@@ -229,7 +238,18 @@ export default async function AdminChecklistsPage() {
         </article>
 
         <article className="card">
-          <h2>Tareas actuales</h2>
+          <div className="section-heading">
+            <div>
+              <h2>Tareas actuales</h2>
+              <p className="muted compact-copy">
+                Ajusta objetivos o desactiva trabajo futuro sin modificar
+                turnos ya ejecutados.
+              </p>
+            </div>
+            <Link className="pill" href="/admin/reports/productivity">
+              Ver eficiencia
+            </Link>
+          </div>
           <div className="stack">
             {data.tasks.map((task) => (
               <div className="task" key={task.id}>

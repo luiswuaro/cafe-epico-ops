@@ -334,10 +334,15 @@ export const checklistRuns = pgTable("checklist_runs", {
   status: checklistRunStatusEnum("status").notNull().default("OPEN"),
   startedByEmployeeId: uuid("started_by_employee_id").references(() => employees.id, { onDelete: "set null" }),
   startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+  completedByEmployeeId: uuid("completed_by_employee_id").references(() => employees.id, { onDelete: "set null" }),
   completedAt: timestamp("completed_at", { withTimezone: true }),
+  closingNote: text("closing_note"),
   ...timestamps,
-}, (t) => [index("checklist_runs_store_date_idx").on(t.storeId, t.businessDate),
-  uniqueIndex("checklist_runs_daily_uidx").on(t.storeId, t.checklistTemplateId, t.businessDate)]);
+}, (t) => [
+  index("checklist_runs_store_date_idx").on(t.storeId, t.businessDate),
+  index("checklist_runs_completed_by_idx").on(t.completedByEmployeeId),
+  uniqueIndex("checklist_runs_daily_uidx").on(t.storeId, t.checklistTemplateId, t.businessDate),
+]);
 
 export const checklistRunTasks = pgTable("checklist_run_tasks", {
   id: uuid("id").primaryKey().defaultRandom(),

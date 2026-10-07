@@ -1,6 +1,7 @@
 import Link from "next/link";
 import {
   completeChecklistTask,
+  saveChecklistRunNote,
   startChecklistTask,
 } from "@/app/actions/checklists";
 import { getBaristaCockpit } from "@/src/application/barista/cockpit";
@@ -70,7 +71,20 @@ export default async function HandoffPage() {
   ]);
 
   const completed = tasks.filter((task) => task.status === "COMPLETED").length;
+  const inProgress = tasks.filter(
+    (task) => task.status !== "COMPLETED" && task.startedAt,
+  ).length;
   const done = tasks.length > 0 && completed === tasks.length;
+  const measured = tasks
+    .map((task) =>
+      timingMetrics(
+        task.targetDurationSecondsSnapshot,
+        task.startedAt,
+        task.completedAt,
+      ),
+    )
+    .filter((metric) => metric.actualSeconds != null && metric.targetSeconds != null);
+  const onTarget = measured.filter((metric) => metric.onTarget === true).length;
 
   return (
     <main className="shell">
@@ -81,6 +95,32 @@ export default async function HandoffPage() {
           {completed} / {tasks.length} tareas completadas.
         </p>
         {done && <p className="status-ok">Entrega completada.</p>}
+      </section>
+
+      <section className="grid checklist-kpis" style={{ marginBottom: "1rem" }}>
+        <article className="card">
+          <span className="pill">AVANCE</span>
+          <div className="metric">{completed} / {tasks.length}</div>
+          <p>{done ? "Entrega lista." : "tareas completadas."}</p>
+        </article>
+        <article className="card">
+          <span className="pill">EN PROCESO</span>
+          <div className="metric">{inProgress}</div>
+          <p>tarea(s) con cronómetro activo.</p>
+        </article>
+        <article className="card">
+          <span className="pill">EFICIENCIA MEDIDA</span>
+          <div className="metric">
+            {measured.length > 0
+              ? Math.round((onTarget / measured.length) * 100) + "%"
+              : "—"}
+          </div>
+          <p>
+            {measured.length > 0
+              ? onTarget + " / " + measured.length + " dentro del objetivo."
+              : "Aún no hay tareas con objetivo completadas."}
+          </p>
+        </article>
       </section>
 
       <section className="grid" style={{ marginBottom: "1rem" }}>
@@ -103,7 +143,7 @@ export default async function HandoffPage() {
             </>
           ) : (
             <p className="status-warn">
-              No hay batch de espresso asignado.
+              No hay batch de espresso confirmado en OPS.
             </p>
           )}
         </article>
@@ -183,6 +223,33 @@ export default async function HandoffPage() {
             Loyverse desde la entrega.
           </p>
         </article>
+      </section>
+
+      <section className="card handoff-note" style={{ marginBottom: "1rem" }}>
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">NOTA GENERAL DE ENTREGA</p>
+            <h2>Lo adicional que debe saber el siguiente turno</h2>
+          </div>
+          {run.closingNote && <span className="pill">GUARDADA</span>}
+        </div>
+        <p className="muted compact-copy">
+          Úsala para contexto que no pertenece a una tarea concreta. Las notas
+          específicas siguen quedando dentro de cada tarea.
+        </p>
+        <form action={saveChecklistRunNote} className="stack">
+          <input type="hidden" name="runId" value={run.id} />
+          <textarea
+            name="note"
+            rows={3}
+            maxLength={2000}
+            defaultValue={run.closingNote ?? ""}
+            placeholder="Ej. Molino estable; queda pendiente recibir proveedor a las 17:00."
+          />
+          <button type="submit">
+            {run.closingNote ? "Actualizar nota general" : "Guardar nota general"}
+          </button>
+        </form>
       </section>
 
       {cockpit.unavailableProducts.length > 0 && (
