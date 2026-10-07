@@ -51,6 +51,18 @@ export async function getTodayOperationalSummary(employee: {
   const handoffCompleted = handoffTasks.filter(
     (task) => task.status === "COMPLETED",
   ).length;
+  const openingNext =
+    openingTasks.find(
+      (task) => task.status === "PENDING" && task.startedAt,
+    ) ??
+    openingTasks.find((task) => task.status === "PENDING") ??
+    null;
+  const handoffNext =
+    handoffTasks.find(
+      (task) => task.status === "PENDING" && task.startedAt,
+    ) ??
+    handoffTasks.find((task) => task.status === "PENDING") ??
+    null;
 
   const [espressoRows, activeRoastRows] = await Promise.all([
     db
@@ -112,11 +124,23 @@ export async function getTodayOperationalSummary(employee: {
       completed: openingCompleted,
       total: openingTasks.length,
       status: openingRun.status,
+      next: openingNext
+        ? {
+            title: openingNext.titleSnapshot,
+            started: Boolean(openingNext.startedAt),
+          }
+        : null,
     },
     handoff: {
       completed: handoffCompleted,
       total: handoffTasks.length,
       status: handoffRun.status,
+      next: handoffNext
+        ? {
+            title: handoffNext.titleSnapshot,
+            started: Boolean(handoffNext.startedAt),
+          }
+        : null,
     },
     inventory: {
       openShortages,
