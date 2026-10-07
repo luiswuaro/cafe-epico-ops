@@ -82,6 +82,11 @@ export default async function RoastingPage({
           El objetivo es medir repetibilidad, costo y disponibilidad, no solo
           guardar curvas.
         </p>
+        <p>
+          <Link href="/admin/roasting/compare">
+            <button>Comparar batches en Roast Engineer</button>
+          </Link>
+        </p>
       </section>
 
       {typeof params.error === "string" && (
