@@ -1,6 +1,6 @@
 "use server";
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { requirePermission } from "@/src/infrastructure/auth/permissions";
 import { getDb } from "@/src/infrastructure/db/client";
@@ -19,13 +19,19 @@ export async function resolveOperationalIncident(formData: FormData) {
   const now = new Date();
 
   const [event] = await db
-    .select({ id: operationalEvents.id })
+    .select({
+      id: operationalEvents.id,
+      eventType: operationalEvents.eventType,
+    })
     .from(operationalEvents)
     .where(
       and(
         eq(operationalEvents.id, eventId),
         eq(operationalEvents.organizationId, organizationId),
-        eq(operationalEvents.eventType, "BAR_INCIDENT"),
+        inArray(operationalEvents.eventType, [
+          "BAR_INCIDENT",
+          "STOCK_COUNT",
+        ]),
       ),
     )
     .limit(1);
@@ -45,7 +51,10 @@ export async function resolveOperationalIncident(formData: FormData) {
       organizationId,
       actorUserId: user.id,
       actorEmployeeId: employeeId,
-      action: "BAR_INCIDENT_RESOLVED",
+      action:
+        event.eventType === "STOCK_COUNT"
+          ? "STOCK_COUNT_RECONCILED"
+          : "BAR_INCIDENT_RESOLVED",
       entityType: "operational_event",
       entityId: eventId,
       afterData: { resolvedAt: now.toISOString() },
