@@ -4,7 +4,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { parseRoastCurveCsv } from "@/src/domain/roasting/curve";
+import { parseRoastCurveInput } from "@/src/domain/roasting/curve";
 import { requirePermission } from "@/src/infrastructure/auth/permissions";
 import { getDb } from "@/src/infrastructure/db/client";
 import {
@@ -55,6 +55,25 @@ function finiteOrNull(value: number | null) {
 
 function validTargetUse(value: string) {
   return ["ESPRESSO", "FILTER", "OMNI"].includes(value);
+}
+
+async function readCurveSource(formData: FormData) {
+  const fileEntry = formData.get("curveFile");
+  if (fileEntry instanceof File && fileEntry.size > 0) {
+    if (fileEntry.size > 5_000_000) {
+      throw new Error("ROAST_CURVE_FILE_TOO_LARGE");
+    }
+    return {
+      raw: await fileEntry.text(),
+      sourceName: fileEntry.name,
+    };
+  }
+
+  const pasted = String(formData.get("curveRaw") ?? "").trim();
+  return {
+    raw: pasted,
+    sourceName: pasted ? "texto pegado" : null,
+  };
 }
 
 export async function saveRoastSettings(formData: FormData) {
@@ -370,7 +389,33 @@ export async function recordRoastBatch(formData: FormData) {
   );
   const dropTimeS = parseSeconds(formData.get("dropTimeS"));
   const dropTempC = optionalNumber(formData.get("dropTempC"));
-  const curveCsv = String(formData.get("curveCsv") ?? "").trim();
+  let curveImport = {
+    points: [] as ReturnType<typeof parseRoastCurveInput>["points"],
+    format: null as ReturnType<typeof parseRoastCurveInput>["format"] | null,
+    warnings: [] as string[],
+  };
+  let curveSourceName: string | null = null;
+
+  try {
+    const source = await readCurveSource(formData);
+    curveSourceName = source.sourceName;
+    if (source.raw) {
+      const parsed = parseRoastCurveInput(source.raw);
+      curveImport = {
+        points: parsed.points,
+        format: parsed.format,
+        warnings: parsed.warnings,
+      };
+    }
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message === "ROAST_CURVE_FILE_TOO_LARGE"
+    ) {
+      redirect("/admin/roasting?error=curve-too-large");
+    }
+    throw error;
+  }
 
   if (
     !coffeeLotId ||
@@ -412,7 +457,10 @@ export async function recordRoastBatch(formData: FormData) {
     developmentTimeS != null && dropTimeS != null && dropTimeS > 0
       ? (developmentTimeS / dropTimeS) * 100
       : null;
-  const curveData = curveCsv ? parseRoastCurveCsv(curveCsv) : [];
+  const curveData = curveImport.points;
+  if (curveSourceName && curveData.length === 0) {
+    redirect("/admin/roasting?error=curve-format");
+  }
 
   const { user, employeeId, organizationId } =
     await requirePermission("roast.manage");
@@ -588,6 +636,9 @@ export async function recordRoastBatch(formData: FormData) {
           developmentTimeS,
           dtrPct,
           curvePoints: curveData.length,
+          curveFormat: curveImport.format,
+          curveSourceName,
+          curveWarnings: curveImport.warnings,
           inventoryPosted: posted,
         },
       });
