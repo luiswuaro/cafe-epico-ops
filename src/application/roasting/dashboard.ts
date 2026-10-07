@@ -541,6 +541,13 @@ export async function getRoastingDashboard(organizationId: string) {
     inventoryItems: itemRows.filter((row) => row.isActive),
     stores: storeRows.filter((row) => row.isActive),
     locations: locationRows.filter((row) => row.isActive),
+    loyverseVariants: loyverse.smartRows.map((row) => ({
+      variantExternalId: row.variantExternalId,
+      itemName: row.itemName,
+      unitLabel: row.unitLabel,
+      inStock: row.inStock,
+      avgDailyUsage14: row.avgDailyUsage14,
+    })),
     recommendations: recommendations.slice(0, 12),
     summary: {
       batches30: recentBatches.length,
