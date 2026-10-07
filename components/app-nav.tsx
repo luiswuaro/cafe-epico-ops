@@ -44,6 +44,7 @@ export async function AppNav() {
       <Link href="/recipes">Recetas</Link>
       <Link href="/sops">SOPs</Link>
       <Link href="/quality/espresso">Espresso QC</Link>
+      {canAdmin && <Link href="/admin/roasting">Tueste</Link>}
       {canAdmin && <Link href="/admin">Admin</Link>}
       <form action="/auth/signout" method="post">
         <button
