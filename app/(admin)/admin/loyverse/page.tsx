@@ -11,6 +11,7 @@ type PageProps = {
 
 const labels: Record<string, string> = {
   stores: "Tiendas",
+  categories: "Categorías",
   items: "Artículos + variantes",
   inventory: "Inventario POS",
   customers: "Clientes",
@@ -31,7 +32,7 @@ export default async function LoyverseAdminPage({ searchParams }: PageProps) {
         <p className="eyebrow">ADMIN · LOYVERSE</p>
         <h1>Integración Loyverse</h1>
         <p className="muted">
-          V0.1 es solo lectura: espeja POS hacia Café Épico Ops y no modifica inventario en Loyverse.
+          Loyverse es la fuente maestra de artículos, recetas comerciales e inventario. Ops lo espeja para operación, análisis y control técnico.
         </p>
       </section>
 
@@ -92,18 +93,18 @@ export default async function LoyverseAdminPage({ searchParams }: PageProps) {
         <article className="card">
           <h2>Inventario</h2>
           <p className="muted">
-            Vincula unidades y luego sincroniza + importa el teórico con un
-            solo botón.
+            La existencia se lee directamente de Loyverse. Ya no hay mapeo,
+            saldo inicial ni inventario paralelo en Ops.
           </p>
-          <Link href="/admin/loyverse/inventory">
-            Abrir mapeo e importación →
+          <Link href="/inventory">
+            Ver inventario Loyverse →
           </Link>
         </article>
         <article className="card">
           <h2>Recetas fuente</h2>
           <p className="muted">
-            Revisa artículos compuestos y cantidades tal como están guardados
-            en Loyverse.
+            Revisa recetas anidadas: componentes directos y consumo real
+            expandido hasta insumos base.
           </p>
           <Link href="/admin/loyverse/recipes">
             Ver composiciones →
