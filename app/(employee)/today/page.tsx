@@ -61,6 +61,12 @@ export default async function TodayPage({
     cockpit.currentShift === "MORNING"
       ? cockpit.currentHour >= 15
       : cockpit.currentHour >= 21;
+  const selectedCountVariant =
+    typeof params.count === "string" ? params.count : "";
+  const suggestedCountRows = cockpit.countOptions
+    .filter((row) => row.sourceQuantity < 0 && !row.countedToday)
+    .slice(0, 6);
+
   const actionQueue = buildBaristaActionQueue({
     currentHour: cockpit.currentHour,
     handoffWindow,
@@ -577,9 +583,39 @@ export default async function TodayPage({
             Registra lo que realmente hay. No modifica Loyverse; si existe una
             diferencia, administración recibe el pendiente para conciliarlo.
           </p>
+          {suggestedCountRows.length > 0 && (
+            <div>
+              <p className="eyebrow">CONTAR PRIMERO</p>
+              <div
+                style={{
+                  display: "flex",
+                  gap: ".5rem",
+                  flexWrap: "wrap",
+                }}
+              >
+                {suggestedCountRows.map((row) => (
+                  <Link
+                    className="button"
+                    key={row.variantExternalId}
+                    href={
+                      "/today?count=" +
+                      encodeURIComponent(row.variantExternalId) +
+                      "#conteo-rapido"
+                    }
+                  >
+                    {row.itemName}
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
           <label>
             Insumo
-            <select name="variantExternalId" required defaultValue="">
+            <select
+              name="variantExternalId"
+              required
+              defaultValue={selectedCountVariant}
+            >
               <option value="" disabled>
                 Selecciona…
               </option>
