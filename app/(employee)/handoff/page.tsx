@@ -144,6 +144,47 @@ export default async function HandoffPage() {
         </article>
       </section>
 
+      <section className="grid" style={{ marginBottom: "1rem" }}>
+        <article className="card">
+          <p className="eyebrow">CALIDAD DEL TURNO</p>
+          <h2>Merma y remakes</h2>
+          <p>
+            Merma: <strong>{cockpit.lossSummary.wasteEvents}</strong> ·
+            remakes: <strong>{cockpit.lossSummary.remakeEvents}</strong>
+          </p>
+          <p className="muted">
+            Costo estimado registrado:{" "}
+            {new Intl.NumberFormat("es-MX", {
+              style: "currency",
+              currency: "MXN",
+              maximumFractionDigits: 0,
+            }).format(cockpit.lossSummary.estimatedLossCost)}
+            {cockpit.lossSummary.remakeRate == null
+              ? ""
+              : " · remake rate " +
+                cockpit.lossSummary.remakeRate.toFixed(1) +
+                "%"}
+          </p>
+        </article>
+
+        <article className="card">
+          <p className="eyebrow">CONTEOS FÍSICOS</p>
+          <h2>
+            {
+              cockpit.stockCountsToday.filter(
+                (row) => row.pendingAdmin,
+              ).length
+            }{" "}
+            pendiente(s) de conciliación
+          </h2>
+          <p className="muted">
+            {cockpit.stockCountsToday.length} insumo(s) contado(s) hoy. Las
+            diferencias quedan visibles para administración y no modifican
+            Loyverse desde la entrega.
+          </p>
+        </article>
+      </section>
+
       {cockpit.unavailableProducts.length > 0 && (
         <section className="card" style={{ marginBottom: "1rem" }}>
           <p className="eyebrow">PRODUCTOS NO DISPONIBLES</p>
