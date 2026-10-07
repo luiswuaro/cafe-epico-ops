@@ -213,6 +213,33 @@ export default async function RoastingPage({
         </article>
       </section>
 
+      <section className="card" style={{ marginTop: "1rem" }}>
+        <p className="eyebrow">ROAST ENGINEER · CORRELACIONES</p>
+        <h2>Qué variables se están moviendo junto con la cata</h2>
+        <p className="muted">
+          Pearson r sobre batches con puntaje sensorial disponible. Se muestra
+          la asociación observada; no implica causalidad. Menos de 4 muestras
+          se considera insuficiente.
+        </p>
+        <div className="stack">
+          {data.correlations.map((row) => (
+            <div className="task" key={row.key}>
+              <div style={{ flex: 1 }}>
+                <strong>{row.label}</strong>
+                <div className="muted">
+                  n={row.samples} · {row.strength}
+                </div>
+              </div>
+              <div className="metric" style={{ fontSize: "1.35rem" }}>
+                {row.r == null
+                  ? "—"
+                  : (row.r > 0 ? "+" : "") + row.r.toFixed(2)}
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
       <section className="grid" style={{ marginTop: "1rem" }}>
         <article className="card">
           <h2>Café actualmente en barra</h2>
