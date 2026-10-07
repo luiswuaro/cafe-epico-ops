@@ -96,6 +96,8 @@ export async function getBusinessAnalytics(organizationId: string) {
       customerTickets: 0,
       beverageUnits: 0,
       foodUnits: 0,
+      cogs: 0,
+      cogs: 0,
     },
     afternoon: {
       tickets: 0,
@@ -113,6 +115,7 @@ export async function getBusinessAnalytics(organizationId: string) {
       tickets: number;
       morningSales: number;
       afternoonSales: number;
+      cogs: number;
     }
   >();
   const hourly = Array.from({ length: 24 }, (_, hour) => ({
@@ -141,6 +144,7 @@ export async function getBusinessAnalytics(organizationId: string) {
       tickets: 0,
       morningSales: 0,
       afternoonSales: 0,
+      cogs: 0,
     };
     day.sales += money;
     day.tickets += 1;
@@ -155,8 +159,8 @@ export async function getBusinessAnalytics(organizationId: string) {
   }
 
   const productByShift = {
-    morning: new Map<string, { qty: number; sales: number }>(),
-    afternoon: new Map<string, { qty: number; sales: number }>(),
+    morning: new Map<string, { qty: number; sales: number; cogs: number }>(),
+    afternoon: new Map<string, { qty: number; sales: number; cogs: number }>(),
   };
 
   for (const line of lines) {
@@ -176,14 +180,25 @@ export async function getBusinessAnalytics(organizationId: string) {
         ? line.payload.item_name
         : "Sin nombre";
     const qty = Number(line.quantity ?? 0);
-    const sales = Number(line.grossTotalMoney ?? 0);
+    const sales = Number(
+      line.payload.total_money ?? line.grossTotalMoney ?? 0,
+    );
+    const cogs = Number(
+      line.payload.cost_total ??
+        Number(line.payload.cost ?? 0) * qty,
+    );
 
     if (isFood(name)) target.foodUnits += qty;
     else target.beverageUnits += qty;
+    target.cogs += cogs;
 
-    const product = products.get(name) ?? { qty: 0, sales: 0 };
+    const day = daily.get(local.date);
+    if (day) day.cogs += cogs;
+
+    const product = products.get(name) ?? { qty: 0, sales: 0, cogs: 0 };
     product.qty += qty;
     product.sales += sales;
+    product.cogs += cogs;
     products.set(name, product);
   }
 
@@ -203,8 +218,9 @@ export async function getBusinessAnalytics(organizationId: string) {
       (acc, [, row]) => ({
         sales: acc.sales + row.sales,
         tickets: acc.tickets + row.tickets,
+        cogs: acc.cogs + row.cogs,
       }),
-      { sales: 0, tickets: 0 },
+      { sales: 0, tickets: 0, cogs: 0 },
     );
 
   const previous = aggregateDays(previous7);
@@ -252,9 +268,19 @@ export async function getBusinessAnalytics(organizationId: string) {
   const captureRate =
     totalTickets > 0 ? (identifiedTickets / totalTickets) * 100 : 0;
 
-  const topProducts = (map: Map<string, { qty: number; sales: number }>) =>
+  const topProducts = (
+    map: Map<string, { qty: number; sales: number; cogs: number }>,
+  ) =>
     [...map.entries()]
-      .map(([name, values]) => ({ name, ...values }))
+      .map(([name, values]) => ({
+        name,
+        ...values,
+        contribution: values.sales - values.cogs,
+        contributionPct:
+          values.sales > 0
+            ? ((values.sales - values.cogs) / values.sales) * 100
+            : 0,
+      }))
       .sort((a, b) => b.qty - a.qty)
       .slice(0, 10);
 
@@ -263,6 +289,16 @@ export async function getBusinessAnalytics(organizationId: string) {
   const avgTicketChange = pctChange(
     currentAvgTicket,
     previousAvgTicket,
+  );
+  const currentContribution = current.sales - current.cogs;
+  const previousContribution = previous.sales - previous.cogs;
+  const currentContributionPct =
+    current.sales > 0 ? (currentContribution / current.sales) * 100 : 0;
+  const previousContributionPct =
+    previous.sales > 0 ? (previousContribution / previous.sales) * 100 : 0;
+  const contributionChange = pctChange(
+    currentContribution,
+    previousContribution,
   );
 
   const suggestions: Array<{
@@ -368,6 +404,11 @@ export async function getBusinessAnalytics(organizationId: string) {
       salesChange,
       ticketsChange,
       avgTicketChange,
+      currentContribution,
+      previousContribution,
+      currentContributionPct,
+      previousContributionPct,
+      contributionChange,
     },
     loyalty: {
       customers: activeCustomers.length,
