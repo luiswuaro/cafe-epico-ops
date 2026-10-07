@@ -210,6 +210,12 @@ export default async function TodayPage() {
               ? "Apertura completada."
               : "Completa primero las tareas críticas para estar operativos a las 7:30."}
           </p>
+          {!openingDone && summary.opening.next && (
+            <p className="muted">
+              Siguiente: <strong>{summary.opening.next.title}</strong>
+              {summary.opening.next.started ? " · en proceso" : ""}
+            </p>
+          )}
           <Link href="/checklists" className="button">
             {openingDone ? "Ver apertura" : "Continuar apertura"}
           </Link>
@@ -262,6 +268,12 @@ export default async function TodayPage() {
               ? "Entrega de turno completada."
               : "Barra abastecida, limpieza, incidencias, faltantes y corte de caja."}
           </p>
+          {summary.handoff.next && (
+            <p className="muted">
+              Siguiente: <strong>{summary.handoff.next.title}</strong>
+              {summary.handoff.next.started ? " · en proceso" : ""}
+            </p>
+          )}
           <Link href="/handoff">
             {summary.handoff.total > 0 &&
             summary.handoff.completed === summary.handoff.total
