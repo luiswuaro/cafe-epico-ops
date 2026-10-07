@@ -51,6 +51,40 @@ function within(
   return Math.abs(actual - target) <= tolerance;
 }
 
+function pearson(
+  pairs: Array<{ x: number; y: number }>,
+) {
+  if (pairs.length < 4) return null;
+  const meanX =
+    pairs.reduce((sum, pair) => sum + pair.x, 0) / pairs.length;
+  const meanY =
+    pairs.reduce((sum, pair) => sum + pair.y, 0) / pairs.length;
+  let numerator = 0;
+  let sumX2 = 0;
+  let sumY2 = 0;
+
+  for (const pair of pairs) {
+    const dx = pair.x - meanX;
+    const dy = pair.y - meanY;
+    numerator += dx * dy;
+    sumX2 += dx * dx;
+    sumY2 += dy * dy;
+  }
+
+  const denominator = Math.sqrt(sumX2 * sumY2);
+  if (denominator === 0) return null;
+  return numerator / denominator;
+}
+
+function correlationStrength(value: number | null) {
+  if (value == null) return "MUESTRA INSUFICIENTE";
+  const abs = Math.abs(value);
+  if (abs >= 0.7) return "FUERTE";
+  if (abs >= 0.4) return "MODERADA";
+  if (abs >= 0.2) return "DÉBIL";
+  return "MUY DÉBIL";
+}
+
 export async function getRoastingDashboard(organizationId: string) {
   const db = getDb();
 
@@ -626,6 +660,86 @@ export async function getRoastingDashboard(organizationId: string) {
     };
   });
 
+  const correlationDefinitions = [
+    {
+      key: "DTR",
+      label: "DTR vs puntaje sensorial",
+      read: (batch: (typeof enrichedBatches)[number]) => n(batch.dtrPct),
+    },
+    {
+      key: "WEIGHT_LOSS",
+      label: "Merma vs puntaje sensorial",
+      read: (batch: (typeof enrichedBatches)[number]) =>
+        n(batch.weightLossPct),
+    },
+    {
+      key: "FIRST_CRACK_TIME",
+      label: "Tiempo a FC vs puntaje sensorial",
+      read: (batch: (typeof enrichedBatches)[number]) =>
+        batch.firstCrackTimeS,
+    },
+    {
+      key: "DROP_TEMP",
+      label: "Temperatura drop vs puntaje sensorial",
+      read: (batch: (typeof enrichedBatches)[number]) =>
+        n(batch.dropTempC),
+    },
+    {
+      key: "REST_AT_CUPPING",
+      label: "Reposo al catar vs puntaje sensorial",
+      read: (batch: (typeof enrichedBatches)[number]) => {
+        if (!batch.latestSensory) return null;
+        return Math.max(
+          0,
+          (batch.latestSensory.evaluatedAt.getTime() -
+            batch.roastedAt.getTime()) /
+            86_400_000,
+        );
+      },
+    },
+  ];
+
+  const correlations = correlationDefinitions.map((definition) => {
+    const pairs = enrichedBatches.flatMap((batch) => {
+      const x = definition.read(batch);
+      const y = n(batch.latestSensory?.overallScore);
+      return x != null && y != null ? [{ x, y }] : [];
+    });
+    const r = pearson(pairs);
+    return {
+      key: definition.key,
+      label: definition.label,
+      samples: pairs.length,
+      r,
+      strength: correlationStrength(r),
+    };
+  });
+
+  const strongestCorrelation = correlations
+    .filter(
+      (row) =>
+        row.r != null &&
+        row.samples >= 6 &&
+        Math.abs(row.r) >= 0.4,
+    )
+    .sort(
+      (a, b) => Math.abs(b.r ?? 0) - Math.abs(a.r ?? 0),
+    )[0] ?? null;
+
+  if (strongestCorrelation) {
+    recommendations.push({
+      level: "INFO",
+      title: "Señal estadística en tueste",
+      detail:
+        strongestCorrelation.label +
+        ": r=" +
+        strongestCorrelation.r!.toFixed(2) +
+        " con n=" +
+        strongestCorrelation.samples +
+        ". Es correlación observada; no demuestra causalidad.",
+    });
+  }
+
   const thirtyDaysAgo = Date.now() - 30 * 86_400_000;
   const recentBatches = enrichedBatches.filter(
     (batch) => batch.roastedAt.getTime() >= thirtyDaysAgo,
@@ -661,6 +775,7 @@ export async function getRoastingDashboard(organizationId: string) {
     restPerformance: restBuckets,
     empiricalRest,
     profilePerformance,
+    correlations,
     summary: {
       batches30: recentBatches.length,
       green30,
