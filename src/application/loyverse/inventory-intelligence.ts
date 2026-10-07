@@ -1,4 +1,4 @@
-import { and, eq, gte } from "drizzle-orm";
+import { and, eq, gte, inArray } from "drizzle-orm";
 import { getLoyverseInventoryView } from "@/src/application/loyverse/inventory-view";
 import { getDb } from "@/src/infrastructure/db/client";
 import {
@@ -194,7 +194,7 @@ export async function getInventoryIntelligence(
         .where(
           and(
             eq(operationalEvents.organizationId, organizationId),
-            eq(operationalEvents.eventType, "WASTE"),
+            inArray(operationalEvents.eventType, ["WASTE", "REMAKE"]),
             gte(operationalEvents.occurredAt, since35),
           ),
         ),
