@@ -88,6 +88,23 @@ export default async function AnalyticsPage({
           <p>{change(data.trend.avgTicketChange)}</p>
         </article>
         <article className="card">
+          <span className="pill">CONTRIBUCIÓN · 7 DÍAS</span>
+          <div className="metric">
+            {money.format(data.trend.currentContribution)}
+          </div>
+          <p>
+            {data.trend.currentContributionPct.toFixed(1)}% de venta ·{" "}
+            {change(data.trend.contributionChange)} vs periodo previo
+          </p>
+        </article>
+        <article className="card">
+          <span className="pill">COGS · 7 DÍAS</span>
+          <div className="metric">
+            {money.format(data.trend.current.cogs)}
+          </div>
+          <p>costo registrado en líneas de venta Loyverse.</p>
+        </article>
+        <article className="card">
           <span className="pill">CAPTURA LEALTAD</span>
           <div className="metric">
             {data.loyalty.captureRate.toFixed(1)}%
@@ -211,6 +228,16 @@ export default async function AnalyticsPage({
               <span>
                 {number.format(item.qty)} · {money.format(item.sales)}
               </span>
+              <div className="muted">
+                COGS {money.format(item.cogs)} · contribución{" "}
+                {money.format(item.contribution)} (
+                {item.contributionPct.toFixed(0)}%)
+              </div>
+              <div className="muted">
+                COGS {money.format(item.cogs)} · contribución{" "}
+                {money.format(item.contribution)} (
+                {item.contributionPct.toFixed(0)}%)
+              </div>
             </div>
           ))}
         </article>

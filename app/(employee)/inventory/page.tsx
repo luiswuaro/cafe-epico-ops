@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { refreshLoyverseInventorySource } from "./loyverse-actions";
 import { reportShortage, resolveShortage } from "./actions";
-import { getLoyverseInventoryView } from "@/src/application/loyverse/inventory-view";
+import { getInventoryIntelligence } from "@/src/application/loyverse/inventory-intelligence";
 import { listOpenShortages } from "@/src/application/inventory/shortages";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
 import {
@@ -22,8 +22,22 @@ const number = new Intl.NumberFormat("es-MX", {
 const money = new Intl.NumberFormat("es-MX", {
   style: "currency",
   currency: "MXN",
-  maximumFractionDigits: 2,
+  maximumFractionDigits: 0,
 });
+
+function coverageLabel(days: number | null) {
+  if (days == null) return "sin consumo calculable";
+  if (!Number.isFinite(days)) return "sin consumo calculable";
+  if (days > 99) return ">99 días";
+  return `${days.toFixed(1)} días`;
+}
+
+function statusLabel(status: "CRITICAL" | "WATCH" | "OK" | "NO_DATA") {
+  if (status === "CRITICAL") return "CRÍTICO";
+  if (status === "WATCH") return "REVISAR";
+  if (status === "OK") return "OK";
+  return "SIN DATO";
+}
 
 export default async function InventoryPage({ searchParams }: PageProps) {
   const params = await searchParams;
@@ -46,7 +60,7 @@ export default async function InventoryPage({ searchParams }: PageProps) {
   );
 
   const [inventory, shortages, canResolve, canSync] = await Promise.all([
-    getLoyverseInventoryView(employee.organizationId, requestedStore),
+    getInventoryIntelligence(employee.organizationId, requestedStore),
     listOpenShortages(employee.organizationId, employee.homeStoreId),
     employeeHasPermission(
       employee.id,
@@ -70,59 +84,37 @@ export default async function InventoryPage({ searchParams }: PageProps) {
   const error = typeof params.error === "string" ? params.error : null;
   const refreshed = params.refreshed === "1";
 
+  const purchaseRows = inventory.smartRows
+    .filter((row) => row.suggestedPurchase > 0.0005)
+    .slice(0, 20);
+
+  const tomorrowRows = inventory.smartRows
+    .filter((row) => row.expectedTomorrow > 0.0005)
+    .sort((a, b) => b.expectedTomorrow - a.expectedTomorrow)
+    .slice(0, 15);
+
   return (
     <main className="shell">
       <section className="hero">
-        <p className="eyebrow">INVENTARIO · FUENTE LOYVERSE</p>
-        <h1>Inventario</h1>
+        <p className="eyebrow">INVENTARIO · LOYVERSE + INTELIGENCIA</p>
+        <h1>Inventario operativo</h1>
         <p className="muted">
-          La existencia que ves aquí viene directamente del POS. Para cambiar
-          cantidades, costos o artículos se usa Loyverse; Café Épico Ops solo
-          los refleja y analiza.
+          Loyverse conserva la existencia. Ops calcula consumo teórico desde
+          ventas y recetas, cobertura, reposición sugerida y cambios históricos.
         </p>
       </section>
 
       {refreshed && (
         <p className="card status-ok">
-          Loyverse actualizado · {String(params.items ?? "0")} artículos ·{" "}
-          {String(params.levels ?? "0")} niveles de inventario.
+          Actualización completa · {String(params.items ?? "0")} artículos ·{" "}
+          {String(params.levels ?? "0")} existencias ·{" "}
+          {String(params.receipts ?? "0")} tickets revisados.
         </p>
       )}
 
       {error && <p className="alert">No se pudo actualizar: {error}</p>}
 
-      <section className="grid">
-        <article className="card">
-          <span className="pill">FUENTE MAESTRA</span>
-          <div className="metric">Loyverse</div>
-          <p>
-            {inventory.rows.length} artículos con control de stock en{" "}
-            <strong>{inventory.selectedStore?.name ?? "sin tienda"}</strong>.
-          </p>
-        </article>
-
-        <article className="card">
-          <span className="pill">ÚLTIMA LECTURA</span>
-          <div className="metric">
-            {inventory.lastSyncedAt
-              ? inventory.lastSyncedAt.toLocaleTimeString("es-MX", {
-                  timeZone: "America/Mexico_City",
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })
-              : "—"}
-          </div>
-          <p className="muted">
-            {inventory.lastSyncedAt
-              ? inventory.lastSyncedAt.toLocaleDateString("es-MX", {
-                  timeZone: "America/Mexico_City",
-                })
-              : "Todavía no hay una sincronización de inventario."}
-          </p>
-        </article>
-      </section>
-
-      <section className="card" style={{ marginTop: "1rem" }}>
+      <section className="card" style={{ marginBottom: "1rem" }}>
         <div
           style={{
             display: "flex",
@@ -147,68 +139,235 @@ export default async function InventoryPage({ searchParams }: PageProps) {
 
           {canSync && (
             <form action={refreshLoyverseInventorySource}>
-              <button type="submit">Actualizar desde Loyverse ahora</button>
+              <button type="submit">
+                Actualizar Loyverse + ventas ahora
+              </button>
             </form>
           )}
         </div>
         <p className="muted" style={{ marginTop: ".6rem" }}>
-          Ya no se usa “inventario inicial”, mapeo ni ajustes de existencia en
-          Ops. Si corriges una cantidad en Loyverse, pulsa actualizar y aquí se
-          refleja.
+          Este botón no suma inventario: reemplaza el espejo con la existencia
+          actual de Loyverse y guarda un histórico solo cuando detecta cambios.
         </p>
       </section>
 
-      <section className="stack" style={{ marginTop: "1rem" }}>
-        {[...groups.entries()].map(([category, rows]) => (
-          <article className="card" key={category}>
-            <p className="eyebrow">{category}</p>
-            <div className="stack">
-              {rows.map((row) => (
-                <div className="task" key={row.variantExternalId}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div>
-                      <strong>{row.itemName}</strong>{" "}
-                      {row.low && (
-                        <span className="status-warn">STOCK BAJO</span>
-                      )}
-                    </div>
-                    <div className="muted">
-                      {row.sku ? "SKU " + row.sku + " · " : ""}
-                      {row.soldByWeight
-                        ? "Loyverse: peso/volumen"
-                        : "Loyverse: pieza"}
-                    </div>
-                    <div style={{ marginTop: ".35rem" }}>
-                      Existencia:{" "}
-                      <strong>
-                        {number.format(row.inStock)} {row.unitLabel}
-                      </strong>
-                      {row.lowStock != null
-                        ? " · mínimo " + number.format(row.lowStock)
-                        : ""}
-                      {row.optimalStock != null
-                        ? " · óptimo " + number.format(row.optimalStock)
-                        : ""}
-                    </div>
-                    {row.purchaseCost != null && (
-                      <div className="muted">
-                        Costo registrado: {money.format(row.purchaseCost)}
-                      </div>
-                    )}
+      <section className="grid">
+        <article className="card">
+          <span className="pill">INSUMOS CONTROLADOS</span>
+          <div className="metric">{inventory.rows.length}</div>
+          <p>{inventory.selectedStore?.name ?? "Sin tienda seleccionada"}</p>
+        </article>
+
+        <article className="card">
+          <span className="pill">REQUIEREN ATENCIÓN</span>
+          <div className="metric">{inventory.summary.atRisk}</div>
+          <p>menos de 3 días de cobertura o stock bajo Loyverse.</p>
+        </article>
+
+        <article className="card">
+          <span className="pill">REPOSICIÓN SUGERIDA</span>
+          <div className="metric">{inventory.summary.suggestedPurchases}</div>
+          <p>insumos para llevar aproximadamente a 7 días de cobertura.</p>
+        </article>
+
+        <article className="card">
+          <span className="pill">COSTO ESTIMADO</span>
+          <div className="metric">
+            {money.format(inventory.summary.estimatedReplenishmentCost)}
+          </div>
+          <p>solo suma insumos con costo configurado en Loyverse.</p>
+        </article>
+      </section>
+
+      <section className="card" style={{ marginTop: "1rem" }}>
+        <h2>Qué revisar antes de mañana</h2>
+        <p className="muted">
+          Pronóstico por recetas vendidas. Usa promedio de este mismo día de la
+          semana cuando hay al menos 2 muestras; si no, promedio de 14 días.
+          Muestra en la unidad nativa de Loyverse.
+        </p>
+
+        {tomorrowRows.length === 0 ? (
+          <p className="muted">
+            Todavía no hay ventas/recetas suficientes para pronosticar consumo.
+          </p>
+        ) : (
+          <div className="stack">
+            {tomorrowRows.map((row) => (
+              <div className="task" key={row.variantExternalId}>
+                <div style={{ flex: 1 }}>
+                  <strong>{row.itemName}</strong>{" "}
+                  <span
+                    className={
+                      row.status === "CRITICAL" || row.status === "WATCH"
+                        ? "status-warn"
+                        : "status-ok"
+                    }
+                  >
+                    {statusLabel(row.status)}
+                  </span>
+                  <div className="muted">
+                    Actual {number.format(row.inStock)} {row.unitLabel}
+                    {" · "}
+                    cobertura {coverageLabel(row.daysCover)}
+                  </div>
+                  <div>
+                    Mañana esperado:{" "}
+                    <strong>
+                      {number.format(row.expectedTomorrow)} {row.unitLabel}
+                    </strong>
+                    {" · "}
+                    mañana/primer turno{" "}
+                    {number.format(row.expectedTomorrowMorning)}
+                    {" · "}
+                    tarde{" "}
+                    {number.format(row.expectedTomorrowAfternoon)}
                   </div>
                 </div>
-              ))}
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="card" style={{ marginTop: "1rem" }}>
+        <h2>Lista de reposición sugerida</h2>
+        <p className="muted">
+          Objetivo automático: aproximadamente 7 días de cobertura, o el stock
+          óptimo de Loyverse cuando esté configurado.
+        </p>
+
+        {purchaseRows.length === 0 ? (
+          <p className="status-ok">
+            Con los datos actuales no hay reposición sugerida.
+          </p>
+        ) : (
+          <div className="stack">
+            {purchaseRows.map((row) => (
+              <div className="task" key={row.variantExternalId}>
+                <div style={{ flex: 1 }}>
+                  <strong>{row.itemName}</strong>
+                  <div className="muted">
+                    Actual {number.format(row.inStock)} {row.unitLabel}
+                    {" · "}
+                    consumo/día {number.format(row.avgDailyUsage14)}
+                    {" · "}
+                    cobertura {coverageLabel(row.daysCover)}
+                  </div>
+                </div>
+                <div style={{ textAlign: "right" }}>
+                  <strong>
+                    +{number.format(row.suggestedPurchase)} {row.unitLabel}
+                  </strong>
+                  {row.suggestedCost != null && (
+                    <div className="muted">
+                      ≈ {money.format(row.suggestedCost)}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="card" style={{ marginTop: "1rem" }}>
+        <h2>Histórico reciente de existencia</h2>
+        <p className="muted">
+          Cada actualización guarda un punto cuando la existencia cambia.
+          Esto permite reconstruir bajas, reposiciones y correcciones de
+          Loyverse sin crear un segundo inventario.
+        </p>
+        {inventory.recentChanges.length === 0 ? (
+          <p className="muted">
+            Este histórico empieza desde esta versión. Después de los primeros
+            cambios de stock aparecerán aquí.
+          </p>
+        ) : (
+          <div className="stack">
+            {inventory.recentChanges.map((change, index) => (
+              <div
+                className="task"
+                key={
+                  change.variantExternalId +
+                  "-" +
+                  change.capturedAt.toISOString() +
+                  "-" +
+                  index
+                }
+              >
+                <div style={{ flex: 1 }}>
+                  <strong>{change.itemName}</strong>
+                  <div className="muted">
+                    {change.capturedAt.toLocaleString("es-MX", {
+                      timeZone: "America/Mexico_City",
+                      dateStyle: "short",
+                      timeStyle: "short",
+                    })}
+                  </div>
+                </div>
+                <div
+                  className={
+                    change.delta < 0 ? "status-warn" : "status-ok"
+                  }
+                >
+                  {number.format(change.before)} →{" "}
+                  {number.format(change.after)} {change.unitLabel}
+                  {" · "}
+                  {change.delta > 0 ? "+" : ""}
+                  {number.format(change.delta)}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="card" style={{ marginTop: "1rem" }}>
+        <h2>Inventario completo</h2>
+        <p className="muted">
+          Existencia actual directa de Loyverse. El consumo/día es teórico
+          según ventas y composición de recetas.
+        </p>
+        <div className="stack">
+          {inventory.smartRows.map((row) => (
+            <div className="task" key={row.variantExternalId}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <strong>{row.itemName}</strong>{" "}
+                <span
+                  className={
+                    row.status === "CRITICAL" || row.status === "WATCH"
+                      ? "status-warn"
+                      : "muted"
+                  }
+                >
+                  {statusLabel(row.status)}
+                </span>
+                <div className="muted">
+                  {row.category}
+                  {row.sku ? " · SKU " + row.sku : ""}
+                </div>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <strong>
+                  {number.format(row.inStock)} {row.unitLabel}
+                </strong>
+                <div className="muted">
+                  consumo/día {number.format(row.avgDailyUsage14)}
+                  {" · "}
+                  {coverageLabel(row.daysCover)}
+                </div>
+              </div>
             </div>
-          </article>
-        ))}
+          ))}
+        </div>
       </section>
 
       <section className="grid" style={{ marginTop: "1rem" }}>
         <form action={reportShortage} className="card stack">
           <h2>Reportar faltante operativo</h2>
           <p className="muted">
-            Esto deja una nota interna para seguimiento; no modifica la
-            existencia de Loyverse.
+            Deja seguimiento interno; no altera la existencia en Loyverse.
           </p>
           <label>
             Insumo / producto
