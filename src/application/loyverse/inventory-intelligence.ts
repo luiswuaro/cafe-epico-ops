@@ -103,6 +103,7 @@ export async function getInventoryIntelligence(
         traffic: {
           currentHour: null,
           nextPeak: null,
+          dayPeak: null,
         },
         topProducts: [],
       },
