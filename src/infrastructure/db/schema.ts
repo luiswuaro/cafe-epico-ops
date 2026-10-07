@@ -166,24 +166,6 @@ export const suppliers = pgTable("suppliers", {
   city: text("city"),
   contact: text("contact"),
   notes: text("notes"),
-  hibeanBeanCloudId: text("hibean_bean_cloud_id"),
-  hibeanBeanName: text("hibean_bean_name"),
-  hibeanGreenInventoryG: numeric("hibean_green_inventory_g", {
-    precision: 14,
-    scale: 2,
-  }),
-  hibeanInventoryReportedG: numeric("hibean_inventory_reported_g", {
-    precision: 14,
-    scale: 2,
-  }),
-  hibeanInventoryConfirmedAt: timestamp(
-    "hibean_inventory_confirmed_at",
-    { withTimezone: true },
-  ),
-  hibeanInventoryConfirmedByEmployeeId: uuid(
-    "hibean_inventory_confirmed_by_employee_id",
-  ).references(() => employees.id, { onDelete: "set null" }),
-  hibeanInventorySourceRoastId: text("hibean_inventory_source_roast_id"),
   isActive: boolean("is_active").notNull().default(true),
   ...timestamps,
 });
