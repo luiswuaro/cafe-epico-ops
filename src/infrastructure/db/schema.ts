@@ -1039,6 +1039,9 @@ export const posOrders = pgTable("pos_orders", {
   matchedExternalReceiptId: text("matched_external_receipt_id"),
   matchedAt: timestamp("matched_at", { withTimezone: true }),
   paidAt: timestamp("paid_at", { withTimezone: true }).notNull().defaultNow(),
+  cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+  cancelledByEmployeeId: uuid("cancelled_by_employee_id").references(() => employees.id, { onDelete: "set null" }),
+  cancelReason: text("cancel_reason"),
   ...timestamps,
 }, (t) => [
   uniqueIndex("pos_orders_client_uidx").on(t.organizationId, t.clientOrderId),
@@ -1063,6 +1066,36 @@ export const posOrderLines = pgTable("pos_order_lines", {
 }, (t) => [
   index("pos_order_lines_order_idx").on(t.orderId),
   index("pos_order_lines_catalog_idx").on(t.organizationId, t.catalogExternalId),
+]);
+
+export const posCatalogOverrides = pgTable("pos_catalog_overrides", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  sourceExternalId: text("source_external_id").notNull(),
+  isEnabled: boolean("is_enabled").notNull().default(true),
+  displayName: text("display_name"),
+  displayPrice: numeric("display_price", { precision: 14, scale: 2 }),
+  recipeDineIn: jsonb("recipe_dine_in").$type<Record<string, unknown>>(),
+  recipeTakeaway: jsonb("recipe_takeaway").$type<Record<string, unknown>>(),
+  updatedByEmployeeId: uuid("updated_by_employee_id").references(() => employees.id, { onDelete: "set null" }),
+  ...timestamps,
+}, (t) => [
+  uniqueIndex("pos_catalog_overrides_source_uidx").on(t.organizationId, t.sourceExternalId),
+]);
+
+export const posManualProducts = pgTable("pos_manual_products", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  category: varchar("category", { length: 40 }).notNull(),
+  price: numeric("price", { precision: 14, scale: 2 }).notNull(),
+  isActive: boolean("is_active").notNull().default(true),
+  recipeDineIn: jsonb("recipe_dine_in").$type<Record<string, unknown>>().notNull().default({}),
+  recipeTakeaway: jsonb("recipe_takeaway").$type<Record<string, unknown>>().notNull().default({}),
+  createdByEmployeeId: uuid("created_by_employee_id").references(() => employees.id, { onDelete: "set null" }),
+  ...timestamps,
+}, (t) => [
+  index("pos_manual_products_org_active_idx").on(t.organizationId, t.isActive),
 ]);
 
 export const posPayments = pgTable("pos_payments", {

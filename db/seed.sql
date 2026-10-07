@@ -32,7 +32,9 @@ insert into permissions(code,description) values
 ('integration.read','Consultar estado de integraciones'),
 ('integration.manage','Configurar integraciones'),
 ('pos.sell','Registrar ventas en el POS'),
-('pos.mirror.read','Comparar ventas espejo contra Loyverse')
+('pos.mirror.read','Comparar ventas espejo contra Loyverse'),
+('pos.cancel','Cancelar cuentas y tickets del POS'),
+('pos.catalog.manage','Administrar productos y recetas del POS')
 on conflict(code) do nothing;
 
 insert into roles(id,organization_id,code,name,description,is_system_role) values

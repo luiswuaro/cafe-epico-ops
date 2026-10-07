@@ -725,3 +725,143 @@ th, td { vertical-align: top; }
   .pos-product-grid { grid-template-columns: 1fr 1fr; }
   .pos-mirror-grid { grid-template-columns: 1fr; }
 }
+
+
+/* POS catalog admin + thermal receipt */
+.pos-result-actions {
+  display: flex;
+  gap: .5rem;
+  flex-wrap: wrap;
+}
+.pos-cancel-panel,
+.pos-recipe-editor,
+.pos-admin-create {
+  margin-top: .75rem;
+}
+.pos-cancel-panel > summary,
+.pos-recipe-editor > summary,
+.pos-admin-create > summary {
+  cursor: pointer;
+  font-weight: 850;
+  padding: .45rem 0;
+}
+.pos-cancel-panel form,
+.pos-recipe-editor form,
+.pos-admin-create form {
+  margin-top: .65rem;
+}
+.pos-admin-list {
+  display: grid;
+  gap: .65rem;
+  margin-top: 1rem;
+}
+.pos-admin-item h2 {
+  margin-bottom: .2rem;
+}
+.receipt-shell {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+.receipt-toolbar {
+  display: flex;
+  gap: .5rem;
+  justify-content: center;
+  margin-bottom: 1rem;
+}
+.receipt-paper {
+  width: min(100%, 80mm);
+  margin: 0 auto;
+  padding: 6mm 5mm;
+  background: white;
+  color: #111;
+  border: 1px solid var(--line);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+.receipt-paper header,
+.receipt-paper footer {
+  text-align: center;
+}
+.receipt-paper h1 {
+  margin: 0 0 .2rem;
+  font-size: 20px;
+}
+.receipt-paper p {
+  margin: .18rem 0;
+}
+.receipt-meta {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: .15rem .6rem;
+  padding: .55rem 0;
+  border-top: 1px dashed #777;
+  border-bottom: 1px dashed #777;
+  margin: .55rem 0;
+}
+.receipt-lines {
+  display: grid;
+}
+.receipt-line,
+.receipt-total {
+  display: flex;
+  justify-content: space-between;
+  gap: .7rem;
+  padding: .28rem 0;
+}
+.receipt-total {
+  border-top: 2px solid #111;
+  margin-top: .4rem;
+  padding-top: .55rem;
+  font-size: 15px;
+}
+.receipt-cancelled {
+  margin: .7rem 0;
+  padding: .5rem;
+  border: 2px solid #111;
+  text-align: center;
+  font-weight: 900;
+}
+.receipt-admin {
+  max-width: 80mm;
+  margin: 1rem auto 0;
+}
+
+@media (max-width: 700px) {
+  .pos-admin-item .section-heading {
+    align-items: stretch;
+  }
+  .pos-admin-item .section-heading form button,
+  .pos-result-actions > * {
+    width: 100%;
+    text-align: center;
+  }
+}
+
+@media print {
+  @page {
+    size: 80mm auto;
+    margin: 0;
+  }
+  body {
+    background: white !important;
+    padding: 0 !important;
+  }
+  .topbar,
+  .nav,
+  .no-print {
+    display: none !important;
+  }
+  .receipt-shell {
+    width: 80mm;
+    margin: 0;
+    padding: 0;
+  }
+  .receipt-paper {
+    width: 80mm;
+    border: 0;
+    margin: 0;
+    padding: 5mm 4mm;
+    box-shadow: none;
+  }
+}

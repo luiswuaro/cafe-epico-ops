@@ -6,7 +6,11 @@ import {
   getShadowOrderMirror,
 } from "@/src/application/pos/mirror";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
-import { assertEmployeePermission } from "@/src/infrastructure/auth/permissions";
+import {
+  assertEmployeePermission,
+  employeeHasPermission,
+} from "@/src/infrastructure/auth/permissions";
+import { cancelPosOrder } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -45,7 +49,7 @@ export default async function PosPage({
 
   const savedId = typeof params.saved === "string" ? params.saved : null;
 
-  const [catalog, recent, saved] = await Promise.all([
+  const [catalog, recent, saved, canCancel] = await Promise.all([
     getPosCatalog(employee.organizationId),
     getRecentShadowOrders(
       employee.organizationId,
@@ -55,6 +59,11 @@ export default async function PosPage({
     savedId
       ? getShadowOrderMirror(employee.organizationId, savedId)
       : Promise.resolve(null),
+    employeeHasPermission(
+      employee.id,
+      "pos.cancel",
+      employee.homeStoreId,
+    ),
   ]);
 
   return (
@@ -84,11 +93,13 @@ export default async function PosPage({
             <div>
               <p className="eyebrow">VENTA REGISTRADA · {saved.order.folio}</p>
               <h2>
-                {saved.mirror?.exact
-                  ? "Espejo exacto encontrado"
-                  : saved.mirror
-                    ? "Encontré una venta para revisar"
-                    : "OPS guardó la venta; falta encontrar su espejo"}
+                {saved.order.status === "CANCELLED"
+                  ? "Venta cancelada"
+                  : saved.mirror?.exact
+                    ? "Espejo exacto encontrado"
+                    : saved.mirror
+                      ? "Encontré una venta para revisar"
+                      : "OPS guardó la venta; falta encontrar su espejo"}
               </h2>
             </div>
             <strong className="metric">{money.format(Number(saved.order.total))}</strong>
@@ -144,9 +155,39 @@ export default async function PosPage({
               </span>
             ))}
           </div>
-          <Link href="/pos" className="button">
-            Nueva orden espejo
-          </Link>
+          <div className="pos-result-actions">
+            <Link href={"/pos/receipt/" + saved.order.id} className="button">
+              Imprimir ticket
+            </Link>
+            <Link href="/pos" className="button">
+              Nueva orden espejo
+            </Link>
+          </div>
+
+          {canCancel && saved.order.status !== "CANCELLED" && (
+            <details className="pos-cancel-panel">
+              <summary>Cancelar ticket</summary>
+              <form action={cancelPosOrder} className="stack">
+                <input type="hidden" name="orderId" value={saved.order.id} />
+                <label>
+                  Motivo
+                  <input
+                    name="reason"
+                    required
+                    minLength={3}
+                    placeholder="Ej. captura duplicada"
+                  />
+                </label>
+                <button type="submit">Cancelar como administrador</button>
+              </form>
+            </details>
+          )}
+
+          {saved.order.status === "CANCELLED" && (
+            <p className="status-bad">
+              CANCELADO · {saved.order.cancelReason ?? "Sin motivo"}
+            </p>
+          )}
         </section>
       )}
 

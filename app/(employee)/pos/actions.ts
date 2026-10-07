@@ -97,10 +97,10 @@ export async function createShadowSale(formData: FormData) {
         serviceMode,
         sourceRecipeExternalId: serviceRecipe.externalId,
         sourceCategory: serviceRecipe.sourceCategory,
-        components: serviceRecipe.effectiveComponents.map((component) => ({
+        components: serviceRecipe.components.map((component) => ({
           variantExternalId: component.variantExternalId,
           itemExternalId: component.itemExternalId,
-          name: component.sourceName,
+          name: component.name,
           quantity: component.quantity * line.quantity,
           unitLabel: component.unitLabel,
           category: component.category,
@@ -195,4 +195,77 @@ export async function createShadowSale(formData: FormData) {
   });
 
   redirect("/pos?saved=" + order.id);
+}
+
+export async function cancelPosOrder(formData: FormData) {
+  const { user, employee } = await getCurrentEmployee();
+  if (!employee.homeStoreId) {
+    throw new Error("El empleado no tiene sucursal asignada");
+  }
+
+  await assertEmployeePermission(
+    employee.id,
+    "pos.cancel",
+    employee.homeStoreId,
+  );
+
+  const orderId = String(formData.get("orderId") ?? "").trim();
+  const reason = String(formData.get("reason") ?? "").trim();
+  if (!orderId) throw new Error("Falta la orden a cancelar");
+  if (reason.length < 3) throw new Error("Escribe el motivo de cancelación");
+
+  const db = getDb();
+  const [order] = await db
+    .select()
+    .from(posOrders)
+    .where(
+      and(
+        eq(posOrders.id, orderId),
+        eq(posOrders.organizationId, employee.organizationId),
+        eq(posOrders.storeId, employee.homeStoreId),
+      ),
+    )
+    .limit(1);
+
+  if (!order) throw new Error("Orden no encontrada");
+  if (order.status === "CANCELLED") {
+    redirect("/pos?saved=" + order.id);
+  }
+  if (order.inventoryEffectApplied) {
+    throw new Error(
+      "Esta venta ya afectó inventario y todavía requiere el flujo de reversa administrativa.",
+    );
+  }
+
+  const now = new Date();
+  await db.transaction(async (tx) => {
+    await tx
+      .update(posOrders)
+      .set({
+        status: "CANCELLED",
+        cancelledAt: now,
+        cancelledByEmployeeId: employee.id,
+        cancelReason: reason,
+        updatedAt: now,
+      })
+      .where(eq(posOrders.id, order.id));
+
+    await tx.insert(auditEvents).values({
+      organizationId: employee.organizationId,
+      storeId: employee.homeStoreId,
+      actorUserId: user.id,
+      actorEmployeeId: employee.id,
+      action: "POS_ORDER_CANCELLED",
+      entityType: "pos_order",
+      entityId: order.id,
+      beforeData: { status: order.status },
+      afterData: {
+        status: "CANCELLED",
+        reason,
+        inventoryEffectApplied: order.inventoryEffectApplied,
+      },
+    });
+  });
+
+  redirect("/pos?saved=" + order.id + "&cancelled=1");
 }

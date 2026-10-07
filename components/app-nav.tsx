@@ -64,6 +64,7 @@ export async function AppNav() {
         <details className="nav-menu">
           <summary>Gestión</summary>
           <div className="nav-popover">
+            <Link href="/admin/pos/catalog">Catálogo POS</Link>
             <Link href="/admin/checklists">Tareas</Link>
             <Link href="/admin/reports/shifts">Turnos</Link>
             <Link href="/admin/reports/productivity">Productividad</Link>
