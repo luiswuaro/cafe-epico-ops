@@ -397,45 +397,69 @@ export async function setOpeningInventoryBalance(formData: FormData) {
 
   const [[location], [item], [existingMovement], [activeMapping]] =
     await Promise.all([
-    db
-      .select({ id: inventoryLocations.id })
-      .from(inventoryLocations)
-      .where(
-        and(
-          eq(inventoryLocations.id, parsed.data.locationId),
-          eq(inventoryLocations.organizationId, employee.organizationId),
-          eq(inventoryLocations.storeId, employee.homeStoreId),
-          eq(inventoryLocations.isActive, true),
-        ),
-      )
-      .limit(1),
-    db
-      .select({
-        id: inventoryItems.id,
-        name: inventoryItems.name,
-        canonicalUnit: inventoryItems.canonicalUnit,
-      })
-      .from(inventoryItems)
-      .where(
-        and(
-          eq(inventoryItems.id, parsed.data.inventoryItemId),
-          eq(inventoryItems.organizationId, employee.organizationId),
-          eq(inventoryItems.isActive, true),
-        ),
-      )
-      .limit(1),
-    db
-      .select({ id: inventoryMovements.id })
-      .from(inventoryMovements)
-      .where(
-        and(
-          eq(inventoryMovements.storeId, employee.homeStoreId),
-          eq(inventoryMovements.locationId, parsed.data.locationId),
-          eq(inventoryMovements.inventoryItemId, parsed.data.inventoryItemId),
-        ),
-      )
-      .limit(1),
-  ]);
+      db
+        .select({ id: inventoryLocations.id })
+        .from(inventoryLocations)
+        .where(
+          and(
+            eq(inventoryLocations.id, parsed.data.locationId),
+            eq(inventoryLocations.organizationId, employee.organizationId),
+            eq(inventoryLocations.storeId, employee.homeStoreId),
+            eq(inventoryLocations.isActive, true),
+          ),
+        )
+        .limit(1),
+      db
+        .select({
+          id: inventoryItems.id,
+          name: inventoryItems.name,
+          canonicalUnit: inventoryItems.canonicalUnit,
+        })
+        .from(inventoryItems)
+        .where(
+          and(
+            eq(inventoryItems.id, parsed.data.inventoryItemId),
+            eq(inventoryItems.organizationId, employee.organizationId),
+            eq(inventoryItems.isActive, true),
+          ),
+        )
+        .limit(1),
+      db
+        .select({ id: inventoryMovements.id })
+        .from(inventoryMovements)
+        .where(
+          and(
+            eq(inventoryMovements.storeId, employee.homeStoreId),
+            eq(inventoryMovements.locationId, parsed.data.locationId),
+            eq(
+              inventoryMovements.inventoryItemId,
+              parsed.data.inventoryItemId,
+            ),
+          ),
+        )
+        .limit(1),
+      db
+        .select({ id: loyverseInventoryMappings.id })
+        .from(loyverseInventoryMappings)
+        .where(
+          and(
+            eq(
+              loyverseInventoryMappings.organizationId,
+              employee.organizationId,
+            ),
+            eq(
+              loyverseInventoryMappings.storeId,
+              employee.homeStoreId,
+            ),
+            eq(
+              loyverseInventoryMappings.inventoryItemId,
+              parsed.data.inventoryItemId,
+            ),
+            eq(loyverseInventoryMappings.isActive, true),
+          ),
+        )
+        .limit(1),
+    ]);
 
   if (!location || !item) throw new Error("Insumo o ubicación inválida");
 
