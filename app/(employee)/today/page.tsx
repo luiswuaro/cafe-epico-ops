@@ -101,6 +101,12 @@ export default async function TodayPage() {
           <p className="eyebrow">QC ESPRESSO · HOY</p>
           <div className="metric">{summary.espressoToday.checks}</div>
           <p>controles registrados</p>
+          {summary.espressoToday.passRate != null && (
+            <p className="muted">
+              Aprobación {summary.espressoToday.passRate.toFixed(0)}% · tiempo
+              medio {summary.espressoToday.averageTimeS?.toFixed(1)} s
+            </p>
+          )}
           {summary.espressoToday.consecutiveOutOfSpec >= 2 ? (
             <p className="status-warn">
               {summary.espressoToday.consecutiveOutOfSpec} controles
