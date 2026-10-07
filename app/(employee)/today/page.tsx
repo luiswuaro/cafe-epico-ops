@@ -4,6 +4,7 @@ import {
   reportBarIncident,
   reportBarWaste,
 } from "./actions";
+import { buildBaristaActionQueue } from "@/src/application/barista/action-queue";
 import { getBaristaCockpit } from "@/src/application/barista/cockpit";
 import { getTodayOperationalSummary } from "@/src/application/dashboard/today";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
@@ -53,6 +54,17 @@ export default async function TodayPage({
     cockpit.currentShift === "MORNING"
       ? cockpit.currentHour >= 15
       : cockpit.currentHour >= 21;
+  const actionQueue = buildBaristaActionQueue({
+    currentHour: cockpit.currentHour,
+    opening: summary.opening,
+    handoff: summary.handoff,
+    latestQc: cockpit.latestQc,
+    shiftRisks: cockpit.shiftRisks,
+    nextPeak: cockpit.traffic.nextPeak,
+    activeRoast: cockpit.activeRoast,
+    incidents: cockpit.incidents,
+    inventoryCorrectionCount: cockpit.inventoryCorrectionCount,
+  });
 
   return (
     <main className="shell">
@@ -218,22 +230,25 @@ export default async function TodayPage({
       </section>
 
       <section className="card" style={{ marginTop: "1rem" }}>
-        <p className="eyebrow">PRIORIDADES DEL TURNO</p>
+        <p className="eyebrow">COLA OPERATIVA</p>
         <h2>Qué hacer ahora</h2>
         <p className="muted">
-          Son recomendaciones operativas basadas en QC, stock y demanda
-          histórica comparable.
+          Solo muestra pendientes que requieren una acción o revisión. Al
+          corregirse el dato, desaparecen automáticamente de esta lista.
         </p>
-        {cockpit.prepActions.length === 0 ? (
+        {actionQueue.length === 0 ? (
           <p className="status-ok">
-            No hay acciones adicionales sugeridas con los datos actuales.
+            No hay pendientes operativos relevantes con los datos actuales.
           </p>
         ) : (
           <div className="stack">
-            {cockpit.prepActions.map((action, index) => (
-              <div className="task" key={action.title + index}>
+            {actionQueue.map((action, index) => (
+              <div className="task" key={action.area + action.title + index}>
                 <div style={{ flex: 1 }}>
-                  <strong>{action.title}</strong>
+                  <div>
+                    <span className="pill">{action.area}</span>{" "}
+                    <strong>{action.title}</strong>
+                  </div>
                   <div
                     className={
                       action.priority === "ACTION"
@@ -246,7 +261,9 @@ export default async function TodayPage({
                 </div>
                 {action.href && (
                   <Link href={action.href}>
-                    <button>Revisar</button>
+                    <button>
+                      {action.priority === "ACTION" ? "Atender" : "Revisar"}
+                    </button>
                   </Link>
                 )}
               </div>
