@@ -1,4 +1,4 @@
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { getDb } from "@/src/infrastructure/db/client";
 import { inventoryItems } from "@/src/infrastructure/db/schema";
 
@@ -14,6 +14,11 @@ export async function listActiveInventoryItems(organizationId: string) {
       densityGPerMl: inventoryItems.densityGPerMl,
     })
     .from(inventoryItems)
-    .where(eq(inventoryItems.organizationId, organizationId))
+    .where(
+      and(
+        eq(inventoryItems.organizationId, organizationId),
+        eq(inventoryItems.isActive, true),
+      ),
+    )
     .orderBy(asc(inventoryItems.category), asc(inventoryItems.name));
 }
