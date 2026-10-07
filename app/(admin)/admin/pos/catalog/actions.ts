@@ -14,37 +14,23 @@ import {
 
 const categorySchema = z.enum(["CALIENTES", "FRÍAS", "ALIMENTOS"]);
 
-function parseRecipe(text: string) {
-  const components = text
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line, index) => {
-      const match = line.match(
-        /^([0-9]+(?:[.,][0-9]+)?)\s+([^|\s]+)\s*\|\s*(.+)$/,
-      );
-      if (!match) {
-        throw new Error(
-          "Línea " +
-            (index + 1) +
-            ' inválida. Usa: "18 g | Café en grano"',
-        );
-      }
-      const quantity = Number(match[1].replace(",", "."));
-      if (!Number.isFinite(quantity) || quantity <= 0) {
-        throw new Error("Cantidad inválida en línea " + (index + 1));
-      }
-      return {
-        variantExternalId: null,
-        itemExternalId: null,
-        name: match[3].trim(),
-        quantity,
-        unitLabel: match[2].trim(),
-        category: null,
-      };
-    });
+const recipeComponentSchema = z.object({
+  variantExternalId: z.string().nullable().optional(),
+  itemExternalId: z.string().nullable().optional(),
+  name: z.string().trim().min(1).max(160),
+  quantity: z.coerce.number().positive().max(100000),
+  unitLabel: z.string().trim().min(1).max(40),
+  category: z.string().nullable().optional(),
+});
 
-  return { components };
+const recipeSchema = z.object({
+  components: z.array(recipeComponentSchema).max(60),
+});
+
+function parseRecipeJson(formData: FormData, name: string) {
+  const raw = String(formData.get(name) ?? "").trim();
+  if (!raw) return { components: [] };
+  return recipeSchema.parse(JSON.parse(raw));
 }
 
 export async function togglePosCatalogItem(formData: FormData) {
@@ -115,12 +101,8 @@ export async function savePosRecipe(formData: FormData) {
   );
 
   const catalogId = String(formData.get("catalogId") ?? "").trim();
-  const dineInText = String(formData.get("dineInRecipe") ?? "");
-  const takeawayText = String(formData.get("takeawayRecipe") ?? "");
-  const dineIn = parseRecipe(dineInText);
-  const takeaway = takeawayText.trim()
-    ? parseRecipe(takeawayText)
-    : dineIn;
+  const dineIn = parseRecipeJson(formData, "dineInRecipeJson");
+  const takeaway = parseRecipeJson(formData, "takeawayRecipeJson");
   const db = getDb();
 
   if (catalogId.startsWith("manual:")) {
@@ -192,11 +174,8 @@ export async function createManualPosProduct(formData: FormData) {
     String(formData.get("category") ?? ""),
   );
   const price = Number(formData.get("price"));
-  const dineIn = parseRecipe(String(formData.get("dineInRecipe") ?? ""));
-  const takeawayText = String(formData.get("takeawayRecipe") ?? "");
-  const takeaway = takeawayText.trim()
-    ? parseRecipe(takeawayText)
-    : dineIn;
+  const dineIn = parseRecipeJson(formData, "dineInRecipeJson");
+  const takeaway = parseRecipeJson(formData, "takeawayRecipeJson");
 
   if (!name) throw new Error("Falta el nombre del producto");
   if (!Number.isFinite(price) || price <= 0) {

@@ -22,6 +22,12 @@ type Customer = {
   pointsBalance: number;
 };
 
+type CartLine = {
+  key: string;
+  externalId: string;
+  note: string;
+};
+
 type Props = {
   catalog: CatalogItem[];
   customers: Customer[];
@@ -45,10 +51,15 @@ export function PosClient({
     "CALIENTES",
   );
   const [query, setQuery] = useState("");
-  const [cart, setCart] = useState<Record<string, number>>({});
+  const [cart, setCart] = useState<CartLine[]>([]);
   const [serviceMode, setServiceMode] =
     useState<"DINE_IN" | "TAKEAWAY">("DINE_IN");
   const [customerId, setCustomerId] = useState(selectedCustomerId ?? "");
+
+  const catalogById = useMemo(
+    () => new Map(catalog.map((item) => [item.id, item])),
+    [catalog],
+  );
 
   const visible = useMemo(() => {
     const q = query.trim().toLocaleLowerCase("es-MX");
@@ -59,14 +70,12 @@ export function PosClient({
     });
   }, [catalog, category, query]);
 
-  const cartLines = catalog
-    .filter((item) => (cart[item.id] ?? 0) > 0)
-    .map((item) => ({ ...item, quantity: cart[item.id] }));
+  const cartLines = cart.flatMap((line) => {
+    const item = catalogById.get(line.externalId);
+    return item ? [{ ...line, item }] : [];
+  });
 
-  const total = cartLines.reduce(
-    (sum, line) => sum + line.price * line.quantity,
-    0,
-  );
+  const total = cartLines.reduce((sum, line) => sum + line.item.price, 0);
 
   const selectedCustomer =
     customers.find((customer) => customer.id === customerId) ?? null;
@@ -74,17 +83,43 @@ export function PosClient({
     ? Math.round(total * 0.05 * 100) / 100
     : 0;
 
-  const add = (id: string) =>
-    setCart((current) => ({ ...current, [id]: (current[id] ?? 0) + 1 }));
+  const productCount = (id: string) =>
+    cart.reduce(
+      (sum, line) => sum + (line.externalId === id ? 1 : 0),
+      0,
+    );
 
-  const change = (id: string, delta: number) =>
-    setCart((current) => {
-      const next = Math.max(0, (current[id] ?? 0) + delta);
-      const copy = { ...current };
-      if (next === 0) delete copy[id];
-      else copy[id] = next;
-      return copy;
-    });
+  function add(externalId: string) {
+    setCart((current) => [
+      ...current,
+      {
+        key: globalThis.crypto.randomUUID(),
+        externalId,
+        note: "",
+      },
+    ]);
+  }
+
+  function remove(key: string) {
+    setCart((current) => current.filter((line) => line.key !== key));
+  }
+
+  function duplicate(line: CartLine) {
+    setCart((current) => [
+      ...current,
+      {
+        key: globalThis.crypto.randomUUID(),
+        externalId: line.externalId,
+        note: "",
+      },
+    ]);
+  }
+
+  function updateNote(key: string, note: string) {
+    setCart((current) =>
+      current.map((line) => (line.key === key ? { ...line, note } : line)),
+    );
+  }
 
   return (
     <div className="pos-layout">
@@ -120,21 +155,22 @@ export function PosClient({
         </div>
 
         <div className="pos-product-grid">
-          {visible.map((item) => (
-            <button
-              type="button"
-              className="pos-product-card"
-              key={item.id}
-              onClick={() => add(item.id)}
-            >
-              <span className="eyebrow">{item.category}</span>
-              <strong>{item.name}</strong>
-              <span>{money.format(item.price)}</span>
-              {(cart[item.id] ?? 0) > 0 && (
-                <span className="pos-product-qty">{cart[item.id]}</span>
-              )}
-            </button>
-          ))}
+          {visible.map((item) => {
+            const count = productCount(item.id);
+            return (
+              <button
+                type="button"
+                className="pos-product-card"
+                key={item.id}
+                onClick={() => add(item.id)}
+              >
+                <span className="eyebrow">{item.category}</span>
+                <strong>{item.name}</strong>
+                <span>{money.format(item.price)}</span>
+                {count > 0 && <span className="pos-product-qty">{count}</span>}
+              </button>
+            );
+          })}
         </div>
       </section>
 
@@ -144,7 +180,7 @@ export function PosClient({
             <p className="eyebrow">ORDEN ESPEJO</p>
             <h2>Cuenta</h2>
           </div>
-          <span className="pill">{cartLines.length} producto(s)</span>
+          <span className="pill">{cartLines.length} unidad(es)</span>
         </div>
 
         <div className="pos-service-toggle">
@@ -168,22 +204,44 @@ export function PosClient({
           {cartLines.length === 0 ? (
             <p className="muted">Toca un producto para agregarlo.</p>
           ) : (
-            cartLines.map((line) => (
-              <div className="pos-cart-line" key={line.id}>
-                <div>
-                  <strong>{line.name}</strong>
-                  <div className="muted">{money.format(line.price)} c/u</div>
+            cartLines.map((line, index) => (
+              <div className="pos-cart-line pos-cart-unit" key={line.key}>
+                <div className="pos-cart-unit-main">
+                  <div className="pos-cart-unit-title">
+                    <strong>
+                      {index + 1}. {line.item.name}
+                    </strong>
+                    <strong>{money.format(line.item.price)}</strong>
+                  </div>
+
+                  <input
+                    className="pos-line-note"
+                    value={line.note}
+                    onChange={(event) =>
+                      updateNote(line.key, event.target.value)
+                    }
+                    placeholder="Nota: sin hielo, deslactosada, extra caliente..."
+                    maxLength={180}
+                    aria-label={"Nota para " + line.item.name}
+                  />
                 </div>
-                <div className="pos-qty-control">
-                  <button type="button" onClick={() => change(line.id, -1)}>
-                    −
+
+                <div className="pos-unit-actions">
+                  <button
+                    type="button"
+                    onClick={() => duplicate(line)}
+                    title="Agregar otra igual"
+                  >
+                    +1
                   </button>
-                  <strong>{line.quantity}</strong>
-                  <button type="button" onClick={() => change(line.id, 1)}>
-                    +
+                  <button
+                    type="button"
+                    onClick={() => remove(line.key)}
+                    title="Quitar"
+                  >
+                    ×
                   </button>
                 </div>
-                <strong>{money.format(line.price * line.quantity)}</strong>
               </div>
             ))
           )}
@@ -250,8 +308,9 @@ export function PosClient({
             name="cart"
             value={JSON.stringify(
               cartLines.map((line) => ({
-                externalId: line.id,
-                quantity: line.quantity,
+                externalId: line.externalId,
+                quantity: 1,
+                note: line.note.trim() || null,
               })),
             )}
           />
@@ -280,10 +339,10 @@ export function PosClient({
           </label>
 
           <label>
-            Nota / instrucción de comanda
+            Nota general de la mesa / orden
             <input
               name="note"
-              placeholder="Ej. sin azúcar, leche muy caliente..."
+              placeholder="Ej. entregar todo junto, cumpleaños..."
               maxLength={300}
             />
           </label>

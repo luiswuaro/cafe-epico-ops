@@ -1093,6 +1093,7 @@ export const posOrderLines = pgTable("pos_order_lines", {
   unitPrice: numeric("unit_price", { precision: 14, scale: 2 }).notNull(),
   quantity: numeric("quantity", { precision: 12, scale: 3 }).notNull(),
   lineTotal: numeric("line_total", { precision: 14, scale: 2 }).notNull(),
+  note: text("note"),
   expectedConsumption: jsonb("expected_consumption").$type<Record<string, unknown>>().notNull().default({}),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [

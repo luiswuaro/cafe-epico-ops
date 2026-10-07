@@ -27,6 +27,7 @@ const cartSchema = z
     z.object({
       externalId: z.string().min(1),
       quantity: z.number().int().min(1).max(20),
+      note: z.string().trim().max(180).nullable().optional(),
     }),
   )
   .min(1)
@@ -88,6 +89,7 @@ async function buildOrderInput(
     return {
       item,
       quantity: line.quantity,
+      note: line.note?.trim() || null,
       lineTotal,
       expectedConsumption: {
         mode: "SHADOW",
@@ -221,6 +223,7 @@ async function createShadowOrder(
         unitPrice: line.item.price.toFixed(2),
         quantity: String(line.quantity),
         lineTotal: line.lineTotal.toFixed(2),
+        note: line.note,
         expectedConsumption: line.expectedConsumption,
       })),
     );

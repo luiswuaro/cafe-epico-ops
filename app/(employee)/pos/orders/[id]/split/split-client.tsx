@@ -6,6 +6,7 @@ import { saveOrderSplit } from "./actions";
 type Line = {
   id: string;
   name: string;
+  note: string | null;
   quantity: number;
   unitPrice: number;
 };
@@ -27,6 +28,7 @@ export function SplitAccountBuilder({
             key: line.id + ":" + index,
             lineId: line.id,
             name: line.name,
+            note: line.note,
             unitPrice: line.unitPrice,
             unitNumber: index + 1,
           }),
@@ -131,6 +133,9 @@ export function SplitAccountBuilder({
               <span className="muted">
                 Unidad {unit.unitNumber} · {"$" + unit.unitPrice.toFixed(2)}
               </span>
+              {unit.note && (
+                <span className="command-line-note">↳ {unit.note}</span>
+              )}
             </div>
             <select
               aria-label={"Cuenta para " + unit.name}

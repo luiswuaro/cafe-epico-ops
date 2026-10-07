@@ -3,6 +3,7 @@ import {
   savePosRecipe,
   togglePosCatalogItem,
 } from "./actions";
+import { RecipeServiceEditor } from "./recipe-editor";
 import { getPosCatalog } from "@/src/application/pos/catalog";
 import { requirePermission } from "@/src/infrastructure/auth/permissions";
 
@@ -13,30 +14,20 @@ const money = new Intl.NumberFormat("es-MX", {
   currency: "MXN",
 });
 
-function recipeText(
-  components: Array<{
-    name: string;
-    quantity: number;
-    unitLabel: string;
-  }>,
-) {
-  return components
-    .map(
-      (component) =>
-        component.quantity +
-        " " +
-        component.unitLabel +
-        " | " +
-        component.name,
-    )
-    .join("\n");
-}
-
 export default async function PosCatalogAdminPage() {
   const { organizationId } = await requirePermission("pos.catalog.manage");
   const catalog = await getPosCatalog(organizationId, {
     includeDisabled: true,
   });
+
+  const ingredientOptions = Array.from(
+    new Set(
+      catalog.flatMap((item) => [
+        ...item.serviceRecipes.DINE_IN.components.map((row) => row.name),
+        ...item.serviceRecipes.TAKEAWAY.components.map((row) => row.name),
+      ]),
+    ),
+  ).sort((a, b) => a.localeCompare(b, "es-MX"));
 
   return (
     <main className="shell">
@@ -44,9 +35,8 @@ export default async function PosCatalogAdminPage() {
         <p className="eyebrow">POS · ADMINISTRACIÓN</p>
         <h1>Catálogo y recetas</h1>
         <p className="muted">
-          Decide qué aparece en caja. Puedes ocultar productos de Loyverse,
-          agregar productos propios y corregir la receta operativa que OPS
-          usará después para inventario.
+          Un producto, una ficha. La receta se edita por insumos y sólo
+          personalizas “Para llevar” cuando realmente cambia el consumo.
         </p>
       </section>
 
@@ -77,25 +67,13 @@ export default async function PosCatalogAdminPage() {
               />
             </label>
           </div>
-          <label>
-            Receta aquí
-            <textarea
-              name="dineInRecipe"
-              rows={5}
-              placeholder={"18 g | Café en grano\n220 ml | Leche"}
-            />
-          </label>
-          <label>
-            Receta para llevar
-            <textarea
-              name="takeawayRecipe"
-              rows={5}
-              placeholder="Déjala vacía para usar la misma receta."
-            />
-          </label>
-          <p className="muted">
-            Formato por línea: <strong>cantidad unidad | ingrediente</strong>.
-          </p>
+
+          <RecipeServiceEditor
+            dineIn={[]}
+            takeaway={[]}
+            ingredientOptions={ingredientOptions}
+          />
+
           <button type="submit">Crear producto</button>
         </form>
       </details>
@@ -134,29 +112,17 @@ export default async function PosCatalogAdminPage() {
               <summary>Editar receta</summary>
               <form action={savePosRecipe} className="stack">
                 <input type="hidden" name="catalogId" value={item.id} />
-                <label>
-                  Aquí
-                  <textarea
-                    name="dineInRecipe"
-                    rows={5}
-                    defaultValue={recipeText(
-                      item.serviceRecipes.DINE_IN.components,
-                    )}
-                  />
-                </label>
-                <label>
-                  Para llevar
-                  <textarea
-                    name="takeawayRecipe"
-                    rows={5}
-                    defaultValue={recipeText(
-                      item.serviceRecipes.TAKEAWAY.components,
-                    )}
-                  />
-                </label>
+
+                <RecipeServiceEditor
+                  dineIn={item.serviceRecipes.DINE_IN.components}
+                  takeaway={item.serviceRecipes.TAKEAWAY.components}
+                  ingredientOptions={ingredientOptions}
+                />
+
                 <p className="muted">
-                  Formato: 18 g | Café en grano. En modo espejo esto calcula
-                  consumo esperado; todavía no descuenta inventario.
+                  Cada renglón es un insumo. OPS conserva la trazabilidad de
+                  cantidad, unidad e ingrediente sin obligarte a escribir
+                  fórmulas de texto.
                 </p>
                 <button type="submit">Guardar receta</button>
               </form>

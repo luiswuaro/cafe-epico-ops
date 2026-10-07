@@ -34,8 +34,15 @@ function receiptLines(payload: Record<string, unknown>) {
 }
 
 function fingerprint(lines: Array<{ name: string; quantity: number }>) {
-  return lines
-    .map((line) => normalize(line.name) + ":" + Number(line.quantity).toFixed(3))
+  const grouped = new Map<string, number>();
+
+  for (const line of lines) {
+    const name = normalize(line.name);
+    grouped.set(name, (grouped.get(name) ?? 0) + Number(line.quantity));
+  }
+
+  return [...grouped.entries()]
+    .map(([name, quantity]) => name + ":" + quantity.toFixed(3))
     .sort()
     .join("|");
 }

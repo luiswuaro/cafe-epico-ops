@@ -80,6 +80,9 @@ export default async function SplitOrderPage({
                     <div key={assignment.id}>
                       {Number(assignment.quantity)}×{" "}
                       {line?.nameSnapshot ?? "Producto"}
+                      {line?.note ? (
+                        <div className="command-line-note">↳ {line.note}</div>
+                      ) : null}
                     </div>
                   );
                 })}
@@ -142,6 +145,7 @@ export default async function SplitOrderPage({
             lines={state.lines.map((line) => ({
               id: line.id,
               name: line.nameSnapshot,
+              note: line.note,
               quantity: Number(line.quantity),
               unitPrice: Number(line.unitPrice),
             }))}

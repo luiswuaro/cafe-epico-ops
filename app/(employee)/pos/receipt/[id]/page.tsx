@@ -98,6 +98,7 @@ export default async function ReceiptPage({
           quantity: posOrderSplitLines.quantity,
           nameSnapshot: posOrderLines.nameSnapshot,
           lineTotal: posOrderSplitLines.lineTotal,
+          note: posOrderLines.note,
         })
         .from(posOrderSplitLines)
         .innerJoin(
@@ -111,6 +112,7 @@ export default async function ReceiptPage({
           quantity: posOrderLines.quantity,
           nameSnapshot: posOrderLines.nameSnapshot,
           lineTotal: posOrderLines.lineTotal,
+          note: posOrderLines.note,
         })
         .from(posOrderLines)
         .where(eq(posOrderLines.orderId, id));
@@ -194,11 +196,16 @@ export default async function ReceiptPage({
 
         <div className="receipt-lines">
           {lines.map((line) => (
-            <div key={line.id} className="receipt-line">
-              <span>
-                {Number(line.quantity)}× {line.nameSnapshot}
-              </span>
-              <span>{money.format(Number(line.lineTotal))}</span>
+            <div key={line.id} className="receipt-product">
+              <div className="receipt-line">
+                <span>
+                  {Number(line.quantity)}× {line.nameSnapshot}
+                </span>
+                <span>{money.format(Number(line.lineTotal))}</span>
+              </div>
+              {line.note && (
+                <div className="receipt-line-note">↳ {line.note}</div>
+              )}
             </div>
           ))}
         </div>

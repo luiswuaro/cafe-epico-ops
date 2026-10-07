@@ -106,8 +106,13 @@ export default async function PosOrdersPage() {
 
                 <div className="command-lines">
                   {order.lines.map((line) => (
-                    <div key={line.id}>
-                      <strong>{Number(line.quantity)}×</strong> {line.name}
+                    <div className="command-line-item" key={line.id}>
+                      <div>
+                        <strong>{Number(line.quantity)}×</strong> {line.name}
+                      </div>
+                      {line.note && (
+                        <div className="command-line-note">↳ {line.note}</div>
+                      )}
                     </div>
                   ))}
                 </div>

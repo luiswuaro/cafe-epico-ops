@@ -49,6 +49,7 @@ export async function getOpenPosOrders(
       orderId: posOrderLines.orderId,
       name: posOrderLines.nameSnapshot,
       quantity: posOrderLines.quantity,
+      note: posOrderLines.note,
     })
     .from(posOrderLines)
     .where(inArray(posOrderLines.orderId, rows.map((row) => row.id)))
