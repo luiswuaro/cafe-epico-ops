@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, gte, isNull } from "drizzle-orm";
 import { getBusinessAnalytics } from "@/src/application/analytics/business";
 import { getInventoryIntelligence } from "@/src/application/loyverse/inventory-intelligence";
 import { getProductivityReport } from "@/src/application/reports/productivity";
@@ -31,8 +31,15 @@ function median(values: number[]) {
 }
 
 export async function getDecisionCenter(organizationId: string) {
-  const [analytics, inventory, roasting, productivity, openEvents] =
-    await Promise.all([
+  const since30 = new Date(Date.now() - 30 * 86_400_000);
+  const [
+    analytics,
+    inventory,
+    roasting,
+    productivity,
+    openEvents,
+    recentOperationalEvents,
+  ] = await Promise.all([
       getBusinessAnalytics(organizationId),
       getInventoryIntelligence(organizationId),
       getRoastingDashboard(organizationId),
@@ -55,6 +62,19 @@ export async function getDecisionCenter(organizationId: string) {
         )
         .orderBy(desc(operationalEvents.occurredAt))
         .limit(50),
+      getDb()
+        .select({
+          eventType: operationalEvents.eventType,
+          variantExternalId: operationalEvents.variantExternalId,
+          quantity: operationalEvents.quantity,
+        })
+        .from(operationalEvents)
+        .where(
+          and(
+            eq(operationalEvents.organizationId, organizationId),
+            gte(operationalEvents.occurredAt, since30),
+          ),
+        ),
     ]);
 
   const today = analytics.periods.find((period) => period.key === "today")!;
@@ -261,6 +281,40 @@ export async function getDecisionCenter(organizationId: string) {
     });
   }
 
+  const inventoryCostByVariant = new Map(
+    inventory.rows.map((row) => [
+      row.variantExternalId,
+      row.purchaseCost,
+    ]),
+  );
+  let wasteCost30 = 0;
+  let wasteCostedEvents30 = 0;
+  let wasteUncostedEvents30 = 0;
+  let remakes30 = 0;
+
+  for (const event of recentOperationalEvents) {
+    if (event.eventType === "REMAKE") {
+      remakes30 += 1;
+      continue;
+    }
+    if (
+      event.eventType !== "WASTE" ||
+      !event.variantExternalId ||
+      event.quantity == null
+    ) {
+      continue;
+    }
+    const unitCost = inventoryCostByVariant.get(
+      event.variantExternalId,
+    );
+    if (unitCost == null) {
+      wasteUncostedEvents30 += 1;
+      continue;
+    }
+    wasteCost30 += Number(event.quantity) * unitCost;
+    wasteCostedEvents30 += 1;
+  }
+
   const itemsWithoutCost = inventory.rows.filter(
     (row) => row.purchaseCost == null,
   ).length;
@@ -349,6 +403,10 @@ export async function getDecisionCenter(organizationId: string) {
       activeRoastAssignments: roasting.summary.activeAssignments,
       measuredTasks14: productivity.measuredTasks,
       openOperationalEvents: actionableEvents.length,
+      wasteCost30,
+      wasteCostedEvents30,
+      wasteUncostedEvents30,
+      remakes30,
     },
     decisions: orderedDecisions,
     menuEngineering,
