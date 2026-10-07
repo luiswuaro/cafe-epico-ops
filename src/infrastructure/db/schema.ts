@@ -507,9 +507,7 @@ export const roastBatches = pgTable("roast_batches", {
   index("roast_batches_profile_idx").on(t.profileId, t.roastedAt),
 ]);
 
-export const roastGreenInventoryConfirmations = pgTable(
-  "roast_green_inventory_confirmations",
-  {
+export const roastGreenInventoryConfirmations = pgTable("roast_green_inventory_confirmations", {
     id: uuid("id").primaryKey().defaultRandom(),
     organizationId: uuid("organization_id")
       .notNull()
@@ -538,8 +536,7 @@ export const roastGreenInventoryConfirmations = pgTable(
       .notNull()
       .defaultNow(),
     note: text("note"),
-  },
-  (t) => [
+}, (t) => [
     index("roast_green_inventory_confirmations_lot_idx").on(
       t.coffeeLotId,
       t.confirmedAt,
@@ -553,9 +550,7 @@ export const roastGreenInventoryConfirmations = pgTable(
   ],
 );
 
-export const roastImportDrafts = pgTable(
-  "roast_import_drafts",
-  {
+export const roastImportDrafts = pgTable("roast_import_drafts", {
     id: uuid("id").primaryKey().defaultRandom(),
     organizationId: uuid("organization_id")
       .notNull()
@@ -584,8 +579,7 @@ export const roastImportDrafts = pgTable(
       { onDelete: "set null" },
     ),
     ...timestamps,
-  },
-  (t) => [
+}, (t) => [
     uniqueIndex("roast_import_drafts_hash_uidx").on(
       t.organizationId,
       t.sourceSha256,
