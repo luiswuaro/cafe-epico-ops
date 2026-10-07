@@ -52,7 +52,7 @@ export async function reportBarWaste(formData: FormData) {
       organizationId: employee.organizationId,
       storeId: employee.homeStoreId,
       employeeId: employee.id,
-      eventType: "WASTE",
+      eventType: reason === "REMAKE" ? "REMAKE" : "WASTE",
       severity:
         quantity >= Math.max(1, row.avgDailyUsage14 * 0.2)
           ? "IMPORTANT"
