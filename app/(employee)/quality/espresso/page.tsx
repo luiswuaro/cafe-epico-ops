@@ -151,12 +151,12 @@ export default async function EspressoQcPage({ searchParams }: PageProps) {
           <p className="eyebrow">CAFÉ ACTIVO · ESPRESSO</p>
           <h2>{activeRoast.lotName}</h2>
           <p>
-            Batch <strong>{activeRoast.batchCode}</strong> ·{" "}
-            {(
-              (Date.now() - activeRoast.roastedAt.getTime()) /
-              86_400_000
-            ).toFixed(1)}{" "}
-            d post-tueste.
+            Batch <strong>{activeRoast.batchCode}</strong> · tostado{" "}
+            {activeRoast.roastedAt.toLocaleString("es-MX", {
+              timeZone: "America/Mexico_City",
+              dateStyle: "short",
+              timeStyle: "short",
+            })}
           </p>
           <p className="muted">
             Este batch se asociará automáticamente al control que guardes.
