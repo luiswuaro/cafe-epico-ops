@@ -218,8 +218,9 @@ function buildLines(
   }
 
   lines.push({ text: separator(width) });
+  const doubleWidth = Math.max(12, Math.floor(width / 2));
   lines.push({
-    text: leftRight("TOTAL", ticket.total, width),
+    text: leftRight("TOTAL", ticket.total, doubleWidth),
     bold: true,
     size: "double",
   });
