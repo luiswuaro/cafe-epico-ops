@@ -160,6 +160,10 @@ export default async function InventoryPage({ searchParams }: PageProps) {
     (row) => row.operationalInStock != null,
   ).length;
 
+  const lagRows = inventory.smartRows
+    .filter((row) => row.status === "CRITICAL" || row.status === "WATCH")
+    .slice(0, 12);
+
   const purchaseRows = inventory.smartRows
     .filter((row) => row.suggestedPurchase > 0.0005)
     .slice(0, 20);
@@ -280,6 +284,50 @@ export default async function InventoryPage({ searchParams }: PageProps) {
           sin unidad operativa confirmada.
         </p>
       )}
+
+      <section className="card" style={{ marginTop: "1rem" }}>
+        <h2>Históricos y rezago</h2>
+        <p className="muted">
+          Abre cualquier insumo para ver saldo OPS, referencia de Loyverse,
+          movimientos por ventas, ajustes y cambios de existencia de los últimos
+          30 días.
+        </p>
+        {lagRows.length === 0 ? (
+          <p className="status-ok">No hay insumos críticos o en revisión.</p>
+        ) : (
+          <div className="stack">
+            {lagRows.map((row) => (
+              <div className="task" key={"lag-" + row.variantExternalId}>
+                <div style={{ flex: 1 }}>
+                  <strong>{row.itemName}</strong>{" "}
+                  <span className="status-warn">
+                    {statusLabel(row.status)}
+                  </span>
+                  <div className="muted">
+                    cobertura {coverageLabel(row.daysCover)}
+                    {" · "}
+                    último reabasto OPS{" "}
+                    {row.lastOperationalRestockAt
+                      ? row.lastOperationalRestockAt.toLocaleDateString("es-MX", {
+                          timeZone: "America/Mexico_City",
+                        })
+                      : "sin registro"}
+                  </div>
+                </div>
+                <Link
+                  className="button secondary"
+                  href={
+                    "/inventory/history/" +
+                    encodeURIComponent(row.variantExternalId)
+                  }
+                >
+                  Ver histórico
+                </Link>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
 
       <section className="card" style={{ marginTop: "1rem" }}>
         <h2>Qué revisar antes de mañana</h2>

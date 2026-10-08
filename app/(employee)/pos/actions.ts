@@ -96,6 +96,19 @@ async function buildOrderInput(
       );
     }
 
+    if (
+      (item.category === "CALIENTES" || item.category === "FRÍAS") &&
+      serviceRecipe.components.some(
+        (component) => !component.variantExternalId,
+      )
+    ) {
+      throw new Error(
+        "La bebida " +
+          item.name +
+          " tiene un insumo sin vínculo de inventario. Corrige la receta antes de cobrarla.",
+      );
+    }
+
     return {
       item,
       quantity: line.quantity,

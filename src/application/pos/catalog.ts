@@ -127,6 +127,7 @@ function mergePosComponents(components: PosRecipeComponent[]) {
 
 function enforceDrinkPackaging(
   category: PosCatalogCategory,
+  mode: PosServiceMode,
   override: StoredRecipe | null,
   base: PosRecipeComponent[],
 ) {
@@ -138,6 +139,20 @@ function enforceDrinkPackaging(
     (component) => !isDisposableComponent(component),
   );
   const standardPackaging = base.filter(isDisposableComponent);
+
+  if (mode === "DINE_IN" && category === "CALIENTES") {
+    return mergePosComponents(ingredients);
+  }
+
+  if (mode === "DINE_IN" && category === "FRÍAS") {
+    return mergePosComponents([
+      ...ingredients,
+      ...standardPackaging.filter(
+        (component) =>
+          normalize(component.name) === normalize("POPOTE PARA TAPIOCA"),
+      ),
+    ]);
+  }
 
   return mergePosComponents([...ingredients, ...standardPackaging]);
 }
@@ -288,12 +303,14 @@ export async function getPosCatalog(
             sourceCategory: recipe.serviceRecipes.DINE_IN.sourceCategory,
             components: enforceDrinkPackaging(
               recipe.category as PosCatalogCategory,
+              "DINE_IN",
               overrideDineIn,
               baseDineIn,
             ),
             configured:
               enforceDrinkPackaging(
                 recipe.category as PosCatalogCategory,
+                "DINE_IN",
                 overrideDineIn,
                 baseDineIn,
               ).length > 0,
@@ -303,12 +320,14 @@ export async function getPosCatalog(
             sourceCategory: recipe.serviceRecipes.TAKEAWAY.sourceCategory,
             components: enforceDrinkPackaging(
               recipe.category as PosCatalogCategory,
+              "TAKEAWAY",
               overrideTakeaway,
               baseTakeaway,
             ),
             configured:
               enforceDrinkPackaging(
                 recipe.category as PosCatalogCategory,
+                "TAKEAWAY",
                 overrideTakeaway,
                 baseTakeaway,
               ).length > 0,
