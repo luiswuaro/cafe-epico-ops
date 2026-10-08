@@ -35,7 +35,8 @@ insert into permissions(code,description) values
 ('pos.mirror.read','Comparar ventas espejo contra Loyverse'),
 ('pos.cancel','Cancelar cuentas y tickets del POS'),
 ('pos.catalog.manage','Administrar productos y recetas del POS'),
-('pos.cash.manage','Abrir, operar y cerrar la caja de efectivo')
+('pos.cash.manage','Abrir, operar y cerrar la caja de efectivo'),
+('pos.print.manage','Configurar impresora y plantilla térmica')
 on conflict(code) do nothing;
 
 insert into roles(id,organization_id,code,name,description,is_system_role) values

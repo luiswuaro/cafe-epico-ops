@@ -1049,6 +1049,42 @@ export const posLoyaltyEntries = pgTable("pos_loyalty_entries", {
   index("pos_loyalty_order_idx").on(t.orderId),
 ]);
 
+export const posPrintSettings = pgTable("pos_print_settings", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  businessName: text("business_name").notNull().default("Café Épico"),
+  addressLine: text("address_line").notNull().default("Tepexi de Rodríguez, Puebla"),
+  phoneLine: text("phone_line"),
+  socialLine: text("social_line"),
+  headerMessage: text("header_message"),
+  footerMessage: text("footer_message").notNull().default("Gracias por tu visita."),
+  showLogo: boolean("show_logo").notNull().default(false),
+  logoDataUrl: text("logo_data_url"),
+  logoRasterBase64: text("logo_raster_base64"),
+  logoWidthPx: integer("logo_width_px"),
+  logoHeightPx: integer("logo_height_px"),
+  logoAlign: varchar("logo_align", { length: 20 }).notNull().default("center"),
+  showBusinessName: boolean("show_business_name").notNull().default(true),
+  showAddress: boolean("show_address").notNull().default(true),
+  showPhone: boolean("show_phone").notNull().default(false),
+  showSocial: boolean("show_social").notNull().default(false),
+  showFolio: boolean("show_folio").notNull().default(true),
+  showDate: boolean("show_date").notNull().default(true),
+  showEmployee: boolean("show_employee").notNull().default(true),
+  showService: boolean("show_service").notNull().default(true),
+  showCustomer: boolean("show_customer").notNull().default(true),
+  showPoints: boolean("show_points").notNull().default(true),
+  showItemNotes: boolean("show_item_notes").notNull().default(true),
+  showNoCfdi: boolean("show_no_cfdi").notNull().default(true),
+  lineWidthChars: integer("line_width_chars").notNull().default(32),
+  feedLines: integer("feed_lines").notNull().default(3),
+  autoCut: boolean("auto_cut").notNull().default(false),
+  updatedByEmployeeId: uuid("updated_by_employee_id").references(() => employees.id, { onDelete: "set null" }),
+  ...timestamps,
+}, (t) => [
+  uniqueIndex("pos_print_settings_org_uidx").on(t.organizationId),
+]);
+
 export const posOrders = pgTable("pos_orders", {
   id: uuid("id").primaryKey().defaultRandom(),
   organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),

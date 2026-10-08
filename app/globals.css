@@ -1303,3 +1303,202 @@ th, td { vertical-align: top; }
     text-align: center;
   }
 }
+
+
+/* POS v0.1.5 ticket template editor */
+.ticket-template-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(300px, .65fr);
+  gap: 1rem;
+  align-items: start;
+}
+.ticket-template-layout > .stack {
+  min-width: 0;
+}
+.ticket-toggle-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .45rem;
+  margin-bottom: .8rem;
+}
+.ticket-toggle {
+  display: flex;
+  align-items: center;
+  gap: .55rem;
+  min-height: 44px;
+  padding: .55rem .65rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  font-weight: 750;
+}
+.ticket-toggle input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+}
+.ticket-logo-editor {
+  display: grid;
+  gap: .7rem;
+  margin-top: .8rem;
+  padding-top: .8rem;
+  border-top: 1px solid var(--line);
+}
+.ticket-logo-current {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: .75rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #faf7f1;
+}
+.ticket-logo-current img {
+  display: block;
+  max-width: min(220px, 55%);
+  max-height: 120px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+.ticket-save-button {
+  min-height: 48px;
+  font-weight: 900;
+}
+.ticket-preview-column {
+  min-width: 0;
+}
+.ticket-preview-sticky {
+  position: sticky;
+  top: 5.5rem;
+}
+.ticket-preview-paper {
+  width: min(100%, 58mm);
+  margin: .5rem auto 0;
+  padding: 5mm 4mm;
+  background: white;
+  color: #000;
+  border: 1px solid var(--line);
+  box-shadow: 0 10px 24px rgba(0,0,0,.08);
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+.ticket-preview-paper h3 {
+  margin: .2rem 0;
+  text-align: center;
+  font-size: 17px;
+  font-weight: 900;
+}
+.ticket-preview-paper p {
+  margin: .18rem 0;
+}
+.ticket-preview-paper hr {
+  border: 0;
+  border-top: 1px dashed #000;
+  margin: .5rem 0;
+}
+.ticket-preview-paper .center {
+  text-align: center;
+}
+.ticket-preview-logo {
+  display: flex;
+  margin-bottom: .4rem;
+}
+.ticket-preview-logo.left {
+  justify-content: flex-start;
+}
+.ticket-preview-logo.center {
+  justify-content: center;
+}
+.ticket-preview-logo.right {
+  justify-content: flex-end;
+}
+.ticket-preview-logo img {
+  display: block;
+  max-width: 100%;
+  max-height: 90px;
+  width: auto;
+  height: auto;
+  image-rendering: pixelated;
+}
+.ticket-preview-product {
+  display: grid;
+  gap: .08rem;
+  padding: .22rem 0;
+}
+.ticket-preview-product > div,
+.ticket-preview-total {
+  display: flex;
+  justify-content: space-between;
+  gap: .45rem;
+}
+.ticket-preview-product > span {
+  font-size: 10px;
+  padding-left: .3rem;
+}
+.receipt-logo {
+  display: flex;
+  margin-bottom: 2mm;
+}
+.receipt-logo-left {
+  justify-content: flex-start;
+}
+.receipt-logo-center {
+  justify-content: center;
+}
+.receipt-logo-right {
+  justify-content: flex-end;
+}
+.receipt-logo img {
+  display: block;
+  max-width: 100%;
+  max-height: 26mm;
+  width: auto;
+  height: auto;
+  image-rendering: pixelated;
+}
+.printer-bridge-actions {
+  display: flex;
+  gap: .5rem;
+  flex-wrap: wrap;
+}
+.printer-bridge-actions button {
+  flex: 1 1 220px;
+}
+.printer-bridge-ok {
+  border-color: #5d7b57;
+}
+.code-block {
+  overflow-x: auto;
+  padding: .8rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #171613;
+  color: #fff;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 900px) {
+  .ticket-template-layout {
+    grid-template-columns: 1fr;
+  }
+  .ticket-preview-sticky {
+    position: static;
+  }
+}
+@media (max-width: 600px) {
+  .ticket-toggle-grid {
+    grid-template-columns: 1fr;
+  }
+  .ticket-logo-current {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .ticket-logo-current img {
+    max-width: 100%;
+  }
+}

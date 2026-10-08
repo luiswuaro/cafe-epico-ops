@@ -1,7 +1,9 @@
+import Image from "next/image";
 import Link from "next/link";
 import { and, eq, isNull } from "drizzle-orm";
-import { PrintTicketButton } from "./print-button";
 import { DirectPrintTicketButton } from "./direct-print-button";
+import { PrintTicketButton } from "./print-button";
+import { getPosPrintSettings } from "@/src/application/pos/print-settings";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
 import {
   assertEmployeePermission,
@@ -48,24 +50,28 @@ export default async function ReceiptPage({
   );
 
   const db = getDb();
-  const [order] = await db
-    .select({
-      order: posOrders,
-      employeeName: employees.name,
-      customerName: posCustomers.name,
-      customerPoints: posCustomers.pointsBalance,
-    })
-    .from(posOrders)
-    .leftJoin(employees, eq(employees.id, posOrders.employeeId))
-    .leftJoin(posCustomers, eq(posCustomers.id, posOrders.customerId))
-    .where(
-      and(
-        eq(posOrders.id, id),
-        eq(posOrders.organizationId, employee.organizationId),
-        eq(posOrders.storeId, employee.homeStoreId),
-      ),
-    )
-    .limit(1);
+  const [order, printSettings] = await Promise.all([
+    db
+      .select({
+        order: posOrders,
+        employeeName: employees.name,
+        customerName: posCustomers.name,
+        customerPoints: posCustomers.pointsBalance,
+      })
+      .from(posOrders)
+      .leftJoin(employees, eq(employees.id, posOrders.employeeId))
+      .leftJoin(posCustomers, eq(posCustomers.id, posOrders.customerId))
+      .where(
+        and(
+          eq(posOrders.id, id),
+          eq(posOrders.organizationId, employee.organizationId),
+          eq(posOrders.storeId, employee.homeStoreId),
+        ),
+      )
+      .limit(1)
+      .then((rows) => rows[0] ?? null),
+    getPosPrintSettings(employee.organizationId),
+  ]);
 
   if (!order) throw new Error("Ticket no encontrado");
 
@@ -152,6 +158,19 @@ export default async function ReceiptPage({
 
   const total = split ? Number(split.total) : Number(order.order.total);
   const paymentMethod = payments.map((payment) => payment.method).join(" + ");
+  const pointsEarned =
+    !split && order.customerName
+      ? Number(order.order.loyaltyPointsPreview).toFixed(2)
+      : null;
+  const pointsBalance =
+    !split && order.customerName
+      ? Number(order.customerPoints ?? 0).toFixed(2)
+      : null;
+
+  const service =
+    order.order.serviceMode === "TAKEAWAY"
+      ? "Para llevar"
+      : order.order.tableLabel || "Aquí";
 
   return (
     <main className="receipt-shell">
@@ -166,15 +185,13 @@ export default async function ReceiptPage({
         >
           Volver
         </Link>
+
         <DirectPrintTicketButton
           ticket={{
             folio: order.order.folio,
             date: ticketDate,
             employee: order.employeeName ?? "Empleado",
-            service:
-              order.order.serviceMode === "TAKEAWAY"
-                ? "Para llevar"
-                : order.order.tableLabel || "Aquí",
+            service,
             splitLabel: split?.label ?? null,
             items: lines.map((line) => ({
               quantity: Number(line.quantity),
@@ -185,36 +202,112 @@ export default async function ReceiptPage({
             total: money.format(total),
             payment: paymentMethod || "-",
             customer: order.customerName,
+            pointsEarned,
+            pointsBalance,
+          }}
+          template={{
+            businessName: printSettings.businessName,
+            addressLine: printSettings.addressLine,
+            phoneLine: printSettings.phoneLine,
+            socialLine: printSettings.socialLine,
+            headerMessage: printSettings.headerMessage,
+            footerMessage: printSettings.footerMessage,
+            showLogo: printSettings.showLogo,
+            logoRasterBase64: printSettings.logoRasterBase64,
+            logoWidthPx: printSettings.logoWidthPx,
+            logoHeightPx: printSettings.logoHeightPx,
+            logoAlign: printSettings.logoAlign,
+            showBusinessName: printSettings.showBusinessName,
+            showAddress: printSettings.showAddress,
+            showPhone: printSettings.showPhone,
+            showSocial: printSettings.showSocial,
+            showFolio: printSettings.showFolio,
+            showDate: printSettings.showDate,
+            showEmployee: printSettings.showEmployee,
+            showService: printSettings.showService,
+            showCustomer: printSettings.showCustomer,
+            showPoints: printSettings.showPoints,
+            showItemNotes: printSettings.showItemNotes,
+            showNoCfdi: printSettings.showNoCfdi,
+            lineWidthChars: printSettings.lineWidthChars,
+            feedLines: printSettings.feedLines,
+            autoCut: printSettings.autoCut,
           }}
         />
+
         <PrintTicketButton />
       </div>
 
       <article className="receipt-paper">
         <header>
-          <h1>Café Épico</h1>
-          <p>Tepexi de Rodríguez, Puebla</p>
-          <p>
-            {split
-              ? split.label + " · ticket separado"
-              : "Ticket de prueba · POS espejo"}
-          </p>
+          {printSettings.showLogo &&
+            printSettings.logoDataUrl &&
+            printSettings.logoWidthPx &&
+            printSettings.logoHeightPx && (
+              <div
+                className={
+                  "receipt-logo receipt-logo-" + printSettings.logoAlign
+                }
+              >
+                <Image
+                  src={printSettings.logoDataUrl}
+                  alt="Logo Café Épico"
+                  width={printSettings.logoWidthPx}
+                  height={printSettings.logoHeightPx}
+                  unoptimized
+                />
+              </div>
+            )}
+
+          {printSettings.showBusinessName && (
+            <h1>{printSettings.businessName}</h1>
+          )}
+          {printSettings.showAddress && printSettings.addressLine && (
+            <p>{printSettings.addressLine}</p>
+          )}
+          {printSettings.showPhone && printSettings.phoneLine && (
+            <p>{printSettings.phoneLine}</p>
+          )}
+          {printSettings.showSocial && printSettings.socialLine && (
+            <p>{printSettings.socialLine}</p>
+          )}
+          {printSettings.headerMessage && (
+            <p>{printSettings.headerMessage}</p>
+          )}
+          {split && <p><strong>{split.label} · ticket separado</strong></p>}
         </header>
 
-        <div className="receipt-meta">
-          <span>Folio</span>
-          <span>{order.order.folio}</span>
-          <span>Fecha</span>
-          <span>{ticketDate}</span>
-          <span>Atendió</span>
-          <span>{order.employeeName ?? "Empleado"}</span>
-          <span>Servicio</span>
-          <span>
-            {order.order.serviceMode === "TAKEAWAY"
-              ? "Para llevar"
-              : order.order.tableLabel || "Aquí"}
-          </span>
-        </div>
+        {(printSettings.showFolio ||
+          printSettings.showDate ||
+          printSettings.showEmployee ||
+          printSettings.showService) && (
+          <div className="receipt-meta">
+            {printSettings.showFolio && (
+              <>
+                <span>Folio</span>
+                <span>{order.order.folio}</span>
+              </>
+            )}
+            {printSettings.showDate && (
+              <>
+                <span>Fecha</span>
+                <span>{ticketDate}</span>
+              </>
+            )}
+            {printSettings.showEmployee && (
+              <>
+                <span>Atendió</span>
+                <span>{order.employeeName ?? "Empleado"}</span>
+              </>
+            )}
+            {printSettings.showService && (
+              <>
+                <span>Servicio</span>
+                <span>{service}</span>
+              </>
+            )}
+          </div>
+        )}
 
         <div className="receipt-lines">
           {lines.map((line) => (
@@ -225,7 +318,7 @@ export default async function ReceiptPage({
                 </span>
                 <span>{money.format(Number(line.lineTotal))}</span>
               </div>
-              {line.note && (
+              {printSettings.showItemNotes && line.note && (
                 <div className="receipt-line-note">↳ {line.note}</div>
               )}
             </div>
@@ -240,25 +333,25 @@ export default async function ReceiptPage({
         <div className="receipt-meta">
           <span>Pago</span>
           <span>{paymentMethod || "—"}</span>
-          {order.customerName && (
+
+          {printSettings.showCustomer && order.customerName && (
             <>
               <span>Cliente</span>
               <span>{order.customerName}</span>
-              {!split && (
-                <>
-                  <span>Saldo puntos</span>
-                  <span>{Number(order.customerPoints ?? 0).toFixed(2)}</span>
-                  <span>Generaría 5%</span>
-                  <span>
-                    +{Number(order.order.loyaltyPointsPreview).toFixed(2)}
-                  </span>
-                </>
-              )}
+            </>
+          )}
+
+          {printSettings.showPoints && pointsBalance && pointsEarned && (
+            <>
+              <span>Puntos ganados</span>
+              <span>+{pointsEarned}</span>
+              <span>Saldo puntos</span>
+              <span>{pointsBalance}</span>
             </>
           )}
         </div>
 
-        {order.order.note && <p>Nota: {order.order.note}</p>}
+        {order.order.note && <p>Nota de orden: {order.order.note}</p>}
 
         {order.order.status === "CANCELLED" && (
           <div className="receipt-cancelled">
@@ -269,11 +362,13 @@ export default async function ReceiptPage({
         )}
 
         <footer>
-          <p>Gracias por tu visita.</p>
+          {printSettings.footerMessage && (
+            <p><strong>{printSettings.footerMessage}</strong></p>
+          )}
           {!split && (
             <p>Puntos en simulación mientras POS esté en modo espejo.</p>
           )}
-          <p>Documento de prueba interna · no es CFDI.</p>
+          {printSettings.showNoCfdi && <p>Este ticket no es CFDI.</p>}
         </footer>
       </article>
 

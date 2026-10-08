@@ -26,22 +26,16 @@ public static class CafeEpicoRawPrinter {
 
     [DllImport("winspool.Drv", EntryPoint="OpenPrinterA", SetLastError=true, CharSet=CharSet.Ansi, ExactSpelling=true)]
     public static extern bool OpenPrinter(string szPrinter, out IntPtr hPrinter, IntPtr pd);
-
     [DllImport("winspool.Drv", EntryPoint="ClosePrinter", SetLastError=true, ExactSpelling=true)]
     public static extern bool ClosePrinter(IntPtr hPrinter);
-
     [DllImport("winspool.Drv", EntryPoint="StartDocPrinterA", SetLastError=true, CharSet=CharSet.Ansi, ExactSpelling=true)]
     public static extern bool StartDocPrinter(IntPtr hPrinter, Int32 level, [In] DOCINFOA di);
-
     [DllImport("winspool.Drv", EntryPoint="EndDocPrinter", SetLastError=true, ExactSpelling=true)]
     public static extern bool EndDocPrinter(IntPtr hPrinter);
-
     [DllImport("winspool.Drv", EntryPoint="StartPagePrinter", SetLastError=true, ExactSpelling=true)]
     public static extern bool StartPagePrinter(IntPtr hPrinter);
-
     [DllImport("winspool.Drv", EntryPoint="EndPagePrinter", SetLastError=true, ExactSpelling=true)]
     public static extern bool EndPagePrinter(IntPtr hPrinter);
-
     [DllImport("winspool.Drv", EntryPoint="WritePrinter", SetLastError=true, ExactSpelling=true)]
     public static extern bool WritePrinter(IntPtr hPrinter, IntPtr pBytes, Int32 dwCount, out Int32 dwWritten);
 
@@ -51,18 +45,12 @@ public static class CafeEpicoRawPrinter {
             throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
 
         try {
-            var di = new DOCINFOA {
-                pDocName = "Cafe Epico OPS",
-                pDataType = "RAW"
-            };
-
+            var di = new DOCINFOA { pDocName = "Cafe Epico OPS", pDataType = "RAW" };
             if (!StartDocPrinter(hPrinter, 1, di))
                 throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
-
             try {
                 if (!StartPagePrinter(hPrinter))
                     throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
-
                 try {
                     IntPtr unmanaged = Marshal.AllocCoTaskMem(bytes.Length);
                     try {
@@ -70,22 +58,10 @@ public static class CafeEpicoRawPrinter {
                         Int32 written;
                         if (!WritePrinter(hPrinter, unmanaged, bytes.Length, out written) || written != bytes.Length)
                             throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
-                    }
-                    finally {
-                        Marshal.FreeCoTaskMem(unmanaged);
-                    }
-                }
-                finally {
-                    EndPagePrinter(hPrinter);
-                }
-            }
-            finally {
-                EndDocPrinter(hPrinter);
-            }
-        }
-        finally {
-            ClosePrinter(hPrinter);
-        }
+                    } finally { Marshal.FreeCoTaskMem(unmanaged); }
+                } finally { EndPagePrinter(hPrinter); }
+            } finally { EndDocPrinter(hPrinter); }
+        } finally { ClosePrinter(hPrinter); }
     }
 }
 "@
@@ -124,29 +100,53 @@ function Align-Code([string]$align) {
   }
 }
 
+function Add-RasterImage($list, $logo) {
+  if ($null -eq $logo) { return }
+  if ([string]::IsNullOrWhiteSpace([string]$logo.dataBase64)) { return }
+
+  $width = [int]$logo.width
+  $height = [int]$logo.height
+  if ($width -lt 1 -or $width -gt 384 -or $height -lt 1 -or $height -gt 600) {
+    throw "Dimensiones de logo fuera de rango."
+  }
+
+  $data = [Convert]::FromBase64String([string]$logo.dataBase64)
+  $widthBytes = [int][Math]::Ceiling($width / 8.0)
+  $expected = $widthBytes * $height
+  if ($data.Length -ne $expected) {
+    throw "Raster de logo invalido."
+  }
+
+  $align = Align-Code ([string]$logo.align)
+  Add-Bytes $list ([byte[]](27,97,[byte]$align))
+
+  $xL = [byte]($widthBytes -band 255)
+  $xH = [byte](($widthBytes -shr 8) -band 255)
+  $yL = [byte]($height -band 255)
+  $yH = [byte](($height -shr 8) -band 255)
+
+  Add-Bytes $list ([byte[]](29,118,48,0,$xL,$xH,$yL,$yH))
+  Add-Bytes $list $data
+  Add-Bytes $list ([byte[]](10))
+}
+
 function Build-EscPos($payload) {
   $encoding = [Text.Encoding]::GetEncoding(850)
   $bytes = New-Object 'System.Collections.Generic.List[byte]'
 
   Add-Bytes $bytes ([byte[]](27,64))
   Add-Bytes $bytes ([byte[]](27,116,[byte]$EscPosCodePage))
+  Add-RasterImage $bytes $payload.logo
 
   foreach ($line in $payload.lines) {
     $align = Align-Code ([string]$line.align)
     Add-Bytes $bytes ([byte[]](27,97,[byte]$align))
-
-    if ($line.bold -eq $true) {
-      Add-Bytes $bytes ([byte[]](27,69,1))
-    } else {
-      Add-Bytes $bytes ([byte[]](27,69,0))
-    }
-
+    Add-Bytes $bytes ([byte[]](27,69,[byte]$(if ($line.bold -eq $true) { 1 } else { 0 })))
     if ([string]$line.size -eq "double") {
       Add-Bytes $bytes ([byte[]](29,33,17))
     } else {
       Add-Bytes $bytes ([byte[]](29,33,0))
     }
-
     Add-Text $bytes ([string]$line.text) $encoding
     Add-Bytes $bytes ([byte[]](10))
   }
@@ -179,7 +179,6 @@ Write-Host "Cafe Epico Print Bridge" -ForegroundColor Cyan
 Write-Host "Impresora: $PrinterName"
 Write-Host "URL local : http://127.0.0.1:$Port"
 Write-Host "Token     : $Token" -ForegroundColor Yellow
-Write-Host "Deja esta ventana abierta mientras uses el POS."
 Write-Host ""
 
 try {
@@ -206,6 +205,7 @@ try {
         printer = $PrinterName
         port = $Port
         mode = "RAW_ESC_POS"
+        graphics = $true
       }
       continue
     }
@@ -215,25 +215,15 @@ try {
         $reader = New-Object IO.StreamReader($request.InputStream, $request.ContentEncoding)
         $body = $reader.ReadToEnd()
         $payload = $body | ConvertFrom-Json
-
         if ($null -eq $payload.lines -or $payload.lines.Count -eq 0) {
           throw "El ticket no contiene lineas."
         }
-
         $raw = Build-EscPos $payload
         [CafeEpicoRawPrinter]::Print($PrinterName, $raw)
-
-        Send-Json $context 200 @{
-          ok = $true
-          printer = $PrinterName
-          bytes = $raw.Length
-        }
+        Send-Json $context 200 @{ ok = $true; printer = $PrinterName; bytes = $raw.Length }
       }
       catch {
-        Send-Json $context 500 @{
-          ok = $false
-          error = $_.Exception.Message
-        }
+        Send-Json $context 500 @{ ok = $false; error = $_.Exception.Message }
       }
       continue
     }

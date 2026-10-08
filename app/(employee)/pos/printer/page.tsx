@@ -22,38 +22,58 @@ export default async function PosPrinterPage() {
           <p className="eyebrow">POS · HARDWARE</p>
           <h1>Impresora térmica directa</h1>
           <p className="muted">
-            Esta configuración se guarda sólo en esta computadora. El puente
-            manda ESC/POS RAW a Windows y evita el tamaño de hoja impuesto por
-            Chrome.
+            OPS imprime en RAW ESC/POS: sin hoja de Chrome y con soporte para
+            gráficos térmicos.
           </p>
         </div>
-        <Link href="/pos" className="button">
-          Volver al POS
-        </Link>
+        <div className="pos-result-actions">
+          <Link href="/admin/pos/ticket" className="button">
+            Editar ticket
+          </Link>
+          <Link href="/pos" className="button">
+            Volver al POS
+          </Link>
+        </div>
       </section>
 
       <section className="card">
-        <p className="eyebrow">1 · PUENTE LOCAL</p>
-        <h2>Ejecuta el puente en la computadora de caja</h2>
+        <p className="eyebrow">1 · INSTALAR UNA SOLA VEZ</p>
+        <h2>Arranque automático en Windows</h2>
         <p className="muted">
-          El archivo del proyecto es
-          <code> tools/print-bridge/CafeEpicoPrintBridge.ps1</code>. Por
-          defecto busca la impresora de Windows “POS-58 (copy 1)” y muestra un
-          token local al arrancar.
+          Desde la raíz del proyecto abre PowerShell y ejecuta:
+        </p>
+        <pre className="code-block">
+          powershell -ExecutionPolicy Bypass -File
+          .\tools\print-bridge\Install-CafeEpicoPrintBridge.ps1
+        </pre>
+        <p className="muted">
+          El instalador crea una tarea de Windows para iniciar el puente oculto
+          al entrar a tu sesión. Ya no necesitas dejar una ventana de
+          PowerShell abierta.
+        </p>
+        <p className="muted">
+          Al terminar te mostrará un token. Cópialo en el paso 2.
         </p>
       </section>
 
       <section className="card">
-        <p className="eyebrow">2 · VINCULAR ESTE NAVEGADOR</p>
-        <h2>Conectar OPS con la impresora</h2>
+        <p className="eyebrow">2 · VINCULAR ESTA COMPUTADORA</p>
+        <h2>Conectar OPS con la POS-58</h2>
         <PrinterBridgeSetup />
       </section>
 
       <section className="card">
-        <p className="eyebrow">SEGURIDAD</p>
+        <p className="eyebrow">MANTENIMIENTO</p>
         <p className="muted">
-          El puente sólo escucha en 127.0.0.1, por lo que no queda expuesto a
-          otros equipos de la red. Además exige el token local para imprimir.
+          Para quitar el arranque automático usa:
+        </p>
+        <pre className="code-block">
+          powershell -ExecutionPolicy Bypass -File
+          .\tools\print-bridge\Uninstall-CafeEpicoPrintBridge.ps1
+        </pre>
+        <p className="muted">
+          El puente escucha sólo en 127.0.0.1 y exige el token local para
+          imprimir.
         </p>
       </section>
     </main>
