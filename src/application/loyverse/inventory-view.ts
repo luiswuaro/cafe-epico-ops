@@ -5,6 +5,7 @@ import {
   loyverseInventoryLevels,
   loyverseItemSettings,
   loyverseItems,
+  operationalInventoryBalances,
   loyverseStores,
   loyverseVariants,
   suppliers,
@@ -32,7 +33,7 @@ export async function getLoyverseInventoryView(
 ) {
   const db = getDb();
 
-  const [stores, items, variants, levels, categories, settings] = await Promise.all([
+  const [stores, items, variants, levels, categories, settings, operationalBalances] = await Promise.all([
     db
       .select({
         externalId: loyverseStores.externalId,
@@ -97,6 +98,24 @@ export async function getLoyverseInventoryView(
       .from(loyverseItemSettings)
       .leftJoin(suppliers, eq(suppliers.id, loyverseItemSettings.supplierId))
       .where(eq(loyverseItemSettings.organizationId, organizationId)),
+    db
+      .select({
+        variantExternalId: operationalInventoryBalances.variantExternalId,
+        loyverseStoreExternalId:
+          operationalInventoryBalances.loyverseStoreExternalId,
+        quantityNative: operationalInventoryBalances.quantityNative,
+        sourceQuantityNative:
+          operationalInventoryBalances.sourceQuantityNative,
+        initializedAt: operationalInventoryBalances.initializedAt,
+        updatedAt: operationalInventoryBalances.updatedAt,
+      })
+      .from(operationalInventoryBalances)
+      .where(
+        eq(
+          operationalInventoryBalances.organizationId,
+          organizationId,
+        ),
+      ),
   ]);
 
   const selectedStore =
@@ -122,6 +141,14 @@ export async function getLoyverseInventoryView(
   );
   const settingByVariant = new Map(
     settings.map((setting) => [setting.variantExternalId, setting]),
+  );
+  const operationalBalanceByVariant = new Map(
+    operationalBalances
+      .filter(
+        (balance) =>
+          balance.loyverseStoreExternalId === selectedStore.externalId,
+      )
+      .map((balance) => [balance.variantExternalId, balance]),
   );
 
   const rows = levels
@@ -169,7 +196,13 @@ export async function getLoyverseInventoryView(
         loyversePurchaseCost;
       const lowStock = numberOrNull(storeConfig?.low_stock);
       const optimalStock = numberOrNull(storeConfig?.optimal_stock);
-      const inStock = Number(level.inStock);
+      const sourceInStock = Number(level.inStock);
+      const operationalBalance =
+        operationalBalanceByVariant.get(variant.externalId);
+      const operationalInStock = operationalBalance
+        ? Number(operationalBalance.quantityNative)
+        : null;
+      const inStock = operationalInStock ?? sourceInStock;
 
       return [{
         variantExternalId: variant.externalId,
@@ -181,6 +214,13 @@ export async function getLoyverseInventoryView(
           (categoryId ? "Categoría pendiente de sincronizar" : "Sin categoría"),
         categoryId: categoryId || null,
         inStock,
+        sourceInStock,
+        operationalInStock,
+        stockSource: operationalBalance ? ("OPS" as const) : ("LOYVERSE" as const),
+        operationalInitializedAt:
+          operationalBalance?.initializedAt ?? null,
+        operationalUpdatedAt:
+          operationalBalance?.updatedAt ?? null,
         soldByWeight,
         unitLabel: soldByWeight ? "peso/volumen" : "pz",
         purchaseCost,

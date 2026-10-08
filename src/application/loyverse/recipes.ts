@@ -172,9 +172,6 @@ export async function getLoyverseRecipeSource(organizationId: string) {
 
   const disposablePattern =
     /(VASO|TAPA|POPOTE|MANGA|FAJILLA|SERVILLETA|BOLSA|CUBIERTO|CHAROLA)/i;
-  const dryPattern =
-    /(CAFE|CAFÉ|MATCHA|TARO|CACAO|POLVO|AZUCAR|AZÚCAR|CANELA|HIELO)/i;
-
   const presentation = (
     item: ItemRecord,
     variant: VariantRecord,
@@ -189,21 +186,16 @@ export async function getLoyverseRecipeSource(organizationId: string) {
 
     const setting = settingByVariant.get(variant.externalId);
     const soldByWeight = asBool(item.payload.sold_by_weight);
-    const automaticUnit = soldByWeight
-      ? dryPattern.test(item.itemName)
-        ? "g"
-        : "ml"
-      : "pz";
     const factor =
       setting?.displayUnit && setting.displayFactor != null
         ? Number(setting.displayFactor)
-        : soldByWeight
-          ? 1000
-          : 1;
+        : 1;
 
     return {
       displayQuantity: quantity * (Number.isFinite(factor) ? factor : 1),
-      displayUnit: setting?.displayUnit ?? automaticUnit,
+      displayUnit:
+        setting?.displayUnit ??
+        (soldByWeight ? "unidad Loyverse" : "pz"),
     };
   };
 

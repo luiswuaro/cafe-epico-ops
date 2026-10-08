@@ -1,7 +1,7 @@
 "use server";
 
 import { randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -86,6 +86,15 @@ async function buildOrderInput(
     const lineTotal = item.price * line.quantity;
     const serviceRecipe =
       item.serviceRecipes[serviceMode as PosServiceMode];
+
+    if (
+      (item.category === "CALIENTES" || item.category === "FRÍAS") &&
+      !serviceRecipe.configured
+    ) {
+      throw new Error(
+        "La bebida " + item.name + " no tiene receta operativa completa",
+      );
+    }
 
     return {
       item,
@@ -270,6 +279,15 @@ async function createShadowOrder(
       }
     }
 
+    if (status === "PAID") {
+      await tx.execute(
+        sql`select public.apply_pos_order_inventory(
+          ${created.id}::uuid,
+          ${employee.id}::uuid
+        )`,
+      );
+    }
+
     await tx.insert(auditEvents).values({
       organizationId: employee.organizationId,
       storeId: employee.homeStoreId,
@@ -290,7 +308,7 @@ async function createShadowOrder(
         status,
         cashTendered: tender.tendered,
         cashChange: tender.change,
-        inventoryEffectApplied: false,
+        inventoryEffectApplied: status === "PAID",
         loyaltyEffectApplied: false,
       },
     });
@@ -470,6 +488,13 @@ export async function payShadowCommand(formData: FormData) {
       });
     }
 
+    await tx.execute(
+      sql`select public.apply_pos_order_inventory(
+        ${order.id}::uuid,
+        ${employee.id}::uuid
+      )`,
+    );
+
     await tx.insert(auditEvents).values({
       organizationId: employee.organizationId,
       storeId: employee.homeStoreId,
@@ -485,6 +510,7 @@ export async function payShadowCommand(formData: FormData) {
         cashTendered: tender.tendered,
         cashChange: tender.change,
         loyaltyPointsPreview: order.loyaltyPointsPreview,
+        inventoryEffectApplied: true,
         loyaltyEffectApplied: false,
       },
     });
@@ -569,9 +595,9 @@ export async function cancelPosOrder(formData: FormData) {
   if (order.status === "CANCELLED") {
     redirect("/pos?saved=" + order.id);
   }
-  if (order.inventoryEffectApplied || order.loyaltyEffectApplied) {
+  if (order.loyaltyEffectApplied) {
     throw new Error(
-      "Esta venta ya tiene efectos aplicados y requiere una reversa administrativa.",
+      "Esta venta ya aplicó lealtad y requiere una reversa administrativa.",
     );
   }
 
@@ -644,6 +670,15 @@ export async function cancelPosOrder(formData: FormData) {
       );
     }
 
+    if (order.inventoryEffectApplied) {
+      await tx.execute(
+        sql`select public.reverse_pos_order_inventory(
+          ${order.id}::uuid,
+          ${employee.id}::uuid
+        )`,
+      );
+    }
+
     await tx.insert(auditEvents).values({
       organizationId: employee.organizationId,
       storeId: employee.homeStoreId,
@@ -656,7 +691,7 @@ export async function cancelPosOrder(formData: FormData) {
       afterData: {
         status: "CANCELLED",
         reason,
-        inventoryEffectApplied: order.inventoryEffectApplied,
+        inventoryEffectApplied: false,
         loyaltyEffectApplied: order.loyaltyEffectApplied,
       },
     });

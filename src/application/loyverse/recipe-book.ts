@@ -21,20 +21,26 @@ type OperationalCandidate = {
 const DISPOSABLE_PATTERN =
   /(VASO|TAPA|POPOTE|MANGA|FAJILLA|SERVILLETA|BOLSA|CUBIERTO|CHAROLA|PORTAVASOS|DOMO)/i;
 
-const STANDARD_PACKAGING: Record<
-  Exclude<OperationalRecipeCategory, "ALIMENTOS">,
-  string[]
+const SERVICE_PACKAGING: Record<
+  "DINE_IN" | "TAKEAWAY",
+  Record<Exclude<OperationalRecipeCategory, "ALIMENTOS">, string[]>
 > = {
-  CALIENTES: [
-    "VASO CALIENTE 12OZ",
-    "TAPA CALIENTE 12OZ",
-    "MANGA DE PAPEL",
-  ],
-  "FRÍAS": [
-    "VASO FRIO 16OZ",
-    "TAPA PLANA16 OZ",
-    "POPOTE PARA TAPIOCA",
-  ],
+  DINE_IN: {
+    CALIENTES: [],
+    "FRÍAS": ["POPOTE PARA TAPIOCA"],
+  },
+  TAKEAWAY: {
+    CALIENTES: [
+      "VASO CALIENTE 12OZ",
+      "TAPA CALIENTE 12OZ",
+      "MANGA DE PAPEL",
+    ],
+    "FRÍAS": [
+      "VASO FRIO 16OZ",
+      "TAPA PLANA16 OZ",
+      "POPOTE PARA TAPIOCA",
+    ],
+  },
 };
 
 function normalize(value: string) {
@@ -136,10 +142,6 @@ export async function getOperationalRecipeSource(
   const allEffective = source.recipes.flatMap(
     (recipe) => recipe.effectiveComponents,
   );
-  const allDirect = source.recipes.flatMap(
-    (recipe) => recipe.directComponents,
-  );
-
   const effectiveByName = new Map<string, EffectiveComponent>();
   for (const component of allEffective) {
     const key = normalize(component.sourceName);
@@ -148,19 +150,9 @@ export async function getOperationalRecipeSource(
     }
   }
 
-  const directByName = new Map<string, DirectComponent>();
-  for (const component of allDirect) {
-    const key = normalize(component.sourceName);
-    if (!directByName.has(key)) {
-      directByName.set(key, component);
-    }
-  }
-
-  function standardEffectivePackaging(
-    category: "CALIENTES" | "FRÍAS",
-  ) {
+  function standardEffectivePackaging(names: string[]) {
     const missing: string[] = [];
-    const components = STANDARD_PACKAGING[category].flatMap((name) => {
+    const components = names.flatMap((name) => {
       const component = effectiveByName.get(normalize(name));
       if (!component) {
         missing.push(name);
@@ -169,20 +161,6 @@ export async function getOperationalRecipeSource(
       return [{ ...component, quantity: 1 }];
     });
     return { components, missing };
-  }
-
-  function standardDirectPackaging(
-    category: "CALIENTES" | "FRÍAS",
-  ) {
-    return STANDARD_PACKAGING[category].flatMap((name) => {
-      const component = directByName.get(normalize(name));
-      if (!component) return [];
-      return [{
-        ...component,
-        quantity: 1,
-        displayQuantity: 1,
-      }];
-    });
   }
 
   const recipes = [...groups.values()]
@@ -215,23 +193,27 @@ export async function getOperationalRecipeSource(
       const packagingWarnings: string[] = [];
 
       if (category === "CALIENTES" || category === "FRÍAS") {
-        const standardEffective = standardEffectivePackaging(category);
-        const standardDirect = standardDirectPackaging(category);
+        const dineInPackaging = standardEffectivePackaging(
+          SERVICE_PACKAGING.DINE_IN[category],
+        );
+        const takeawayPackaging = standardEffectivePackaging(
+          SERVICE_PACKAGING.TAKEAWAY[category],
+        );
 
-        directComponents = mergeDirect([
-          ...baseDirect,
-          ...standardDirect,
-        ]);
+        directComponents = mergeDirect(baseDirect);
         dineInComponents = mergeEffective([
           ...baseEffective,
-          ...standardEffective.components,
+          ...dineInPackaging.components,
         ]);
         takeawayComponents = mergeEffective([
           ...baseEffective,
-          ...standardEffective.components,
+          ...takeawayPackaging.components,
         ]);
 
-        packagingWarnings.push(...standardEffective.missing);
+        packagingWarnings.push(
+          ...dineInPackaging.missing,
+          ...takeawayPackaging.missing,
+        );
       } else {
         const takeawayCandidate =
           candidates.find((candidate) => {

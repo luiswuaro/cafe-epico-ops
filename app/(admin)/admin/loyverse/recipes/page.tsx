@@ -89,12 +89,14 @@ export default async function LoyverseRecipesPage({
       <section className="card" style={{ marginTop: "1rem" }}>
         <p className="eyebrow">REGLAS DE SERVICIO OPS</p>
         <p>
-          <strong>Calientes:</strong> vaso caliente 12 oz + tapa caliente 12 oz
-          + manga de papel, tanto aquí como para llevar.
+          <strong>Calientes aquí:</strong> sin desechable.
+          {" "}<strong>Para llevar:</strong> vaso caliente 12 oz + tapa
+          caliente 12 oz + manga de papel.
         </p>
         <p>
-          <strong>Frías:</strong> vaso frío 16 oz + tapa plana 16 oz + popote
-          para tapioca, tanto aquí como para llevar.
+          <strong>Frías aquí:</strong> sólo popote para tapioca.
+          {" "}<strong>Para llevar:</strong> vaso frío 16 oz + tapa plana
+          16 oz + popote para tapioca.
         </p>
         <p>
           <strong>Alimentos:</strong> aquí conserva la receta base; para llevar

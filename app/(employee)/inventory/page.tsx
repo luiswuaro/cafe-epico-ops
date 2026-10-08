@@ -105,6 +105,44 @@ export default async function InventoryPage({ searchParams }: PageProps) {
       !row.displayUnit,
   ).length;
 
+  const lastRestockByVariant = new Map<string, Date>();
+  for (const change of inventory.recentChanges) {
+    if (change.delta <= 0) continue;
+    if (!lastRestockByVariant.has(change.variantExternalId)) {
+      lastRestockByVariant.set(
+        change.variantExternalId,
+        change.capturedAt,
+      );
+    }
+  }
+
+  const lagRows = inventory.smartRows
+    .filter((row) => row.avgDailyUsage14 > 0.0005)
+    .map((row) => ({
+      row,
+      lastRestockAt:
+        lastRestockByVariant.get(row.variantExternalId) ?? null,
+    }))
+    .sort((a, b) => {
+      if (!a.lastRestockAt && b.lastRestockAt) return -1;
+      if (a.lastRestockAt && !b.lastRestockAt) return 1;
+      if (!a.lastRestockAt || !b.lastRestockAt) {
+        return a.row.daysCover == null
+          ? 1
+          : b.row.daysCover == null
+            ? -1
+            : a.row.daysCover - b.row.daysCover;
+      }
+      return (
+        a.lastRestockAt.getTime() - b.lastRestockAt.getTime()
+      );
+    })
+    .slice(0, 10);
+
+  const operationalBalances = inventory.rows.filter(
+    (row) => row.operationalInStock != null,
+  ).length;
+
   const purchaseRows = inventory.smartRows
     .filter((row) => row.suggestedPurchase > 0.0005)
     .slice(0, 20);
@@ -120,8 +158,9 @@ export default async function InventoryPage({ searchParams }: PageProps) {
         <p className="eyebrow">INVENTARIO · LOYVERSE + INTELIGENCIA</p>
         <h1>Inventario operativo</h1>
         <p className="muted">
-          Loyverse conserva la existencia. Ops calcula consumo teórico desde
-          ventas y recetas, cobertura, reposición sugerida y cambios históricos.
+          OPS conserva un saldo operativo independiente y descuenta las
+          recetas de las ventas pagadas. Loyverse queda como fuente de
+          comparación, sincronización e historial externo.
         </p>
       </section>
 
@@ -201,6 +240,14 @@ export default async function InventoryPage({ searchParams }: PageProps) {
         </article>
 
         <article className="card">
+          <span className="pill">SALDOS OPS ACTIVOS</span>
+          <div className="metric">{operationalBalances}</div>
+          <p>
+            variantes con saldo operativo independiente del espejo de Loyverse.
+          </p>
+        </article>
+
+        <article className="card">
           <span className="pill">COSTO ESTIMADO</span>
           <div className="metric">
             {money.format(inventory.summary.estimatedReplenishmentCost)}
@@ -235,7 +282,9 @@ export default async function InventoryPage({ searchParams }: PageProps) {
             {tomorrowRows.map((row) => (
               <div className="task" key={row.variantExternalId}>
                 <div style={{ flex: 1 }}>
-                  <strong>{row.itemName}</strong>{" "}
+                  <Link href={"/inventory/items/" + row.variantExternalId}>
+                  <strong>{row.itemName}</strong>
+                </Link>{" "}
                   <span
                     className={
                       row.status === "CRITICAL" || row.status === "WATCH"
@@ -262,6 +311,47 @@ export default async function InventoryPage({ searchParams }: PageProps) {
                     tarde{" "}
                     {number.format(displayQuantity(row.expectedTomorrowAfternoon, row.displayFactor))}
                   </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="card" style={{ marginTop: "1rem" }}>
+        <h2>Reposición / rezago</h2>
+        <p className="muted">
+          Insumos con consumo reciente, priorizados por ausencia o antigüedad
+          de una subida de stock en el historial disponible. “Sin reposición
+          detectada” significa únicamente que no aparece una subida en las
+          capturas sincronizadas disponibles.
+        </p>
+        {lagRows.length === 0 ? (
+          <p className="muted">
+            Todavía no hay consumo suficiente para evaluar rezago.
+          </p>
+        ) : (
+          <div className="stack">
+            {lagRows.map(({ row, lastRestockAt }) => (
+              <div className="task" key={row.variantExternalId}>
+                <div style={{ flex: 1 }}>
+                  <Link href={"/inventory/items/" + row.variantExternalId}>
+                    <strong>{row.itemName}</strong>
+                  </Link>
+                  <div className="muted">
+                    {lastRestockAt
+                      ? "Última reposición detectada " +
+                        lastRestockAt.toLocaleString("es-MX", {
+                          timeZone: "America/Mexico_City",
+                          dateStyle: "short",
+                          timeStyle: "short",
+                        })
+                      : "Sin reposición detectada en la ventana disponible"}
+                  </div>
+                </div>
+                <div style={{ textAlign: "right" }}>
+                  <strong>{coverageLabel(row.daysCover)}</strong>
+                  <div className="muted">de cobertura OPS</div>
                 </div>
               </div>
             ))}
@@ -311,11 +401,11 @@ export default async function InventoryPage({ searchParams }: PageProps) {
       </section>
 
       <section className="card" style={{ marginTop: "1rem" }}>
-        <h2>Histórico reciente de existencia</h2>
+        <h2>Histórico reciente · fuente Loyverse</h2>
         <p className="muted">
-          Cada actualización guarda un punto cuando la existencia cambia.
-          Esto permite reconstruir bajas, reposiciones y correcciones de
-          Loyverse sin crear un segundo inventario.
+          Cada actualización de Loyverse guarda un punto cuando la existencia
+          cambia. El histórico individual de cada insumo también muestra el
+          saldo y los movimientos propios de OPS.
         </p>
         {inventory.recentChanges.length === 0 ? (
           <p className="muted">
@@ -373,14 +463,16 @@ export default async function InventoryPage({ searchParams }: PageProps) {
       <section className="card" style={{ marginTop: "1rem" }}>
         <h2>Inventario completo</h2>
         <p className="muted">
-          Existencia actual directa de Loyverse. El consumo/día es teórico
-          según ventas y composición de recetas.
+          La existencia principal es el saldo OPS cuando ya fue inicializado.
+          Debajo se conserva el stock fuente de Loyverse para reconciliación.
         </p>
         <div className="stack">
           {inventory.smartRows.map((row) => (
             <div className="task" key={row.variantExternalId}>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <strong>{row.itemName}</strong>{" "}
+                <Link href={"/inventory/items/" + row.variantExternalId}>
+                  <strong>{row.itemName}</strong>
+                </Link>{" "}
                 <span
                   className={
                     row.status === "CRITICAL" || row.status === "WATCH"
@@ -400,10 +492,26 @@ export default async function InventoryPage({ searchParams }: PageProps) {
                   {number.format(displayQuantity(row.inStock, row.displayFactor))} {displayUnit(row.unitLabel, row.displayUnit)}
                 </strong>
                 <div className="muted">
+                  {row.operationalInStock != null
+                    ? "OPS · Loyverse " +
+                      number.format(
+                        displayQuantity(
+                          row.sourceInStock,
+                          row.displayFactor,
+                        ),
+                      ) +
+                      " " +
+                      displayUnit(row.unitLabel, row.displayUnit)
+                    : "Fuente Loyverse"}
+                </div>
+                <div className="muted">
                   consumo/día {number.format(displayQuantity(row.avgDailyUsage14, row.displayFactor))}
                   {" · "}
                   {coverageLabel(row.daysCover)}
                 </div>
+                <Link href={"/inventory/items/" + row.variantExternalId}>
+                  Ver histórico
+                </Link>
               </div>
             </div>
           ))}

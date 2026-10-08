@@ -1,6 +1,6 @@
 "use server";
 
-import { and, eq, inArray, ne } from "drizzle-orm";
+import { and, eq, inArray, ne, sql } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { getOpenCashSession } from "@/src/application/pos/cash";
@@ -318,6 +318,15 @@ export async function payOrderSplit(formData: FormData) {
       })
       .where(eq(posOrders.id, order.id));
 
+    if (remaining.length === 0) {
+      await tx.execute(
+        sql`select public.apply_pos_order_inventory(
+          ${order.id}::uuid,
+          ${employee.id}::uuid
+        )`,
+      );
+    }
+
     await tx.insert(auditEvents).values({
       organizationId: employee.organizationId,
       storeId: employee.homeStoreId,
@@ -333,6 +342,7 @@ export async function payOrderSplit(formData: FormData) {
         cashTendered: tender.tendered,
         cashChange: tender.change,
         orderId: order.id,
+        inventoryEffectApplied: remaining.length === 0,
       },
     });
   });
