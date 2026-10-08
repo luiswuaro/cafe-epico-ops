@@ -32,6 +32,21 @@ function coverageLabel(days: number | null) {
   return `${days.toFixed(1)} días`;
 }
 
+function displayQuantity(
+  value: number,
+  displayFactor: number | null | undefined,
+) {
+  return value * (displayFactor ?? 1);
+}
+
+function displayUnit(
+  unitLabel: string,
+  configuredUnit: string | null | undefined,
+) {
+  if (configuredUnit) return configuredUnit;
+  return unitLabel === "peso/volumen" ? "unidad Loyverse" : unitLabel;
+}
+
 function statusLabel(status: "CRITICAL" | "WATCH" | "OK" | "NO_DATA") {
   if (status === "CRITICAL") return "CRÍTICO";
   if (status === "WATCH") return "REVISAR";
@@ -184,7 +199,8 @@ export default async function InventoryPage({ searchParams }: PageProps) {
         <p className="muted">
           Pronóstico por recetas vendidas. Usa promedio de este mismo día de la
           semana cuando hay al menos 2 muestras; si no, promedio de 14 días.
-          Muestra en la unidad nativa de Loyverse.
+          Los cálculos usan la unidad nativa de Loyverse; la pantalla convierte
+          a la unidad operativa configurada cuando existe.
         </p>
 
         {tomorrowRows.length === 0 ? (
@@ -207,21 +223,21 @@ export default async function InventoryPage({ searchParams }: PageProps) {
                     {statusLabel(row.status)}
                   </span>
                   <div className="muted">
-                    Actual {number.format(row.inStock)} {row.unitLabel}
+                    Actual {number.format(displayQuantity(row.inStock, row.displayFactor))} {displayUnit(row.unitLabel, row.displayUnit)}
                     {" · "}
                     cobertura {coverageLabel(row.daysCover)}
                   </div>
                   <div>
                     Mañana esperado:{" "}
                     <strong>
-                      {number.format(row.expectedTomorrow)} {row.unitLabel}
+                      {number.format(displayQuantity(row.expectedTomorrow, row.displayFactor))} {displayUnit(row.unitLabel, row.displayUnit)}
                     </strong>
                     {" · "}
                     mañana/primer turno{" "}
-                    {number.format(row.expectedTomorrowMorning)}
+                    {number.format(displayQuantity(row.expectedTomorrowMorning, row.displayFactor))
                     {" · "}
                     tarde{" "}
-                    {number.format(row.expectedTomorrowAfternoon)}
+                    {number.format(displayQuantity(row.expectedTomorrowAfternoon, row.displayFactor))
                   </div>
                 </div>
               </div>
@@ -248,16 +264,16 @@ export default async function InventoryPage({ searchParams }: PageProps) {
                 <div style={{ flex: 1 }}>
                   <strong>{row.itemName}</strong>
                   <div className="muted">
-                    Actual {number.format(row.inStock)} {row.unitLabel}
+                    Actual {number.format(displayQuantity(row.inStock, row.displayFactor))} {displayUnit(row.unitLabel, row.displayUnit)}
                     {" · "}
-                    consumo/día {number.format(row.avgDailyUsage14)}
+                    consumo/día {number.format(displayQuantity(row.avgDailyUsage14, row.displayFactor))
                     {" · "}
                     cobertura {coverageLabel(row.daysCover)}
                   </div>
                 </div>
                 <div style={{ textAlign: "right" }}>
                   <strong>
-                    +{number.format(row.suggestedPurchase)} {row.unitLabel}
+                    +{number.format(displayQuantity(row.suggestedPurchase, row.displayFactor))} {displayUnit(row.unitLabel, row.displayUnit)}
                   </strong>
                   {row.suggestedCost != null && (
                     <div className="muted">
@@ -311,11 +327,19 @@ export default async function InventoryPage({ searchParams }: PageProps) {
                     change.delta < 0 ? "status-warn" : "status-ok"
                   }
                 >
-                  {number.format(change.before)} →{" "}
-                  {number.format(change.after)} {change.unitLabel}
+                  {number.format(
+                    displayQuantity(change.before, change.displayFactor),
+                  )}{" "}
+                  →{" "}
+                  {number.format(
+                    displayQuantity(change.after, change.displayFactor),
+                  )}{" "}
+                  {displayUnit(change.unitLabel, change.displayUnit)}
                   {" · "}
                   {change.delta > 0 ? "+" : ""}
-                  {number.format(change.delta)}
+                  {number.format(
+                    displayQuantity(change.delta, change.displayFactor),
+                  )}
                 </div>
               </div>
             ))}
@@ -350,10 +374,10 @@ export default async function InventoryPage({ searchParams }: PageProps) {
               </div>
               <div style={{ textAlign: "right" }}>
                 <strong>
-                  {number.format(row.inStock)} {row.unitLabel}
+                  {number.format(displayQuantity(row.inStock, row.displayFactor))} {displayUnit(row.unitLabel, row.displayUnit)}
                 </strong>
                 <div className="muted">
-                  consumo/día {number.format(row.avgDailyUsage14)}
+                  consumo/día {number.format(displayQuantity(row.avgDailyUsage14, row.displayFactor))
                   {" · "}
                   {coverageLabel(row.daysCover)}
                 </div>

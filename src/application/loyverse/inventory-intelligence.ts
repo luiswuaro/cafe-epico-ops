@@ -1,4 +1,4 @@
-import { and, eq, gte, inArray } from "drizzle-orm";
+import { and, eq, gte, inArray, sql } from "drizzle-orm";
 import { getLoyverseInventoryView } from "@/src/application/loyverse/inventory-view";
 import { getDb } from "@/src/infrastructure/db/client";
 import {
@@ -155,6 +155,7 @@ export async function getInventoryIntelligence(
             eq(loyverseReceipts.receiptType, "SALE"),
             eq(loyverseReceipts.storeExternalId, selectedStore.externalId),
             gte(loyverseReceipts.receiptDate, since35),
+            sql`coalesce(${loyverseReceipts.payload}->>'cancelled_at','') = ''`,
           ),
         ),
       db
@@ -510,6 +511,8 @@ export async function getInventoryIntelligence(
     variantExternalId: string;
     itemName: string;
     unitLabel: string;
+    displayUnit: string | null;
+    displayFactor: number;
     before: number;
     after: number;
     delta: number;
@@ -528,6 +531,8 @@ export async function getInventoryIntelligence(
         variantExternalId: variantId,
         itemName: item?.itemName ?? variantId,
         unitLabel: item?.unitLabel ?? "u.",
+        displayUnit: item?.displayUnit ?? null,
+        displayFactor: item?.displayFactor ?? 1,
         before: before.stock,
         after: after.stock,
         delta,

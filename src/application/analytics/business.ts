@@ -1,4 +1,4 @@
-import { and, eq, gte } from "drizzle-orm";
+import { and, eq, gte, sql } from "drizzle-orm";
 import { getDb } from "@/src/infrastructure/db/client";
 import {
   loyverseCategories,
@@ -138,6 +138,7 @@ export async function getBusinessAnalytics(organizationId: string) {
             eq(loyverseReceipts.organizationId, organizationId),
             eq(loyverseReceipts.receiptType, "SALE"),
             gte(loyverseReceipts.receiptDate, since),
+            sql`coalesce(${loyverseReceipts.payload}->>'cancelled_at','') = ''`,
           ),
         ),
       db

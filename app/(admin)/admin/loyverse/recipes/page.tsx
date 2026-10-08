@@ -86,6 +86,31 @@ export default async function LoyverseRecipesPage({
         </div>
       </section>
 
+      <section className="card" style={{ marginTop: "1rem" }}>
+        <p className="eyebrow">REGLAS DE SERVICIO OPS</p>
+        <p>
+          <strong>Calientes:</strong> vaso caliente 12 oz + tapa caliente 12 oz
+          + manga de papel, tanto aquí como para llevar.
+        </p>
+        <p>
+          <strong>Frías:</strong> vaso frío 16 oz + tapa plana 16 oz + popote
+          para tapioca, tanto aquí como para llevar.
+        </p>
+        <p>
+          <strong>Alimentos:</strong> aquí conserva la receta base; para llevar
+          conserva el desechable definido en la fuente. No se inventa un empaque
+          cuando todavía no está configurado.
+        </p>
+        {data.packagingWarnings.length > 0 && (
+          <div className="alert">
+            <strong>Empaques pendientes:</strong>{" "}
+            {data.packagingWarnings
+              .map((row) => row.recipe + ": " + row.warning)
+              .join(" · ")}
+          </div>
+        )}
+      </section>
+
       <p className="card" style={{ marginTop: "1rem" }}>
         <strong>Cómo leerlo:</strong> “Directo” muestra la receta seleccionada
         para operación. “Consumo real” abre preparaciones base recursivamente
