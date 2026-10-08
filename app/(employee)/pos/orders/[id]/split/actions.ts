@@ -4,6 +4,7 @@ import { and, eq, inArray, ne } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { getOpenCashSession } from "@/src/application/pos/cash";
+import { resolveCashTender } from "@/src/application/pos/payment";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
 import { assertEmployeePermission } from "@/src/infrastructure/auth/permissions";
 import { getDb } from "@/src/infrastructure/db/client";
@@ -240,6 +241,7 @@ export async function payOrderSplit(formData: FormData) {
     throw new Error("Abre la caja antes de cobrar en efectivo");
   }
 
+  const tender = resolveCashTender(formData, split.total, paymentMethod);
   const now = new Date();
 
   await db.transaction(async (tx) => {
@@ -268,6 +270,8 @@ export async function payOrderSplit(formData: FormData) {
       splitId: split.id,
       method: paymentMethod,
       amount: split.total,
+      tenderedAmount: tender.tenderedAmount,
+      changeAmount: tender.changeAmount,
     });
 
     if (paymentMethod === "CASH" && cashSession) {
@@ -280,7 +284,16 @@ export async function payOrderSplit(formData: FormData) {
         employeeId: employee.id,
         movementType: "SALE",
         amount: split.total,
-        note: split.label + " · " + order.folio,
+        note:
+          split.label +
+          " · " +
+          order.folio +
+          (tender.tenderedAmount && tender.changeAmount
+            ? " · Recibido $" +
+              tender.tenderedAmount +
+              " · Cambio $" +
+              tender.changeAmount
+            : ""),
       });
     }
 
@@ -317,6 +330,8 @@ export async function payOrderSplit(formData: FormData) {
         label: split.label,
         total: Number(split.total),
         paymentMethod,
+        cashTendered: tender.tendered,
+        cashChange: tender.change,
         orderId: order.id,
       },
     });

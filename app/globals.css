@@ -1502,3 +1502,94 @@ th, td { vertical-align: top; }
     max-width: 100%;
   }
 }
+
+
+/* POS v0.2 cash tender + change */
+.pos-payment-fields {
+  display: grid;
+  gap: .65rem;
+}
+.cash-tender-panel {
+  display: grid;
+  gap: .55rem;
+  padding: .75rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #faf7f1;
+}
+.cash-tender-summary,
+.cash-change {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: .75rem;
+}
+.cash-tender-summary strong {
+  font-size: 1.2rem;
+}
+.cash-tender-presets {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
+  gap: .35rem;
+}
+.cash-tender-presets button {
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-weight: 850;
+}
+.cash-change {
+  padding: .75rem;
+  border: 2px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+}
+.cash-change span {
+  font-size: .78rem;
+  font-weight: 900;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.cash-change strong {
+  font-size: 1.65rem;
+}
+.cash-change-ok {
+  border-color: var(--ok);
+}
+.cash-change-confirmation {
+  display: grid;
+  grid-template-columns: 1fr 1.25fr;
+  gap: .55rem;
+  margin: .75rem 0;
+}
+.cash-change-confirmation > div {
+  display: grid;
+  gap: .1rem;
+  padding: .8rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #faf7f1;
+}
+.cash-change-confirmation > div:last-child {
+  border: 2px solid var(--ok);
+  background: #fff;
+}
+.cash-change-confirmation span {
+  font-size: .75rem;
+  font-weight: 900;
+  letter-spacing: .05em;
+}
+.cash-change-confirmation strong {
+  font-size: 1.35rem;
+}
+.cash-change-confirmation > div:last-child strong {
+  font-size: 1.8rem;
+}
+@media (max-width: 520px) {
+  .cash-change-confirmation {
+    grid-template-columns: 1fr;
+  }
+}

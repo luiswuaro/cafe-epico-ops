@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { PosPaymentFields } from "@/components/pos-payment-fields";
 import { SplitAccountBuilder } from "./split-client";
 import { payOrderSplit } from "./actions";
 import { getCashState } from "@/src/application/pos/cash";
@@ -103,19 +104,10 @@ export default async function SplitOrderPage({
               ) : (
                 <form action={payOrderSplit} className="stack">
                   <input type="hidden" name="splitId" value={split.id} />
-                  <label>
-                    Método de pago
-                    <select
-                      name="paymentMethod"
-                      defaultValue={cash.session ? "CASH" : "CARD"}
-                    >
-                      <option value="CASH" disabled={!cash.session}>
-                        Efectivo{cash.session ? "" : " · abre caja"}
-                      </option>
-                      <option value="CARD">Tarjeta</option>
-                      <option value="TRANSFER">Transferencia</option>
-                    </select>
-                  </label>
+                  <PosPaymentFields
+                    total={Number(split.total)}
+                    cashOpen={Boolean(cash.session)}
+                  />
                   <button type="submit">
                     Cobrar {money.format(Number(split.total))}
                   </button>

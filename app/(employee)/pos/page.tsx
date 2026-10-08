@@ -161,6 +161,25 @@ export default async function PosPage({
             </div>
           )}
 
+          {saved.payment?.method === "CASH" &&
+            saved.payment.tenderedAmount &&
+            saved.payment.changeAmount && (
+              <div className="cash-change-confirmation">
+                <div>
+                  <span>Recibido</span>
+                  <strong>
+                    {money.format(Number(saved.payment.tenderedAmount))}
+                  </strong>
+                </div>
+                <div>
+                  <span>CAMBIO A ENTREGAR</span>
+                  <strong>
+                    {money.format(Number(saved.payment.changeAmount))}
+                  </strong>
+                </div>
+              </div>
+            )}
+
           <div className="pos-saved-lines">
             {saved.lines.map((line) => (
               <span key={line.id}>

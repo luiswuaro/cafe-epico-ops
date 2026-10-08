@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { PosPaymentFields } from "@/components/pos-payment-fields";
 import { CommandBoardAutoRefresh } from "./auto-refresh";
 import {
   cancelPosOrder,
@@ -186,20 +187,10 @@ export default async function PosOrdersPage() {
                         name="orderId"
                         value={order.id}
                       />
-                      <label>
-                        Método de pago
-                        <select
-                          name="paymentMethod"
-                          defaultValue={cash.session ? "CASH" : "CARD"}
-                        >
-                          <option value="CASH" disabled={!cash.session}>
-                            Efectivo
-                            {cash.session ? "" : " · abre caja"}
-                          </option>
-                          <option value="CARD">Tarjeta</option>
-                          <option value="TRANSFER">Transferencia</option>
-                        </select>
-                      </label>
+                      <PosPaymentFields
+                        total={Number(order.total)}
+                        cashOpen={Boolean(cash.session)}
+                      />
                       <button type="submit">
                         Marcar pagada ·{" "}
                         {money.format(Number(order.total))}

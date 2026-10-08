@@ -22,6 +22,8 @@ export type DirectReceiptPayload = {
   }>;
   total: string;
   payment: string;
+  cashTendered?: string | null;
+  cashChange?: string | null;
   customer?: string | null;
   pointsEarned?: string | null;
   pointsBalance?: string | null;
@@ -394,6 +396,14 @@ async function buildRasterTicket(
 
   y += 3;
   y = drawPair(context, "Pago", ticket.payment || "—", y);
+
+  if (ticket.cashTendered && ticket.cashChange) {
+    y = drawPair(context, "Recibido", ticket.cashTendered, y);
+    y = drawPair(context, "Cambio", ticket.cashChange, y, {
+      font: "900 25px Arial, Helvetica, sans-serif",
+      lineHeight: 30,
+    });
+  }
 
   if (template.showCustomer && ticket.customer) {
     y = drawWrappedLeft(

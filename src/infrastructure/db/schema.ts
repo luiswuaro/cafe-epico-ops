@@ -1201,6 +1201,8 @@ export const posPayments = pgTable("pos_payments", {
   splitId: uuid("split_id").references(() => posOrderSplits.id, { onDelete: "set null" }),
   method: varchar("method", { length: 30 }).notNull(),
   amount: numeric("amount", { precision: 14, scale: 2 }).notNull(),
+  tenderedAmount: numeric("tendered_amount", { precision: 14, scale: 2 }),
+  changeAmount: numeric("change_amount", { precision: 14, scale: 2 }),
   reference: text("reference"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [

@@ -158,6 +158,13 @@ export default async function ReceiptPage({
 
   const total = split ? Number(split.total) : Number(order.order.total);
   const paymentMethod = payments.map((payment) => payment.method).join(" + ");
+  const cashPayment = payments.find((payment) => payment.method === "CASH");
+  const cashTendered = cashPayment?.tenderedAmount
+    ? money.format(Number(cashPayment.tenderedAmount))
+    : null;
+  const cashChange = cashPayment?.changeAmount
+    ? money.format(Number(cashPayment.changeAmount))
+    : null;
   const pointsEarned =
     !split && order.customerName
       ? Number(order.order.loyaltyPointsPreview).toFixed(2)
@@ -201,6 +208,8 @@ export default async function ReceiptPage({
             })),
             total: money.format(total),
             payment: paymentMethod || "-",
+            cashTendered,
+            cashChange,
             customer: order.customerName,
             pointsEarned,
             pointsBalance,
@@ -333,6 +342,15 @@ export default async function ReceiptPage({
         <div className="receipt-meta">
           <span>Pago</span>
           <span>{paymentMethod || "—"}</span>
+
+          {cashTendered && cashChange && (
+            <>
+              <span>Recibido</span>
+              <span>{cashTendered}</span>
+              <span>Cambio</span>
+              <span><strong>{cashChange}</strong></span>
+            </>
+          )}
 
           {printSettings.showCustomer && order.customerName && (
             <>

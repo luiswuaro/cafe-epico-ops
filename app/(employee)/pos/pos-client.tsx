@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { PosPaymentFields } from "@/components/pos-payment-fields";
 import {
   createPosCustomer,
   createShadowCommand,
@@ -324,19 +325,7 @@ export function PosClient({
             </label>
           )}
 
-          <label>
-            Método de pago
-            <select
-              name="paymentMethod"
-              defaultValue={cashOpen ? "CASH" : "CARD"}
-            >
-              <option value="CASH" disabled={!cashOpen}>
-                Efectivo{cashOpen ? "" : " · abre caja"}
-              </option>
-              <option value="CARD">Tarjeta</option>
-              <option value="TRANSFER">Transferencia</option>
-            </select>
-          </label>
+          <PosPaymentFields total={total} cashOpen={cashOpen} />
 
           <label>
             Nota general de la mesa / orden
@@ -352,6 +341,7 @@ export function PosClient({
               type="submit"
               formAction={createShadowCommand}
               className="pos-command-button"
+              formNoValidate
               disabled={cartLines.length === 0}
             >
               Enviar comanda

@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getPosCatalog, type PosServiceMode } from "@/src/application/pos/catalog";
 import { getOpenCashSession } from "@/src/application/pos/cash";
+import { resolveCashTender } from "@/src/application/pos/payment";
 import { syncLoyverseReceipts } from "@/src/application/loyverse/sync";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
 import { assertEmployeePermission } from "@/src/infrastructure/auth/permissions";
@@ -186,6 +187,16 @@ async function createShadowOrder(
     throw new Error("Abre la caja antes de cobrar en efectivo");
   }
 
+  const tender =
+    status === "PAID" && paymentMethod
+      ? resolveCashTender(formData, input.total, paymentMethod)
+      : {
+          tenderedAmount: null,
+          changeAmount: null,
+          tendered: null,
+          change: null,
+        };
+
   const order = await db.transaction(async (tx) => {
     const [created] = await tx
       .insert(posOrders)
@@ -234,6 +245,8 @@ async function createShadowOrder(
         orderId: created.id,
         method: paymentMethod,
         amount: input.total.toFixed(2),
+        tenderedAmount: tender.tenderedAmount,
+        changeAmount: tender.changeAmount,
       });
 
       if (paymentMethod === "CASH" && cashSession) {
@@ -245,7 +258,14 @@ async function createShadowOrder(
           employeeId: employee.id,
           movementType: "SALE",
           amount: input.total.toFixed(2),
-          note: created.folio,
+          note:
+            tender.tenderedAmount && tender.changeAmount
+              ? created.folio +
+                " · Recibido $" +
+                tender.tenderedAmount +
+                " · Cambio $" +
+                tender.changeAmount
+              : created.folio,
         });
       }
     }
@@ -268,6 +288,8 @@ async function createShadowOrder(
         customerId: input.customerId,
         loyaltyPointsPreview: input.loyaltyPointsPreview,
         status,
+        cashTendered: tender.tendered,
+        cashChange: tender.change,
         inventoryEffectApplied: false,
         loyaltyEffectApplied: false,
       },
@@ -406,6 +428,7 @@ export async function payShadowCommand(formData: FormData) {
     throw new Error("Abre la caja antes de cobrar en efectivo");
   }
 
+  const tender = resolveCashTender(formData, order.total, paymentMethod);
   const now = new Date();
 
   await db.transaction(async (tx) => {
@@ -423,6 +446,8 @@ export async function payShadowCommand(formData: FormData) {
       orderId: order.id,
       method: paymentMethod,
       amount: order.total,
+      tenderedAmount: tender.tenderedAmount,
+      changeAmount: tender.changeAmount,
     });
 
     if (paymentMethod === "CASH" && cashSession) {
@@ -434,7 +459,14 @@ export async function payShadowCommand(formData: FormData) {
         employeeId: employee.id,
         movementType: "SALE",
         amount: order.total,
-        note: order.folio,
+        note:
+          tender.tenderedAmount && tender.changeAmount
+            ? order.folio +
+              " · Recibido $" +
+              tender.tenderedAmount +
+              " · Cambio $" +
+              tender.changeAmount
+            : order.folio,
       });
     }
 
@@ -450,6 +482,8 @@ export async function payShadowCommand(formData: FormData) {
       afterData: {
         status: "PAID",
         paymentMethod,
+        cashTendered: tender.tendered,
+        cashChange: tender.change,
         loyaltyPointsPreview: order.loyaltyPointsPreview,
         loyaltyEffectApplied: false,
       },
