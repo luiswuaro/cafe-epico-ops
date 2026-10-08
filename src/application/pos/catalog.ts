@@ -27,6 +27,9 @@ type StoredRecipe = {
   components: PosRecipeComponent[];
 };
 
+const DISPOSABLE_PATTERN =
+  /(VASO|TAPA|POPOTE|MANGA|FAJILLA|SERVILLETA|BOLSA|CUBIERTO|CHAROLA|PORTAVASOS|DOMO)/i;
+
 function normalize(value: string) {
   return value
     .normalize("NFD")
@@ -100,6 +103,43 @@ function storedRecipe(value: unknown): StoredRecipe | null {
   });
 
   return { components };
+}
+
+function isDisposableComponent(component: PosRecipeComponent) {
+  return DISPOSABLE_PATTERN.test(normalize(component.name));
+}
+
+function mergePosComponents(components: PosRecipeComponent[]) {
+  const merged = new Map<string, PosRecipeComponent>();
+
+  for (const component of components) {
+    const key =
+      component.variantExternalId ||
+      component.itemExternalId ||
+      normalize(component.name);
+    const current = merged.get(key);
+    if (current) current.quantity += component.quantity;
+    else merged.set(key, { ...component });
+  }
+
+  return [...merged.values()];
+}
+
+function enforceDrinkPackaging(
+  category: PosCatalogCategory,
+  override: StoredRecipe | null,
+  base: PosRecipeComponent[],
+) {
+  if (category !== "CALIENTES" && category !== "FRÍAS") {
+    return override?.components ?? base;
+  }
+
+  const ingredients = (override?.components ?? base).filter(
+    (component) => !isDisposableComponent(component),
+  );
+  const standardPackaging = base.filter(isDisposableComponent);
+
+  return mergePosComponents([...ingredients, ...standardPackaging]);
 }
 
 function mapEffectiveComponents(
@@ -246,16 +286,32 @@ export async function getPosCatalog(
           DINE_IN: {
             externalId: recipe.serviceRecipes.DINE_IN.externalId,
             sourceCategory: recipe.serviceRecipes.DINE_IN.sourceCategory,
-            components: overrideDineIn?.components ?? baseDineIn,
+            components: enforceDrinkPackaging(
+              recipe.category as PosCatalogCategory,
+              overrideDineIn,
+              baseDineIn,
+            ),
             configured:
-              (overrideDineIn?.components.length ?? baseDineIn.length) > 0,
+              enforceDrinkPackaging(
+                recipe.category as PosCatalogCategory,
+                overrideDineIn,
+                baseDineIn,
+              ).length > 0,
           },
           TAKEAWAY: {
             externalId: recipe.serviceRecipes.TAKEAWAY.externalId,
             sourceCategory: recipe.serviceRecipes.TAKEAWAY.sourceCategory,
-            components: overrideTakeaway?.components ?? baseTakeaway,
+            components: enforceDrinkPackaging(
+              recipe.category as PosCatalogCategory,
+              overrideTakeaway,
+              baseTakeaway,
+            ),
             configured:
-              (overrideTakeaway?.components.length ?? baseTakeaway.length) > 0,
+              enforceDrinkPackaging(
+                recipe.category as PosCatalogCategory,
+                overrideTakeaway,
+                baseTakeaway,
+              ).length > 0,
           },
         },
       };
