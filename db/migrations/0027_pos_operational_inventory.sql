@@ -1,6 +1,6 @@
 -- POS v0.3: saldo operativo independiente, descuento por receta y reversas.
 
-create table if not exists public.operational_inventory_balances (
+create table if not exists operational_inventory_balances (
   organization_id uuid not null references public.organizations(id) on delete cascade,
   store_id uuid not null references public.stores(id) on delete cascade,
   loyverse_store_external_id text not null,
@@ -20,7 +20,7 @@ create index if not exists operational_inventory_balances_variant_idx
     variant_external_id
   );
 
-create table if not exists public.operational_inventory_movements (
+create table if not exists operational_inventory_movements (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references public.organizations(id) on delete cascade,
   store_id uuid not null references public.stores(id) on delete cascade,
