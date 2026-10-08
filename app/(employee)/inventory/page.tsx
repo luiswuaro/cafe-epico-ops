@@ -234,10 +234,10 @@ export default async function InventoryPage({ searchParams }: PageProps) {
                     </strong>
                     {" · "}
                     mañana/primer turno{" "}
-                    {number.format(displayQuantity(row.expectedTomorrowMorning, row.displayFactor))
+                    {number.format(displayQuantity(row.expectedTomorrowMorning, row.displayFactor))}
                     {" · "}
                     tarde{" "}
-                    {number.format(displayQuantity(row.expectedTomorrowAfternoon, row.displayFactor))
+                    {number.format(displayQuantity(row.expectedTomorrowAfternoon, row.displayFactor))}
                   </div>
                 </div>
               </div>
@@ -266,7 +266,7 @@ export default async function InventoryPage({ searchParams }: PageProps) {
                   <div className="muted">
                     Actual {number.format(displayQuantity(row.inStock, row.displayFactor))} {displayUnit(row.unitLabel, row.displayUnit)}
                     {" · "}
-                    consumo/día {number.format(displayQuantity(row.avgDailyUsage14, row.displayFactor))
+                    consumo/día {number.format(displayQuantity(row.avgDailyUsage14, row.displayFactor))}
                     {" · "}
                     cobertura {coverageLabel(row.daysCover)}
                   </div>
@@ -377,7 +377,7 @@ export default async function InventoryPage({ searchParams }: PageProps) {
                   {number.format(displayQuantity(row.inStock, row.displayFactor))} {displayUnit(row.unitLabel, row.displayUnit)}
                 </strong>
                 <div className="muted">
-                  consumo/día {number.format(displayQuantity(row.avgDailyUsage14, row.displayFactor))
+                  consumo/día {number.format(displayQuantity(row.avgDailyUsage14, row.displayFactor))}
                   {" · "}
                   {coverageLabel(row.daysCover)}
                 </div>
