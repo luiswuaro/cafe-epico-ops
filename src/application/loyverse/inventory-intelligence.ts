@@ -5,6 +5,8 @@ import {
   loyverseInventorySnapshots,
   loyverseItems,
   operationalEvents,
+  operationalInventoryBalances,
+  operationalInventoryMovements,
   loyverseReceiptLines,
   loyverseReceipts,
   loyverseVariants,
@@ -123,8 +125,15 @@ export async function getInventoryIntelligence(
   const since35 = new Date(Date.now() - 35 * 86_400_000);
   const since14 = new Date(Date.now() - 14 * 86_400_000);
 
-  const [items, variants, receipts, lines, snapshots, wasteEvents] =
-    await Promise.all([
+  const [
+    items,
+    variants,
+    receipts,
+    lines,
+    snapshots,
+    wasteEvents,
+    restockMovements,
+  ] = await Promise.all([
       db
         .select({
           externalId: loyverseItems.externalId,
@@ -198,6 +207,50 @@ export async function getInventoryIntelligence(
             eq(operationalEvents.organizationId, organizationId),
             inArray(operationalEvents.eventType, ["WASTE", "REMAKE"]),
             gte(operationalEvents.occurredAt, since35),
+          ),
+        ),
+      db
+        .select({
+          variantExternalId:
+            operationalInventoryMovements.variantExternalId,
+          occurredAt: operationalInventoryMovements.occurredAt,
+        })
+        .from(operationalInventoryMovements)
+        .innerJoin(
+          operationalInventoryBalances,
+          and(
+            eq(
+              operationalInventoryBalances.organizationId,
+              operationalInventoryMovements.organizationId,
+            ),
+            eq(
+              operationalInventoryBalances.storeId,
+              operationalInventoryMovements.storeId,
+            ),
+            eq(
+              operationalInventoryBalances.variantExternalId,
+              operationalInventoryMovements.variantExternalId,
+            ),
+          ),
+        )
+        .where(
+          and(
+            eq(
+              operationalInventoryMovements.organizationId,
+              organizationId,
+            ),
+            eq(
+              operationalInventoryBalances.loyverseStoreExternalId,
+              selectedStore.externalId,
+            ),
+            eq(
+              operationalInventoryMovements.movementType,
+              "RESTOCK",
+            ),
+            gte(
+              operationalInventoryMovements.occurredAt,
+              since35,
+            ),
           ),
         ),
     ]);
@@ -383,6 +436,18 @@ export async function getInventoryIntelligence(
   const inventoryByVariant = new Map(
     inventory.rows.map((row) => [row.variantExternalId, row]),
   );
+  const lastOperationalRestockByVariant = new Map<string, Date>();
+  for (const movement of restockMovements) {
+    const current = lastOperationalRestockByVariant.get(
+      movement.variantExternalId,
+    );
+    if (!current || movement.occurredAt > current) {
+      lastOperationalRestockByVariant.set(
+        movement.variantExternalId,
+        movement.occurredAt,
+      );
+    }
+  }
 
   const smartRows = inventory.rows
     .map((row) => {
@@ -479,6 +544,9 @@ export async function getInventoryIntelligence(
         suggestedCost,
         orderInDays,
         orderDate,
+        lastOperationalRestockAt:
+          lastOperationalRestockByVariant.get(row.variantExternalId) ??
+          null,
         status,
       };
     })

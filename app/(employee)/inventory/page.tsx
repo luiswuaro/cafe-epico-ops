@@ -118,11 +118,28 @@ export default async function InventoryPage({ searchParams }: PageProps) {
 
   const lagRows = inventory.smartRows
     .filter((row) => row.avgDailyUsage14 > 0.0005)
-    .map((row) => ({
-      row,
-      lastRestockAt:
-        lastRestockByVariant.get(row.variantExternalId) ?? null,
-    }))
+    .map((row) => {
+      const sourceRestockAt =
+        lastRestockByVariant.get(row.variantExternalId) ?? null;
+      const opsRestockAt = row.lastOperationalRestockAt ?? null;
+      const lastRestockAt =
+        sourceRestockAt && opsRestockAt
+          ? sourceRestockAt > opsRestockAt
+            ? sourceRestockAt
+            : opsRestockAt
+          : sourceRestockAt ?? opsRestockAt;
+
+      return {
+        row,
+        lastRestockAt,
+        restockSource:
+          lastRestockAt == null
+            ? null
+            : opsRestockAt && lastRestockAt === opsRestockAt
+              ? ("OPS" as const)
+              : ("LOYVERSE" as const),
+      };
+    })
     .sort((a, b) => {
       if (!a.lastRestockAt && b.lastRestockAt) return -1;
       if (a.lastRestockAt && !b.lastRestockAt) return 1;
@@ -322,9 +339,9 @@ export default async function InventoryPage({ searchParams }: PageProps) {
         <h2>Reposición / rezago</h2>
         <p className="muted">
           Insumos con consumo reciente, priorizados por ausencia o antigüedad
-          de una subida de stock en el historial disponible. “Sin reposición
-          detectada” significa únicamente que no aparece una subida en las
-          capturas sincronizadas disponibles.
+          del último reabasto registrado en OPS o de una subida de stock
+          detectada en Loyverse. No se atribuye proveedor ni motivo sin un
+          movimiento registrado.
         </p>
         {lagRows.length === 0 ? (
           <p className="muted">
@@ -332,7 +349,7 @@ export default async function InventoryPage({ searchParams }: PageProps) {
           </p>
         ) : (
           <div className="stack">
-            {lagRows.map(({ row, lastRestockAt }) => (
+            {lagRows.map(({ row, lastRestockAt, restockSource }) => (
               <div className="task" key={row.variantExternalId}>
                 <div style={{ flex: 1 }}>
                   <Link href={"/inventory/items/" + row.variantExternalId}>
@@ -340,13 +357,15 @@ export default async function InventoryPage({ searchParams }: PageProps) {
                   </Link>
                   <div className="muted">
                     {lastRestockAt
-                      ? "Última reposición detectada " +
+                      ? (restockSource === "OPS"
+                          ? "Último reabasto registrado OPS "
+                          : "Última subida de stock detectada en Loyverse ") +
                         lastRestockAt.toLocaleString("es-MX", {
                           timeZone: "America/Mexico_City",
                           dateStyle: "short",
                           timeStyle: "short",
                         })
-                      : "Sin reposición detectada en la ventana disponible"}
+                      : "Sin reabasto ni subida de stock detectada en la ventana disponible"}
                   </div>
                 </div>
                 <div style={{ textAlign: "right" }}>

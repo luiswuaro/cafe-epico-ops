@@ -275,6 +275,10 @@ export async function getLoyverseIngredientHistory(
     }
   }
 
+  const lastOperationalRestockAt =
+    movements.find((movement) => movement.movementType === "RESTOCK")
+      ?.occurredAt ?? null;
+
   const sourceCurrentNative = sourceLevel
     ? Number(sourceLevel.inStock)
     : null;
@@ -328,6 +332,7 @@ export async function getLoyverseIngredientHistory(
           : display(operationalCurrentNative),
       initializedAt: balance?.initializedAt ?? null,
       updatedAt: balance?.updatedAt ?? null,
+      lastRestockAt: lastOperationalRestockAt,
       sourceOpening:
         balance == null
           ? null

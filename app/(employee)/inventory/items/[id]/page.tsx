@@ -69,6 +69,20 @@ export default async function InventoryIngredientHistoryPage({
 
   if (!history) notFound();
 
+  const latestRestockAt =
+    history.operational.lastRestockAt && history.source.lastRestockAt
+      ? history.operational.lastRestockAt > history.source.lastRestockAt
+        ? history.operational.lastRestockAt
+        : history.source.lastRestockAt
+      : history.operational.lastRestockAt ??
+        history.source.lastRestockAt;
+  const latestRestockSource =
+    latestRestockAt == null
+      ? null
+      : history.operational.lastRestockAt === latestRestockAt
+        ? "OPS"
+        : "LOYVERSE";
+
   return (
     <main className="shell">
       <section className="hero">
@@ -130,16 +144,25 @@ export default async function InventoryIngredientHistoryPage({
         </article>
 
         <article className="card">
-          <span className="pill">ÚLTIMA REPOSICIÓN DETECTADA</span>
+          <span className="pill">ÚLTIMO REABASTO</span>
           <div className="metric">
-            {history.source.daysSinceLastRestock == null
-              ? "—"
-              : history.source.daysSinceLastRestock + " d"}
+            {latestRestockAt
+              ? Math.max(
+                  0,
+                  Math.floor(
+                    (Date.now() - latestRestockAt.getTime()) /
+                      86_400_000,
+                  ),
+                ) + " d"
+              : "—"}
           </div>
           <p>
-            {history.source.lastRestockAt
-              ? time(history.source.lastRestockAt)
-              : "Sin subida de stock detectada en la ventana disponible."}
+            {latestRestockAt
+              ? (latestRestockSource === "OPS"
+                  ? "Registrado en OPS · "
+                  : "Subida detectada en Loyverse · ") +
+                time(latestRestockAt)
+              : "Sin reabasto ni subida de stock detectada en la ventana disponible."}
           </p>
         </article>
       </section>
