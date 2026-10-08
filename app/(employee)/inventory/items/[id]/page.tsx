@@ -145,16 +145,8 @@ export default async function InventoryIngredientHistoryPage({
 
         <article className="card">
           <span className="pill">ÚLTIMO REABASTO</span>
-          <div className="metric">
-            {latestRestockAt
-              ? Math.max(
-                  0,
-                  Math.floor(
-                    (Date.now() - latestRestockAt.getTime()) /
-                      86_400_000,
-                  ),
-                ) + " d"
-              : "—"}
+          <div className="metric history-date">
+            {latestRestockAt ? time(latestRestockAt) : "—"}
           </div>
           <p>
             {latestRestockAt
