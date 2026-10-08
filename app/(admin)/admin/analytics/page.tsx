@@ -50,7 +50,8 @@ export default async function AnalyticsPage({
         <p className="eyebrow">ADMIN · DASHBOARD GERENCIAL</p>
         <h1>Ventas, margen y operación</h1>
         <p className="muted">
-          Ventana gratuita de Loyverse: hasta 30 días contando el día corriente.
+          Ventana gratuita de Loyverse: hasta 30 días contando el día corriente. Las
+            ventas mostradas son netas y excluyen recibos cancelados.
           COGS POS conserva el costo grabado en cada ticket al momento de la
           venta. En productos con cobertura suficiente de costos configurados,
           la tabla también calcula un margen efectivo reconstruido desde receta
@@ -106,7 +107,7 @@ export default async function AnalyticsPage({
             <thead>
               <tr>
                 <th style={{ textAlign: "left" }}>Periodo</th>
-                <th>Venta</th>
+                <th>Venta neta</th>
                 <th>Tickets</th>
                 <th>Ticket prom.</th>
                 <th>Unid.</th>
@@ -414,7 +415,7 @@ export default async function AnalyticsPage({
               <tr>
                 <th style={{ textAlign: "left" }}>Producto</th>
                 <th>Unidades</th>
-                <th>Venta</th>
+                <th>Venta neta</th>
                 <th>Descuento</th>
                 <th>COGS POS</th>
                 <th>Contribución POS</th>
