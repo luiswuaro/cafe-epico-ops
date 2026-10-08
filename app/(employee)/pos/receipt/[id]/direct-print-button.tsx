@@ -4,6 +4,9 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 const STORAGE_KEY = "cafe-epico-printer-bridge-v1";
+const PAPER_WIDTH = 384;
+const SIDE_MARGIN = 18;
+const CONTENT_WIDTH = PAPER_WIDTH - SIDE_MARGIN * 2;
 
 export type DirectReceiptPayload = {
   folio: string;
@@ -53,18 +56,29 @@ export type DirectReceiptTemplate = {
   autoCut: boolean;
 };
 
-type PrintLine = {
-  text: string;
-  align?: "left" | "center" | "right";
-  bold?: boolean;
-  size?: "normal" | "double";
-};
-
-function clip(text: string, width: number) {
-  return text.length <= width ? text : text.slice(0, width);
+function decodeBase64(value: string) {
+  const binary = atob(value);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return bytes;
 }
 
-function wrapText(text: string, width: number) {
+function encodeBase64(bytes: Uint8Array) {
+  let binary = "";
+  const chunk = 0x8000;
+  for (let index = 0; index < bytes.length; index += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + chunk));
+  }
+  return btoa(binary);
+}
+
+function wrapByPixels(
+  context: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number,
+) {
   const clean = text.trim().replace(/\s+/g, " ");
   if (!clean) return [];
 
@@ -73,188 +87,394 @@ function wrapText(text: string, width: number) {
   let current = "";
 
   for (const word of words) {
-    if (word.length > width) {
-      if (current) {
-        lines.push(current);
-        current = "";
-      }
-      for (let i = 0; i < word.length; i += width) {
-        lines.push(word.slice(i, i + width));
-      }
+    const candidate = current ? current + " " + word : word;
+
+    if (context.measureText(candidate).width <= maxWidth) {
+      current = candidate;
       continue;
     }
 
-    const next = current ? current + " " + word : word;
-    if (next.length <= width) {
-      current = next;
-    } else {
-      if (current) lines.push(current);
-      current = word;
+    if (current) {
+      lines.push(current);
+      current = "";
     }
+
+    if (context.measureText(word).width <= maxWidth) {
+      current = word;
+      continue;
+    }
+
+    let piece = "";
+    for (const character of word) {
+      const next = piece + character;
+      if (context.measureText(next).width <= maxWidth) {
+        piece = next;
+      } else {
+        if (piece) lines.push(piece);
+        piece = character;
+      }
+    }
+    current = piece;
   }
 
   if (current) lines.push(current);
   return lines;
 }
 
-function leftRight(left: string, right: string, width: number) {
-  const safeRight = clip(right, Math.min(13, width));
-  const maxLeft = Math.max(1, width - safeRight.length - 1);
-  const safeLeft = clip(left, maxLeft);
-  return (
-    safeLeft +
-    " ".repeat(Math.max(1, width - safeLeft.length - safeRight.length)) +
-    safeRight
-  );
+function renderPackedLogo(
+  context: CanvasRenderingContext2D,
+  template: DirectReceiptTemplate,
+  y: number,
+) {
+  if (
+    !template.showLogo ||
+    !template.logoRasterBase64 ||
+    !template.logoWidthPx ||
+    !template.logoHeightPx
+  ) {
+    return y;
+  }
+
+  const width = template.logoWidthPx;
+  const height = template.logoHeightPx;
+  const bytes = decodeBase64(template.logoRasterBase64);
+  const widthBytes = Math.ceil(width / 8);
+
+  let x = SIDE_MARGIN;
+  if (template.logoAlign === "center") {
+    x = Math.round((PAPER_WIDTH - width) / 2);
+  } else if (template.logoAlign === "right") {
+    x = PAPER_WIDTH - SIDE_MARGIN - width;
+  }
+
+  context.save();
+  context.fillStyle = "#000";
+  for (let row = 0; row < height; row += 1) {
+    for (let column = 0; column < width; column += 1) {
+      const byteIndex = row * widthBytes + Math.floor(column / 8);
+      if ((bytes[byteIndex] & (0x80 >> (column % 8))) !== 0) {
+        context.fillRect(x + column, y + row, 1, 1);
+      }
+    }
+  }
+  context.restore();
+
+  return y + height + 12;
 }
 
-function separator(width: number) {
-  return "-".repeat(width);
+function drawCentered(
+  context: CanvasRenderingContext2D,
+  text: string,
+  y: number,
+  font: string,
+  lineHeight: number,
+) {
+  context.font = font;
+  context.textAlign = "center";
+  context.textBaseline = "top";
+  context.fillStyle = "#000";
+
+  const lines = wrapByPixels(context, text, CONTENT_WIDTH);
+  for (const line of lines) {
+    context.fillText(line, PAPER_WIDTH / 2, y);
+    y += lineHeight;
+  }
+
+  return y;
 }
 
-function pushLabelValue(
-  lines: PrintLine[],
+function drawWrappedLeft(
+  context: CanvasRenderingContext2D,
+  text: string,
+  y: number,
+  font: string,
+  lineHeight: number,
+  indent = 0,
+) {
+  context.font = font;
+  context.textAlign = "left";
+  context.textBaseline = "top";
+  context.fillStyle = "#000";
+
+  const maxWidth = CONTENT_WIDTH - indent;
+  const lines = wrapByPixels(context, text, maxWidth);
+  for (const line of lines) {
+    context.fillText(line, SIDE_MARGIN + indent, y);
+    y += lineHeight;
+  }
+
+  return y;
+}
+
+function drawPair(
+  context: CanvasRenderingContext2D,
   label: string,
   value: string,
-  width: number,
+  y: number,
+  options?: {
+    font?: string;
+    lineHeight?: number;
+    emphasize?: boolean;
+  },
 ) {
-  if ((label + value).length + 1 <= width) {
-    lines.push({ text: leftRight(label, value, width) });
-    return;
+  const font = options?.font ?? "700 21px Arial, Helvetica, sans-serif";
+  const lineHeight = options?.lineHeight ?? 26;
+
+  context.font = font;
+  context.textBaseline = "top";
+  context.fillStyle = "#000";
+
+  const gap = 14;
+  const labelWidth = context.measureText(label).width;
+  const valueWidth = context.measureText(value).width;
+
+  if (labelWidth + gap + valueWidth <= CONTENT_WIDTH) {
+    context.textAlign = "left";
+    context.fillText(label, SIDE_MARGIN, y);
+    context.textAlign = "right";
+    context.fillText(value, PAPER_WIDTH - SIDE_MARGIN, y);
+    return y + lineHeight;
   }
 
-  lines.push({ text: label, bold: true });
-  for (const part of wrapText(value, width)) {
-    lines.push({ text: part, align: "right" });
+  context.textAlign = "left";
+  context.fillText(label, SIDE_MARGIN, y);
+  y += lineHeight;
+
+  context.textAlign = "right";
+  const maxWidth = CONTENT_WIDTH;
+  const wrapped = wrapByPixels(context, value, maxWidth);
+  for (const line of wrapped) {
+    context.fillText(line, PAPER_WIDTH - SIDE_MARGIN, y);
+    y += lineHeight;
   }
+
+  return y;
 }
 
-function buildLines(
+function drawRule(context: CanvasRenderingContext2D, y: number) {
+  context.save();
+  context.strokeStyle = "#000";
+  context.lineWidth = 2;
+  context.setLineDash([7, 5]);
+  context.beginPath();
+  context.moveTo(SIDE_MARGIN, y + 4);
+  context.lineTo(PAPER_WIDTH - SIDE_MARGIN, y + 4);
+  context.stroke();
+  context.restore();
+  return y + 14;
+}
+
+async function buildRasterTicket(
   ticket: DirectReceiptPayload,
   template: DirectReceiptTemplate,
 ) {
-  const width = Math.max(24, Math.min(42, template.lineWidthChars));
-  const lines: PrintLine[] = [];
+  await document.fonts.ready;
+
+  const work = document.createElement("canvas");
+  work.width = PAPER_WIDTH;
+  work.height = 6000;
+
+  const context = work.getContext("2d", { willReadFrequently: true });
+  if (!context) throw new Error("No se pudo renderizar el ticket");
+
+  context.fillStyle = "#fff";
+  context.fillRect(0, 0, work.width, work.height);
+
+  let y = 14;
+
+  y = renderPackedLogo(context, template, y);
 
   if (template.showBusinessName) {
-    lines.push({
-      text: clip(template.businessName || "CAFE EPICO", Math.max(12, Math.floor(width / 2))),
-      align: "center",
-      bold: true,
-      size: "double",
-    });
+    y = drawCentered(
+      context,
+      template.businessName || "Café Épico",
+      y,
+      "900 32px Arial, Helvetica, sans-serif",
+      38,
+    );
   }
 
   if (template.showAddress && template.addressLine) {
-    for (const part of wrapText(template.addressLine, width)) {
-      lines.push({ text: part, align: "center", bold: true });
-    }
+    y = drawCentered(
+      context,
+      template.addressLine,
+      y,
+      "700 19px Arial, Helvetica, sans-serif",
+      23,
+    );
   }
 
   if (template.showPhone && template.phoneLine) {
-    for (const part of wrapText(template.phoneLine, width)) {
-      lines.push({ text: part, align: "center" });
-    }
+    y = drawCentered(
+      context,
+      template.phoneLine,
+      y,
+      "700 19px Arial, Helvetica, sans-serif",
+      23,
+    );
   }
 
   if (template.showSocial && template.socialLine) {
-    for (const part of wrapText(template.socialLine, width)) {
-      lines.push({ text: part, align: "center" });
-    }
+    y = drawCentered(
+      context,
+      template.socialLine,
+      y,
+      "700 19px Arial, Helvetica, sans-serif",
+      23,
+    );
   }
 
   if (template.headerMessage) {
-    for (const part of wrapText(template.headerMessage, width)) {
-      lines.push({ text: part, align: "center" });
-    }
+    y += 3;
+    y = drawCentered(
+      context,
+      template.headerMessage,
+      y,
+      "700 19px Arial, Helvetica, sans-serif",
+      23,
+    );
   }
 
   if (ticket.splitLabel) {
-    lines.push({
-      text: clip(ticket.splitLabel, width),
-      align: "center",
-      bold: true,
-    });
+    y += 4;
+    y = drawCentered(
+      context,
+      ticket.splitLabel,
+      y,
+      "900 22px Arial, Helvetica, sans-serif",
+      27,
+    );
   }
 
-  lines.push({ text: separator(width) });
+  y += 5;
+  y = drawRule(context, y);
 
   if (template.showFolio) {
-    pushLabelValue(lines, "Folio", ticket.folio, width);
+    y = drawPair(context, "Folio", ticket.folio, y);
   }
   if (template.showDate) {
-    pushLabelValue(lines, "Fecha", ticket.date, width);
+    y = drawPair(context, "Fecha", ticket.date, y);
   }
   if (template.showEmployee) {
-    pushLabelValue(lines, "Atendio", ticket.employee, width);
+    y = drawPair(context, "Atendió", ticket.employee, y);
   }
   if (template.showService) {
-    pushLabelValue(lines, "Servicio", ticket.service, width);
+    y = drawPair(context, "Servicio", ticket.service, y);
   }
 
-  lines.push({ text: separator(width) });
+  y += 2;
+  y = drawRule(context, y);
 
   for (const item of ticket.items) {
-    const label = item.quantity + "x " + item.name;
-
-    if (label.length + item.total.length + 1 <= width) {
-      lines.push({
-        text: leftRight(label, item.total, width),
-        bold: true,
-      });
-    } else {
-      for (const part of wrapText(label, width)) {
-        lines.push({ text: part, bold: true });
-      }
-      lines.push({ text: clip(item.total, width), align: "right", bold: true });
-    }
+    const label = item.quantity + "× " + item.name;
+    y = drawPair(context, label, item.total, y, {
+      font: "900 22px Arial, Helvetica, sans-serif",
+      lineHeight: 27,
+    });
 
     if (template.showItemNotes && item.note) {
-      const noteWidth = Math.max(10, width - 2);
-      for (const part of wrapText("> " + item.note, noteWidth)) {
-        lines.push({ text: " " + part });
-      }
+      y = drawWrappedLeft(
+        context,
+        "↳ " + item.note,
+        y,
+        "700 19px Arial, Helvetica, sans-serif",
+        23,
+        10,
+      );
     }
+
+    y += 5;
   }
 
-  lines.push({ text: separator(width) });
-  const doubleWidth = Math.max(12, Math.floor(width / 2));
-  lines.push({
-    text: leftRight("TOTAL", ticket.total, doubleWidth),
-    bold: true,
-    size: "double",
+  y = drawRule(context, y);
+  y = drawPair(context, "TOTAL", ticket.total, y, {
+    font: "900 31px Arial, Helvetica, sans-serif",
+    lineHeight: 37,
   });
-  pushLabelValue(lines, "Pago", ticket.payment || "-", width);
+
+  y += 3;
+  y = drawPair(context, "Pago", ticket.payment || "—", y);
 
   if (template.showCustomer && ticket.customer) {
-    for (const part of wrapText("Cliente: " + ticket.customer, width)) {
-      lines.push({ text: part });
-    }
+    y = drawWrappedLeft(
+      context,
+      "Cliente: " + ticket.customer,
+      y,
+      "700 20px Arial, Helvetica, sans-serif",
+      25,
+    );
   }
 
   if (template.showPoints && ticket.pointsEarned) {
-    pushLabelValue(lines, "Puntos ganados", "+" + ticket.pointsEarned, width);
-  }
-  if (template.showPoints && ticket.pointsBalance) {
-    pushLabelValue(lines, "Saldo puntos", ticket.pointsBalance, width);
+    y = drawPair(
+      context,
+      "Puntos ganados",
+      "+" + ticket.pointsEarned,
+      y,
+    );
   }
 
-  lines.push({ text: separator(width) });
+  if (template.showPoints && ticket.pointsBalance) {
+    y = drawPair(context, "Saldo puntos", ticket.pointsBalance, y);
+  }
+
+  y += 3;
+  y = drawRule(context, y);
 
   if (template.footerMessage) {
-    for (const part of wrapText(template.footerMessage, width)) {
-      lines.push({ text: part, align: "center", bold: true });
-    }
+    y = drawCentered(
+      context,
+      template.footerMessage,
+      y,
+      "900 20px Arial, Helvetica, sans-serif",
+      25,
+    );
   }
 
   if (template.showNoCfdi) {
-    lines.push({
-      text: "Este ticket no es CFDI.",
-      align: "center",
-    });
+    y += 2;
+    y = drawCentered(
+      context,
+      "Este ticket no es CFDI.",
+      y,
+      "700 18px Arial, Helvetica, sans-serif",
+      22,
+    );
   }
 
-  return lines;
+  y += 10;
+
+  if (y > work.height) {
+    throw new Error("El ticket es demasiado largo para renderizarse");
+  }
+
+  const height = Math.ceil(y);
+  const imageData = context.getImageData(0, 0, PAPER_WIDTH, height);
+  const pixels = imageData.data;
+  const widthBytes = Math.ceil(PAPER_WIDTH / 8);
+  const packed = new Uint8Array(widthBytes * height);
+
+  for (let row = 0; row < height; row += 1) {
+    for (let column = 0; column < PAPER_WIDTH; column += 1) {
+      const offset = (row * PAPER_WIDTH + column) * 4;
+      const red = pixels[offset];
+      const green = pixels[offset + 1];
+      const blue = pixels[offset + 2];
+      const luminance = 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+
+      if (luminance < 190) {
+        const byteIndex = row * widthBytes + Math.floor(column / 8);
+        packed[byteIndex] |= 0x80 >> (column % 8);
+      }
+    }
+  }
+
+  return {
+    dataBase64: encodeBase64(packed),
+    width: PAPER_WIDTH,
+    height,
+    align: "center" as const,
+  };
 }
 
 export function DirectPrintTicketButton({
@@ -280,18 +500,7 @@ export function DirectPrintTicketButton({
       const config = JSON.parse(raw) as { url: string; token: string };
       setState("printing");
 
-      const logo =
-        template.showLogo &&
-        template.logoRasterBase64 &&
-        template.logoWidthPx &&
-        template.logoHeightPx
-          ? {
-              dataBase64: template.logoRasterBase64,
-              width: template.logoWidthPx,
-              height: template.logoHeightPx,
-              align: template.logoAlign,
-            }
-          : null;
+      const raster = await buildRasterTicket(ticket, template);
 
       const response = await fetch(
         config.url.replace(/\/$/, "") + "/print",
@@ -302,8 +511,7 @@ export function DirectPrintTicketButton({
             "X-Cafe-Epico-Token": config.token,
           },
           body: JSON.stringify({
-            logo,
-            lines: buildLines(ticket, template),
+            raster,
             feed: template.feedLines,
             cut: template.autoCut,
           }),
@@ -334,7 +542,7 @@ export function DirectPrintTicketButton({
       disabled={state === "printing"}
     >
       {state === "printing"
-        ? "Imprimiendo…"
+        ? "Renderizando e imprimiendo…"
         : state === "ok"
           ? "Impreso ✓"
           : state === "error"

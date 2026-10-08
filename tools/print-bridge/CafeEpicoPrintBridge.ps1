@@ -106,8 +106,8 @@ function Add-RasterImage($list, $logo) {
 
   $width = [int]$logo.width
   $height = [int]$logo.height
-  if ($width -lt 1 -or $width -gt 384 -or $height -lt 1 -or $height -gt 600) {
-    throw "Dimensiones de logo fuera de rango."
+  if ($width -lt 1 -or $width -gt 384 -or $height -lt 1 -or $height -gt 5000) {
+    throw "Dimensiones de raster fuera de rango."
   }
 
   $data = [Convert]::FromBase64String([string]$logo.dataBase64)
@@ -136,9 +136,14 @@ function Build-EscPos($payload) {
 
   Add-Bytes $bytes ([byte[]](27,64))
   Add-Bytes $bytes ([byte[]](27,116,[byte]$EscPosCodePage))
-  Add-RasterImage $bytes $payload.logo
 
-  foreach ($line in $payload.lines) {
+  if ($null -ne $payload.raster) {
+    Add-RasterImage $bytes $payload.raster
+  } elseif ($null -ne $payload.logo) {
+    Add-RasterImage $bytes $payload.logo
+  }
+
+  foreach ($line in @($payload.lines)) {
     $align = Align-Code ([string]$line.align)
     Add-Bytes $bytes ([byte[]](27,97,[byte]$align))
     if ($line.bold -eq $true) {
@@ -210,6 +215,8 @@ try {
         port = $Port
         mode = "RAW_ESC_POS"
         graphics = $true
+        fullTicketRaster = $true
+        version = "1.2.0"
       }
       continue
     }
@@ -219,8 +226,10 @@ try {
         $reader = New-Object IO.StreamReader($request.InputStream, $request.ContentEncoding)
         $body = $reader.ReadToEnd()
         $payload = $body | ConvertFrom-Json
-        if ($null -eq $payload.lines -or $payload.lines.Count -eq 0) {
-          throw "El ticket no contiene lineas."
+        $hasRaster = $null -ne $payload.raster -and -not [string]::IsNullOrWhiteSpace([string]$payload.raster.dataBase64)
+        $hasLines = $null -ne $payload.lines -and @($payload.lines).Count -gt 0
+        if (-not $hasRaster -and -not $hasLines) {
+          throw "El ticket no contiene raster ni lineas."
         }
         $raw = Build-EscPos $payload
         [CafeEpicoRawPrinter]::Print($PrinterName, $raw)
