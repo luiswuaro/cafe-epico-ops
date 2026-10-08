@@ -99,6 +99,12 @@ export default async function InventoryPage({ searchParams }: PageProps) {
   const error = typeof params.error === "string" ? params.error : null;
   const refreshed = params.refreshed === "1";
 
+  const pendingOperationalUnits = inventory.rows.filter(
+    (row) =>
+      row.unitLabel === "peso/volumen" &&
+      !row.displayUnit,
+  ).length;
+
   const purchaseRows = inventory.smartRows
     .filter((row) => row.suggestedPurchase > 0.0005)
     .slice(0, 20);
@@ -186,6 +192,15 @@ export default async function InventoryPage({ searchParams }: PageProps) {
         </article>
 
         <article className="card">
+          <span className="pill">UNIDADES POR CONFIGURAR</span>
+          <div className="metric">{pendingOperationalUnits}</div>
+          <p>
+            insumos por peso/volumen que aún no deben interpretarse como g, kg,
+            ml o L.
+          </p>
+        </article>
+
+        <article className="card">
           <span className="pill">COSTO ESTIMADO</span>
           <div className="metric">
             {money.format(inventory.summary.estimatedReplenishmentCost)}
@@ -193,6 +208,14 @@ export default async function InventoryPage({ searchParams }: PageProps) {
           <p>solo suma insumos con costo configurado en Loyverse.</p>
         </article>
       </section>
+
+      {pendingOperationalUnits > 0 && (
+        <p className="alert" style={{ marginTop: "1rem" }}>
+          Inventario todavía no listo para sustituir Loyverse: hay{" "}
+          <strong>{pendingOperationalUnits}</strong> insumos por peso/volumen
+          sin unidad operativa confirmada.
+        </p>
+      )}
 
       <section className="card" style={{ marginTop: "1rem" }}>
         <h2>Qué revisar antes de mañana</h2>
