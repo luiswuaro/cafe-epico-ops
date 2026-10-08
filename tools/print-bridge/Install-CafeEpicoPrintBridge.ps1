@@ -1,6 +1,7 @@
 param(
   [string]$PrinterName = "POS-58 (copy 1)",
-  [int]$Port = 9137
+  [int]$Port = 9137,
+  [switch]$ResetToken
 )
 
 $ErrorActionPreference = "Stop"
@@ -15,13 +16,37 @@ $configPath = Join-Path $configDir "print-bridge.json"
 $taskName = "CafeEpicoOps-PrintBridge"
 New-Item -ItemType Directory -Path $configDir -Force | Out-Null
 
-$token = [guid]::NewGuid().ToString("N")
+$existingConfig = $null
+if (Test-Path $configPath) {
+  try {
+    $existingConfig = Get-Content -Path $configPath -Raw | ConvertFrom-Json
+  }
+  catch {
+    $existingConfig = $null
+  }
+}
+
+if (
+  -not $ResetToken -and
+  $null -ne $existingConfig -and
+  -not [string]::IsNullOrWhiteSpace([string]$existingConfig.token)
+) {
+  $token = [string]$existingConfig.token
+} else {
+  $token = [guid]::NewGuid().ToString("N")
+}
+
 @{
   printerName = $PrinterName
   port = $Port
   token = $token
   bridgePath = $bridgePath
-  installedAt = (Get-Date).ToString("o")
+  installedAt = if ($null -ne $existingConfig -and $existingConfig.installedAt) {
+    [string]$existingConfig.installedAt
+  } else {
+    (Get-Date).ToString("o")
+  }
+  updatedAt = (Get-Date).ToString("o")
 } | ConvertTo-Json | Set-Content -Path $configPath -Encoding UTF8
 
 $quotedBridge = '"' + $bridgePath + '"'
@@ -45,6 +70,11 @@ Write-Host "Cafe Epico Print Bridge instalado." -ForegroundColor Green
 Write-Host "Impresora : $PrinterName"
 Write-Host "URL       : http://127.0.0.1:$Port"
 Write-Host "Token     : $token" -ForegroundColor Yellow
+if ($ResetToken) {
+  Write-Host "Token regenerado manualmente." -ForegroundColor Yellow
+} elseif ($null -ne $existingConfig -and $existingConfig.token) {
+  Write-Host "Se reutilizo el token existente." -ForegroundColor Green
+}
 Write-Host "Config    : $configPath"
 Write-Host ""
 Write-Host "Guarda el token en POS > Impresora."
