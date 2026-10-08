@@ -160,10 +160,6 @@ export default async function InventoryPage({ searchParams }: PageProps) {
     (row) => row.operationalInStock != null,
   ).length;
 
-  const lagRows = inventory.smartRows
-    .filter((row) => row.status === "CRITICAL" || row.status === "WATCH")
-    .slice(0, 12);
-
   const purchaseRows = inventory.smartRows
     .filter((row) => row.suggestedPurchase > 0.0005)
     .slice(0, 20);
@@ -296,22 +292,29 @@ export default async function InventoryPage({ searchParams }: PageProps) {
           <p className="status-ok">No hay insumos críticos o en revisión.</p>
         ) : (
           <div className="stack">
-            {lagRows.map((row) => (
+            {lagRows.map(({ row, lastRestockAt, restockSource }) => (
               <div className="task" key={"lag-" + row.variantExternalId}>
                 <div style={{ flex: 1 }}>
                   <strong>{row.itemName}</strong>{" "}
-                  <span className="status-warn">
+                  <span
+                    className={
+                      row.status === "CRITICAL" || row.status === "WATCH"
+                        ? "status-warn"
+                        : "muted"
+                    }
+                  >
                     {statusLabel(row.status)}
                   </span>
                   <div className="muted">
                     cobertura {coverageLabel(row.daysCover)}
                     {" · "}
-                    último reabasto OPS{" "}
-                    {row.lastOperationalRestockAt
-                      ? row.lastOperationalRestockAt.toLocaleDateString("es-MX", {
+                    último reabasto{" "}
+                    {lastRestockAt
+                      ? lastRestockAt.toLocaleDateString("es-MX", {
                           timeZone: "America/Mexico_City",
                         })
                       : "sin registro"}
+                    {restockSource ? " · " + restockSource : ""}
                   </div>
                 </div>
                 <Link
