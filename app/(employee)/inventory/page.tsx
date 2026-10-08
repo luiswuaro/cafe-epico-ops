@@ -206,8 +206,8 @@ export default async function InventoryPage({ searchParams }: PageProps) {
           )}
         </div>
         <p className="muted" style={{ marginTop: ".6rem" }}>
-          Este botón no suma inventario: reemplaza el espejo con la existencia
-          actual de Loyverse y guarda un histórico solo cuando detecta cambios.
+          Este botón actualiza sólo el espejo de Loyverse y su histórico.
+          No sobrescribe ni suma el saldo operativo de OPS.
         </p>
       </section>
 
@@ -221,7 +221,7 @@ export default async function InventoryPage({ searchParams }: PageProps) {
         <article className="card">
           <span className="pill">REQUIEREN ATENCIÓN</span>
           <div className="metric">{inventory.summary.atRisk}</div>
-          <p>menos de 3 días de cobertura o stock bajo Loyverse.</p>
+          <p>menos de 3 días de cobertura o saldo OPS crítico.</p>
         </article>
 
         <article className="card">

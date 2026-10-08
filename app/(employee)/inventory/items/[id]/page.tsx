@@ -1,10 +1,14 @@
 import Link from "next/link";
+import { recordOperationalRestock } from "../../actions";
 import { notFound } from "next/navigation";
 import { InventoryConsumptionChart } from "@/components/inventory-consumption-chart";
 import { InventoryStockHistoryChart } from "@/components/inventory-stock-history-chart";
 import { getLoyverseIngredientHistory } from "@/src/application/inventory/loyverse-history";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
-import { assertEmployeePermission } from "@/src/infrastructure/auth/permissions";
+import {
+  assertEmployeePermission,
+  employeeHasPermission,
+} from "@/src/infrastructure/auth/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -26,21 +30,33 @@ function movementLabel(value: string) {
   if (value === "SALE_REVERSAL") return "Reversa de venta";
   if (value === "OPENING_BALANCE") return "Saldo inicial";
   if (value === "WASTE") return "Merma";
+  if (value === "REMAKE") return "Remake";
+  if (value === "RESTOCK") return "Reabasto";
+  if (value === "COUNT_ADJUSTMENT") return "Ajuste por conteo";
   return value;
 }
 
 export default async function InventoryIngredientHistoryPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { id } = await params;
+  const query = await searchParams;
   const { employee } = await getCurrentEmployee();
   if (!employee.homeStoreId) notFound();
 
   await assertEmployeePermission(
     employee.id,
     "inventory.read",
+    employee.homeStoreId,
+  );
+
+  const canAdjust = await employeeHasPermission(
+    employee.id,
+    "inventory.adjust",
     employee.homeStoreId,
   );
 
@@ -64,6 +80,12 @@ export default async function InventoryIngredientHistoryPage({
         </p>
         <Link href="/inventory">← Volver a inventario</Link>
       </section>
+
+      {query.saved === "restock" && (
+        <p className="card status-ok">
+          Reabasto registrado en el saldo operativo de OPS.
+        </p>
+      )}
 
       <section className="grid">
         <article className="card">
@@ -121,6 +143,44 @@ export default async function InventoryIngredientHistoryPage({
           </p>
         </article>
       </section>
+
+      {canAdjust && (
+        <section className="card" style={{ marginTop: "1rem" }}>
+          <p className="eyebrow">MOVIMIENTO OPERATIVO</p>
+          <h2>Registrar reabasto</h2>
+          <p className="muted">
+            Suma al saldo OPS sin modificar Loyverse. Úsalo cuando recibas o
+            agregues inventario físico a barra.
+          </p>
+          <form action={recordOperationalRestock} className="stack">
+            <input
+              type="hidden"
+              name="variantExternalId"
+              value={history.item.variantExternalId}
+            />
+            <label>
+              Cantidad recibida · {history.displayUnit}
+              <input
+                name="quantity"
+                type="number"
+                inputMode="decimal"
+                min="0.001"
+                step="0.001"
+                required
+              />
+            </label>
+            <label>
+              Nota
+              <input
+                name="note"
+                maxLength={300}
+                placeholder="Ej. compra Sam's / proveedor / ajuste de entrada"
+              />
+            </label>
+            <button type="submit">Sumar reabasto a OPS</button>
+          </form>
+        </section>
+      )}
 
       <section className="card" style={{ marginTop: "1rem" }}>
         <h2>Existencia fuente</h2>

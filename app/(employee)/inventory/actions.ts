@@ -1,9 +1,11 @@
+import { randomUUID } from "node:crypto";
 "use server";
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { getInventoryIntelligence } from "@/src/application/loyverse/inventory-intelligence";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
 import { assertEmployeePermission } from "@/src/infrastructure/auth/permissions";
 import { getDb } from "@/src/infrastructure/db/client";
@@ -148,6 +150,98 @@ export async function resolveShortage(formData: FormData) {
 
   revalidatePath("/inventory");
   revalidatePath("/today");
+}
+
+
+export async function recordOperationalRestock(formData: FormData) {
+  const variantExternalId = String(
+    formData.get("variantExternalId") ?? "",
+  ).trim();
+  const displayQuantity = Number(formData.get("quantity"));
+  const note = String(formData.get("note") ?? "").trim();
+
+  if (
+    !variantExternalId ||
+    !Number.isFinite(displayQuantity) ||
+    displayQuantity <= 0 ||
+    displayQuantity > 1_000_000
+  ) {
+    throw new Error("Cantidad de reabasto inválida");
+  }
+
+  const { user, employee } = await getCurrentEmployee();
+  if (!employee.homeStoreId) throw new Error("Employee has no home store");
+
+  await assertEmployeePermission(
+    employee.id,
+    "inventory.adjust",
+    employee.homeStoreId,
+  );
+
+  const inventory = await getInventoryIntelligence(
+    employee.organizationId,
+  );
+  const row = inventory.smartRows.find(
+    (item) => item.variantExternalId === variantExternalId,
+  );
+  if (!row) throw new Error("Insumo no encontrado");
+
+  const displayFactor = row.displayFactor ?? 1;
+  if (!Number.isFinite(displayFactor) || displayFactor <= 0) {
+    throw new Error("Unidad operativa inválida");
+  }
+
+  const nativeQuantity = displayQuantity / displayFactor;
+  const sourceId = randomUUID();
+  const displayUnit =
+    row.displayUnit ??
+    (row.unitLabel === "peso/volumen"
+      ? "unidad Loyverse"
+      : row.unitLabel);
+  const db = getDb();
+
+  await db.transaction(async (tx) => {
+    await tx.execute(
+      sql`select public.post_operational_inventory_delta(
+        ${employee.organizationId}::uuid,
+        ${employee.homeStoreId!}::uuid,
+        ${variantExternalId}::text,
+        ${employee.id}::uuid,
+        'RESTOCK'::varchar,
+        ${nativeQuantity}::numeric,
+        'MANUAL_RESTOCK'::varchar,
+        ${sourceId}::text,
+        ${note || "Reabasto manual"}::text
+      )`,
+    );
+
+    await tx.insert(auditEvents).values({
+      organizationId: employee.organizationId,
+      storeId: employee.homeStoreId,
+      actorUserId: user.id,
+      actorEmployeeId: employee.id,
+      action: "OPERATIONAL_INVENTORY_RESTOCKED",
+      entityType: "operational_inventory",
+      entityId: sourceId,
+      afterData: {
+        variantExternalId,
+        itemName: row.itemName,
+        nativeQuantity,
+        displayQuantity,
+        displayUnit,
+        note: note || null,
+      },
+    });
+  });
+
+  revalidatePath("/inventory");
+  revalidatePath("/today");
+  revalidatePath("/inventory/items/" + variantExternalId);
+  redirect(
+    "/inventory/items/" +
+      encodeURIComponent(variantExternalId) +
+      "?saved=restock",
+  );
 }
 
 

@@ -1,6 +1,6 @@
 "use server";
 
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getInventoryIntelligence } from "@/src/application/loyverse/inventory-intelligence";
@@ -56,55 +56,75 @@ export async function reportBarWaste(formData: FormData) {
     (row.unitLabel === "peso/volumen" ? "u. Loyverse" : row.unitLabel);
 
   const db = getDb();
-  const [created] = await db
-    .insert(operationalEvents)
-    .values({
+  const created = await db.transaction(async (tx) => {
+    const [event] = await tx
+      .insert(operationalEvents)
+      .values({
+        organizationId: employee.organizationId,
+        storeId: employee.homeStoreId,
+        employeeId: employee.id,
+        eventType: reason === "REMAKE" ? "REMAKE" : "WASTE",
+        severity:
+          quantity >= Math.max(1, row.avgDailyUsage14 * 0.2)
+            ? "IMPORTANT"
+            : "NORMAL",
+        variantExternalId,
+        itemNameSnapshot: row.itemName,
+        quantity: String(quantity),
+        unitLabel: row.unitLabel,
+        displayQuantity: String(displayQuantity),
+        displayUnit,
+        note: reason + (note ? " · " + note : ""),
+        resolvedAt: new Date(),
+        resolvedByEmployeeId: employee.id,
+      })
+      .returning({ id: operationalEvents.id });
+
+    await tx.execute(
+      sql`select public.post_operational_inventory_delta(
+        ${employee.organizationId}::uuid,
+        ${employee.homeStoreId!}::uuid,
+        ${variantExternalId}::text,
+        ${employee.id}::uuid,
+        ${reason === "REMAKE" ? "REMAKE" : "WASTE"}::varchar,
+        ${-quantity}::numeric,
+        'BAR_EVENT'::varchar,
+        ${event.id}::text,
+        ${reason + (note ? " · " + note : "")}::text
+      )`,
+    );
+
+    await tx.insert(auditEvents).values({
       organizationId: employee.organizationId,
       storeId: employee.homeStoreId,
-      employeeId: employee.id,
-      eventType: reason === "REMAKE" ? "REMAKE" : "WASTE",
-      severity:
-        quantity >= Math.max(1, row.avgDailyUsage14 * 0.2)
-          ? "IMPORTANT"
-          : "NORMAL",
-      variantExternalId,
-      itemNameSnapshot: row.itemName,
-      quantity: String(quantity),
-      unitLabel: row.unitLabel,
-      displayQuantity: String(displayQuantity),
-      displayUnit,
-      note: reason + (note ? " · " + note : ""),
-      resolvedAt: new Date(),
-      resolvedByEmployeeId: employee.id,
-    })
-    .returning({ id: operationalEvents.id });
+      actorUserId: user.id,
+      actorEmployeeId: employee.id,
+      action:
+        reason === "REMAKE"
+          ? "BAR_REMAKE_REPORTED"
+          : "BAR_WASTE_REPORTED",
+      entityType: "operational_event",
+      entityId: event.id,
+      afterData: {
+        variantExternalId,
+        itemName: row.itemName,
+        quantity,
+        nativeUnitLabel: row.unitLabel,
+        displayQuantity,
+        displayUnit,
+        reason,
+        note,
+        inventoryEffectApplied: true,
+      },
+    });
 
-  await db.insert(auditEvents).values({
-    organizationId: employee.organizationId,
-    storeId: employee.homeStoreId,
-    actorUserId: user.id,
-    actorEmployeeId: employee.id,
-    action:
-      reason === "REMAKE"
-        ? "BAR_REMAKE_REPORTED"
-        : "BAR_WASTE_REPORTED",
-    entityType: "operational_event",
-    entityId: created.id,
-    afterData: {
-      variantExternalId,
-      itemName: row.itemName,
-      quantity,
-      nativeUnitLabel: row.unitLabel,
-      displayQuantity,
-      displayUnit,
-      reason,
-      note,
-    },
+    return event;
   });
 
   revalidatePath("/today");
   revalidatePath("/handoff");
   revalidatePath("/inventory");
+  revalidatePath("/inventory/items/" + variantExternalId);
   revalidatePath("/admin/decision-center");
   redirect("/today?saved=waste");
 }
@@ -149,7 +169,8 @@ export async function reportQuickStockCount(formData: FormData) {
     redirect("/today?error=stock-count-unit");
   }
 
-  const sourceDisplayQuantity = row.inStock * displayFactor;
+  const operationalDisplayQuantity = row.inStock * displayFactor;
+  const sourceDisplayQuantity = row.sourceInStock * displayFactor;
   const nativePhysicalQuantity =
     physicalDisplayQuantity / displayFactor;
   const displayUnit =
@@ -158,13 +179,15 @@ export async function reportQuickStockCount(formData: FormData) {
       ? "u. Loyverse"
       : row.unitLabel);
 
-  const differenceDisplay =
+  const opsAdjustmentDisplay =
+    physicalDisplayQuantity - operationalDisplayQuantity;
+  const sourceDifferenceDisplay =
     physicalDisplayQuantity - sourceDisplayQuantity;
   const toleranceDisplay = row.soldByWeight
     ? Math.max(0.01, Math.abs(sourceDisplayQuantity) * 0.02)
     : 0.49;
-  const hasDiscrepancy =
-    Math.abs(differenceDisplay) > toleranceDisplay;
+  const hasSourceDiscrepancy =
+    Math.abs(sourceDifferenceDisplay) > toleranceDisplay;
   const now = new Date();
   const db = getDb();
 
@@ -198,7 +221,7 @@ export async function reportQuickStockCount(formData: FormData) {
         storeId: employee.homeStoreId,
         employeeId: employee.id,
         eventType: "STOCK_COUNT",
-        severity: hasDiscrepancy ? "IMPORTANT" : "NORMAL",
+        severity: hasSourceDiscrepancy ? "IMPORTANT" : "NORMAL",
         variantExternalId,
         itemNameSnapshot: row.itemName,
         quantity: String(nativePhysicalQuantity),
@@ -206,42 +229,66 @@ export async function reportQuickStockCount(formData: FormData) {
         displayQuantity: String(physicalDisplayQuantity),
         displayUnit,
         note:
-          "Conteo físico · Loyverse al contar " +
+          "Conteo físico · OPS antes " +
+          operationalDisplayQuantity.toFixed(3) +
+          " " +
+          displayUnit +
+          " · Loyverse " +
           sourceDisplayQuantity.toFixed(3) +
           " " +
           displayUnit +
-          " · diferencia " +
-          (differenceDisplay >= 0 ? "+" : "") +
-          differenceDisplay.toFixed(3) +
+          " · ajuste OPS " +
+          (opsAdjustmentDisplay >= 0 ? "+" : "") +
+          opsAdjustmentDisplay.toFixed(3) +
+          " " +
+          displayUnit +
+          " · diferencia vs Loyverse " +
+          (sourceDifferenceDisplay >= 0 ? "+" : "") +
+          sourceDifferenceDisplay.toFixed(3) +
           " " +
           displayUnit +
           (note ? " · " + note : ""),
-        resolvedAt: hasDiscrepancy ? null : now,
-        resolvedByEmployeeId: hasDiscrepancy
+        resolvedAt: hasSourceDiscrepancy ? null : now,
+        resolvedByEmployeeId: hasSourceDiscrepancy
           ? null
           : employee.id,
       })
       .returning({ id: operationalEvents.id });
+
+    await tx.execute(
+      sql`select public.set_operational_inventory_count(
+        ${employee.organizationId}::uuid,
+        ${employee.homeStoreId!}::uuid,
+        ${variantExternalId}::text,
+        ${employee.id}::uuid,
+        ${nativePhysicalQuantity}::numeric,
+        ${event.id}::text,
+        ${note ?? "Conteo físico"}::text
+      )`,
+    );
 
     await tx.insert(auditEvents).values({
       organizationId: employee.organizationId,
       storeId: employee.homeStoreId,
       actorUserId: user.id,
       actorEmployeeId: employee.id,
-      action: "LOYVERSE_STOCK_COUNT_RECORDED",
+      action: "OPS_STOCK_COUNT_RECORDED",
       entityType: "operational_event",
       entityId: event.id,
       afterData: {
         variantExternalId,
         itemName: row.itemName,
-        sourceNativeQuantity: row.inStock,
+        operationalNativeBefore: row.inStock,
+        operationalDisplayBefore: operationalDisplayQuantity,
+        sourceNativeQuantity: row.sourceInStock,
         sourceDisplayQuantity,
         physicalNativeQuantity: nativePhysicalQuantity,
         physicalDisplayQuantity,
         displayUnit,
-        differenceDisplay,
+        opsAdjustmentDisplay,
+        sourceDifferenceDisplay,
         toleranceDisplay,
-        requiresAdminReconciliation: hasDiscrepancy,
+        requiresSourceReconciliation: hasSourceDiscrepancy,
         note,
       },
     });
@@ -252,11 +299,12 @@ export async function reportQuickStockCount(formData: FormData) {
   revalidatePath("/today");
   revalidatePath("/handoff");
   revalidatePath("/inventory");
+  revalidatePath("/inventory/items/" + variantExternalId);
   revalidatePath("/admin/decision-center");
   redirect(
     "/today?saved=stock-count&count=" +
       created.id +
-      (hasDiscrepancy ? "&reconcile=1" : ""),
+      (hasSourceDiscrepancy ? "&reconcile=1" : ""),
   );
 }
 

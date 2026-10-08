@@ -257,9 +257,11 @@ export async function getLoyverseIngredientHistory(
   for (const movement of movements) {
     const delta = Number(movement.quantityDeltaNative);
     if (delta >= 0) continue;
-    if (!["SALE", "WASTE", "PRODUCTION_CONSUMPTION"].includes(
-      movement.movementType,
-    )) {
+    if (
+      !["SALE", "WASTE", "REMAKE", "PRODUCTION_CONSUMPTION"].includes(
+        movement.movementType,
+      )
+    ) {
       continue;
     }
 
