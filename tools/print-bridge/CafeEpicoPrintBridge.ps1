@@ -141,7 +141,11 @@ function Build-EscPos($payload) {
   foreach ($line in $payload.lines) {
     $align = Align-Code ([string]$line.align)
     Add-Bytes $bytes ([byte[]](27,97,[byte]$align))
-    Add-Bytes $bytes ([byte[]](27,69,[byte]$(if ($line.bold -eq $true) { 1 } else { 0 })))
+    if ($line.bold -eq $true) {
+      Add-Bytes $bytes ([byte[]](27,69,1))
+    } else {
+      Add-Bytes $bytes ([byte[]](27,69,0))
+    }
     if ([string]$line.size -eq "double") {
       Add-Bytes $bytes ([byte[]](29,33,17))
     } else {
