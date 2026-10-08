@@ -320,7 +320,7 @@ export default async function InventoryPage({ searchParams }: PageProps) {
                 <Link
                   className="button secondary"
                   href={
-                    "/inventory/history/" +
+                    "/inventory/items/" +
                     encodeURIComponent(row.variantExternalId)
                   }
                 >
