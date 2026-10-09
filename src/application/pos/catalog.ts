@@ -67,7 +67,7 @@ function availableForSale(payload: Record<string, unknown>) {
   return stores.some((value) => asObject(value).available_for_sale === true);
 }
 
-function storedRecipe(value: unknown): StoredRecipe | null {
+function storedRecipe(value: unknown, byUniqueName?: Map<string,{itemId:string;variantId:string}>): StoredRecipe | null {
   const row = asObject(value);
   if (!Array.isArray(row.components)) return null;
 
@@ -82,15 +82,16 @@ function storedRecipe(value: unknown): StoredRecipe | null {
         : "u.";
     if (!name || !Number.isFinite(quantity) || quantity <= 0) return [];
 
+    const matched=byUniqueName?.get(normalize(name));
     return [{
       variantExternalId:
         typeof component.variantExternalId === "string"
           ? component.variantExternalId
-          : null,
+          : matched?.variantId ?? null,
       itemExternalId:
         typeof component.itemExternalId === "string"
           ? component.itemExternalId
-          : null,
+          : matched?.itemId ?? null,
       name,
       quantity,
       unitLabel,
@@ -207,6 +208,21 @@ export async function getPosCatalog(
       .filter((variant) => variant.itemExternalId)
       .map((variant) => [variant.itemExternalId!, variant]),
   );
+  // Resolver únicamente por nombre inequívoco de artículo; nunca asignar
+  // una variante ambigua. Arregla referencias nulas en overrides de empaque.
+  const matchesByName=new Map<string,Array<{itemId:string;variantId:string}>>();
+  for(const item of items){
+    const variant=variantByItem.get(item.externalId);
+    if(!variant) continue;
+    const key=normalize(item.itemName);
+    const matches=matchesByName.get(key)??[];
+    matches.push({itemId:item.externalId,variantId:variant.externalId});
+    matchesByName.set(key,matches);
+  }
+  const byUniqueName=new Map<string,{itemId:string;variantId:string}>();
+  for(const [key,refs] of matchesByName){
+    if(refs.length===1)byUniqueName.set(key,refs[0]);
+  }
   const overrideBySource = new Map(
     overrides.map((override) => [override.sourceExternalId, override]),
   );
@@ -227,8 +243,8 @@ export async function getPosCatalog(
       const baseTakeaway = mapEffectiveComponents(
         recipe.serviceRecipes.TAKEAWAY.effectiveComponents,
       );
-      const overrideDineIn = storedRecipe(override?.recipeDineIn);
-      const overrideTakeaway = storedRecipe(override?.recipeTakeaway);
+      const overrideDineIn = storedRecipe(override?.recipeDineIn,byUniqueName);
+      const overrideTakeaway = storedRecipe(override?.recipeTakeaway,byUniqueName);
 
       return {
         id: recipe.externalId,
@@ -282,8 +298,8 @@ export async function getPosCatalog(
     if (price == null || price <= 0) return [];
 
     const override = overrideBySource.get(item.externalId);
-    const dineIn = storedRecipe(override?.recipeDineIn);
-    const takeaway = storedRecipe(override?.recipeTakeaway);
+    const dineIn = storedRecipe(override?.recipeDineIn,byUniqueName);
+    const takeaway = storedRecipe(override?.recipeTakeaway,byUniqueName);
     const singlePiece = !asBool(item.payload.sold_by_weight) ? [{
       variantExternalId: variant.externalId,
       itemExternalId: item.externalId,
@@ -325,8 +341,8 @@ export async function getPosCatalog(
   });
 
   const manualCatalog = manual.map((item) => {
-    const dineIn = storedRecipe(item.recipeDineIn) ?? { components: [] };
-    const takeaway = storedRecipe(item.recipeTakeaway) ?? dineIn;
+    const dineIn = storedRecipe(item.recipeDineIn,byUniqueName) ?? { components: [] };
+    const takeaway = storedRecipe(item.recipeTakeaway,byUniqueName) ?? dineIn;
 
     return {
       id: "manual:" + item.id,
