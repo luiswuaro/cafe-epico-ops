@@ -78,7 +78,8 @@ export default async function PosInventoryAuditPage() {
         <Link href="/admin/pos/inventory-setup" className="button">Confirmar inventario inicial en lote</Link>
         <Link href="/admin/loyverse/inventory" className="button">Administrar equivalencias</Link>
         <Link href="/admin/pos/catalog" className="button">Revisar recetas POS</Link>
-        <Link href="/inventory" className="button">Consultar inventario</Link>
+        <Link href="/inventory/ops" className="button">Inventario OPS: ajustar y reabastecer</Link>
+        <Link href="/inventory" className="button">Histórico Loyverse</Link>
       </div>
     </section>
     <section className="card stack">
