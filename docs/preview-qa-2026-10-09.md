@@ -29,3 +29,19 @@
 12. Revisar impresión ESC/POS y navegador en tickets individuales y completos. No modificar totales ni incluir empaques extra como un segundo producto vendido.
 
 **Criterio de salida:** CI (typecheck/lint/build) satisfactorio + pruebas manuales en Preview con BD aislada + confirmación de operación real por responsable antes de fusionar.
+
+## Pruebas obligatorias — precios y bloqueo histórico (agregadas)
+
+13. **Cambiar precio importado**: desde Gestión → Catálogo POS editar un americano de prueba de $30 a $35; confirmar que OPS muestra $35 y el producto externo de Loyverse conserva $30. Auditar usuario, precio anterior y nuevo.
+14. **Cambiar precio manual**: editar alimento creado en OPS; validar actualización, permiso de propietario y evento de auditoría.
+15. **Precio congelado en ticket guardado**: guardar ticket con dos americanos a $30, dividir en dos cuentas y cambiar el precio de catálogo a $35. Cobrar ambas cuentas: **$30 cada una**, total original **$60**, inventario de dos shots según receta original y puntos sobre importes realmente pagados. Nueva venta deberá mostrar $35.
+16. **Nueva ronda tras cambio**: mantener una mesa abierta con americano de $30, cambiar catálogo a $35 y añadir otro americano en nueva ronda. Cobrar sin fusionar los precios: líneas de $30 y $35, total $65. Dividir en cuentas y repetir validación para cada línea histórica.
+17. **Receta alterada después de guardar**: guardar ticket, modificar la receta del catálogo y cobrar el ticket antiguo. Se aplican los componentes registrados en la línea original, no la nueva receta. Nueva venta usa receta vigente.
+18. **Concurrencia**: cambiar precio desde dos sesiones administradoras; comparar evento anterior/posterior y revisar que sólo la actualización final determine el catálogo, sin alterar tickets guardados.
+19. **Permisos**: usuario sin `pos.catalog.manage` no puede editar precio ni invocar la operación por POST.
+20. **Errores sin pantalla negra**: cambiar o eliminar la división en un ticket cerrado, simular pago repetido y stock insuficiente. Esperar mensajes legibles, orden y cuentas intactas y sin doble consumo.
+21. **Cancelación parcial**: cobrar solo cuenta 1 de mesa dividida y cancelar ticket completo en caja de pruebas. Verificar que el ingreso cobrado se reversa, que cuenta 2 no registra pago ni inventario, y que la pantalla de división indica que la mesa está cerrada.
+22. **Precio e historial**: imprimir recibos individual y completo de las cuentas previamente separadas después de cambiar precio; total original congelado, cobros y clientes correctos.
+
+## Regla de QA
+La ejecución de GitHub Actions prueba estructura, tipos, lint y compilación, **no** los efectos de las transacciones SQL ni el comportamiento en teléfonos físicos. Estas pruebas deben completarse en un ambiente Preview aislado, no en la base de datos de producción.
