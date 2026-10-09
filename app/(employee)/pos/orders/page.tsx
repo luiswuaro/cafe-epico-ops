@@ -148,7 +148,7 @@ export default async function PosOrdersPage({
                     : ""}
                 </div>
 
-                {Number(order.loyaltyPointsPreview) > 0 && (
+                {!partiallyPaid && Number(order.loyaltyPointsPreview) > 0 && (
                   <div className="muted">
                     Puntos que generaría:{" "}
                     <strong>
@@ -156,6 +156,10 @@ export default async function PosOrdersPage({
                     </strong>
                   </div>
                 )}
+
+                {partiallyPaid && order.mode==="LIVE" && <p className="muted">
+                  Puntos acreditados por cuenta pagada.
+                </p>}
 
                 {!partiallyPaid && (
                   <div className="command-status-actions">
