@@ -5,7 +5,7 @@ import { getDb } from "@/src/infrastructure/db/client";
 import {
   auditEvents, inventoryBalances, inventoryItems, inventoryMovements,
   loyverseInventoryMappings, posCashMovements, posCashSessions, posCustomers,
-  posLoyaltyEntries, posOrderLines, posOrders, posPayments,
+  posLoyaltyEntries, posOrderLines, posOrders, posPayments, posOrderSplits, posOrderSplitLines,
 } from "@/src/infrastructure/db/schema";
 
 export type LiveCart = Array<{
@@ -34,6 +34,7 @@ export async function checkoutLiveOrder(input:{
   actorUserId:string;
   clientOrderId:string;
   existingOrderId?:string;
+  existingSplitId?:string;
   cart:LiveCart;
   customerId:string|null;
   serviceMode:PosServiceMode;
@@ -102,6 +103,8 @@ export async function checkoutLiveOrder(input:{
     // Si la comanda existe, se liquida sobre el MISMO folio.
     // El bloqueo protege contra cobros dobles desde distintos dispositivos.
     let pending:typeof posOrders.$inferSelect|undefined;
+    let split:typeof posOrderSplits.$inferSelect|undefined;
+    let finalSplitPayment=false;
     if(input.existingOrderId){
       [pending]=await tx.select().from(posOrders).where(and(
         eq(posOrders.id,input.existingOrderId),
@@ -110,13 +113,55 @@ export async function checkoutLiveOrder(input:{
       )).for("update").limit(1);
       if(!pending || pending.mode!=="LIVE" || pending.clientOrderId!==input.clientOrderId)
         throw new Error("Comanda LIVE no encontrada.");
-      if(pending.status==="PAID") return {id:pending.id,alreadyRecorded:true};
-      if(!["SENT","PREPARING","READY"].includes(pending.status))
+      if(pending.status==="PAID") {
+        if(input.existingSplitId) {
+          const [paid]=await tx.select().from(posOrderSplits).where(and(
+            eq(posOrderSplits.id,input.existingSplitId),eq(posOrderSplits.orderId,pending.id)
+          )).limit(1);
+          if(paid?.status==="PAID")return {id:pending.id,alreadyRecorded:true};
+        }
+        throw new Error("La comanda ya fue cobrada.");
+      }
+      if(!["SENT","PREPARING","READY","PARTIALLY_PAID"].includes(pending.status))
         throw new Error("Esta comanda ya no está abierta para cobro.");
+      if(pending.status==="PARTIALLY_PAID"&&!input.existingSplitId)
+        throw new Error("Hay cuentas parcialmente cobradas: termina las cuentas divididas.");
       if(pending.serviceMode!==input.serviceMode ||
-        (pending.tableLabel||null)!==(input.tableLabel||null) ||
-        (pending.customerId||null)!==(input.customerId||null))
+        (pending.tableLabel||null)!==(input.tableLabel||null))
         throw new Error("Los datos de la comanda cambiaron. Actualiza Comandas.");
+      const allSplits=await tx.select().from(posOrderSplits)
+        .where(eq(posOrderSplits.orderId,pending.id)).for("update");
+      if(input.existingSplitId){
+        split=allSplits.find(x=>x.id===input.existingSplitId);
+        if(!split)throw new Error("Cuenta dividida no encontrada.");
+        if(split.status==="PAID")return {id:pending.id,alreadyRecorded:true};
+        if(split.status!=="OPEN")throw new Error("La cuenta ya no puede cobrarse.");
+        const assigned=await tx.select({
+          lineId:posOrderSplitLines.orderLineId,
+          quantity:posOrderSplitLines.quantity
+        }).from(posOrderSplitLines).where(eq(posOrderSplitLines.splitId,split.id));
+        if(!assigned.length)throw new Error("Cuenta sin productos asignados.");
+        finalSplitPayment=allSplits.every(x=>x.id===split!.id||x.status==="PAID");
+        const assignedMap=new Map(assigned.map(x=>[x.lineId,Number(x.quantity)]));
+        const assignment=await tx.select().from(posOrderLines)
+          .where(eq(posOrderLines.orderId,pending.id));
+        const expected=assignment.filter(x=>assignedMap.has(x.id)).map(x=>({
+          catalogExternalId:x.catalogExternalId,
+          quantity:assignedMap.get(x.id)!,note:x.note,price:Number(x.unitPrice)
+        }));
+        const expectedTotal=expected.reduce((sum,line)=>sum+line.quantity*line.price,0);
+        if(Math.abs(expectedTotal-Number(split.total))>0.005||Math.abs(expectedTotal-total)>0.005)
+          throw new Error("El total de esta cuenta no coincide con los productos asignados.");
+        const signature=(values:Array<{catalogExternalId:string;quantity:number;note:string|null;price:number}>)=>
+          values.map(v=>[v.catalogExternalId,v.quantity,v.note||"",v.price.toFixed(2)].join("|"))
+            .sort().join("::");
+        const checkout=signature(lines.map(l=>({
+          catalogExternalId:l.item.id,quantity:l.quantity,note:l.note,price:l.price
+        })));
+        if(checkout!==signature(expected))throw new Error("La cuenta cambió desde que se abrió.");
+      } else if(allSplits.length){
+        throw new Error("La mesa tiene cuentas divididas: cobra cada cuenta por separado.");
+      }
       const savedLines=await tx.select().from(posOrderLines)
         .where(eq(posOrderLines.orderId,pending.id));
       const signature=(values:Array<{catalogExternalId:string;quantity:number;note:string|null;price:number}>)=>
@@ -129,7 +174,7 @@ export async function checkoutLiveOrder(input:{
       const checkout=signature(lines.map(l=>({
         catalogExternalId:l.item.id,quantity:l.quantity,note:l.note,price:l.price,
       })));
-      if(snapshot!==checkout || Number(pending.total)!==total)
+      if(!split&&(snapshot!==checkout || Number(pending.total)!==total))
         throw new Error("La comanda cambió de precio, producto o cantidad. No se ha cobrado; solicita revisión.");
     } else {
       const [duplicate]=await tx.select({id:posOrders.id}).from(posOrders).where(and(
@@ -213,8 +258,10 @@ export async function checkoutLiveOrder(input:{
 
     const [order]=pending
       ? await tx.update(posOrders).set({
-          status:"PAID",paidAt:now,updatedAt:now,
-          inventoryEffectApplied:true,loyaltyEffectApplied:Boolean(input.customerId),
+          status:split&&!finalSplitPayment?"PARTIALLY_PAID":"PAID",
+          paidAt:split&&!finalSplitPayment?null:now,updatedAt:now,
+          inventoryEffectApplied:true,
+          loyaltyEffectApplied:Boolean(input.customerId)||pending.loyaltyEffectApplied,
         }).where(and(eq(posOrders.id,pending.id),eq(posOrders.status,pending.status)))
           .returning({id:posOrders.id,folio:posOrders.folio})
       : await tx.insert(posOrders).values({
@@ -243,8 +290,16 @@ export async function checkoutLiveOrder(input:{
         })),
       },
     })));
+    if(split){
+      const [changed]=await tx.update(posOrderSplits).set({
+        status:"PAID",paidAt:now,updatedAt:now
+      }).where(and(eq(posOrderSplits.id,split.id),eq(posOrderSplits.status,"OPEN")))
+        .returning({id:posOrderSplits.id});
+      if(!changed)throw new Error("Esta cuenta fue cobrada por otro dispositivo.");
+    }
     await tx.insert(posPayments).values({
-      organizationId:input.organizationId,orderId:order.id,method:input.paymentMethod,
+      organizationId:input.organizationId,orderId:order.id,
+      splitId:split?.id??null,method:input.paymentMethod,
       amount:total.toFixed(2),
       tenderedAmount:input.paymentMethod==="CASH" ? input.tenderedAmount!.toFixed(2) : null,
       changeAmount:input.paymentMethod==="CASH" ? (input.tenderedAmount!-total).toFixed(2) : null,
@@ -252,7 +307,7 @@ export async function checkoutLiveOrder(input:{
     if(input.paymentMethod==="CASH"){
       await tx.insert(posCashMovements).values({
         organizationId:input.organizationId,storeId:input.storeId,
-        sessionId:session.id,orderId:order.id,employeeId:input.employeeId,
+        sessionId:session.id,orderId:order.id,splitId:split?.id??null,employeeId:input.employeeId,
         movementType:"SALE",amount:total.toFixed(2),note:order.folio,
       });
     }
@@ -264,7 +319,7 @@ export async function checkoutLiveOrder(input:{
         movementType:"SALE",quantityDelta:(-item.amount).toFixed(3),
         sourceType:"POS_LIVE_ORDER",sourceId:order.id,occurredAt:now,
         employeeId:input.employeeId,note:order.folio,
-        externalProvider:"OPS_POS",externalId:order.id,
+        externalProvider:"OPS_POS",externalId:split?.id??order.id,
       });
       await tx.update(inventoryBalances).set({
         theoreticalQuantity:sql`${inventoryBalances.theoreticalQuantity} - ${item.amount}`,
@@ -285,15 +340,16 @@ export async function checkoutLiveOrder(input:{
         }).where(and(eq(posCustomers.id,input.customerId),eq(posCustomers.organizationId,input.organizationId)));
         await tx.insert(posLoyaltyEntries).values({
           organizationId:input.organizationId,customerId:input.customerId,
-          orderId:order.id,entryType:"EARN",points:earned.toFixed(2),note:"Compra "+order.folio,
+          orderId:order.id,entryType:"EARN",points:earned.toFixed(2),note:(split?.label??"Compra")+" · "+order.folio,
         });
       }
     }
     await tx.insert(auditEvents).values({
       organizationId:input.organizationId,storeId:input.storeId,
       actorUserId:input.actorUserId,actorEmployeeId:input.employeeId,
-      action:pending?"POS_LIVE_COMMAND_PAID":"POS_LIVE_SALE_PAID",entityType:"pos_order",entityId:order.id,
-      afterData:{folio:order.folio,total,payment:input.paymentMethod,fromOpenCommand:Boolean(pending),consumptionCount:consume.size,costOnlyComponents,
+      action:split?"POS_LIVE_SPLIT_PAID":pending?"POS_LIVE_COMMAND_PAID":"POS_LIVE_SALE_PAID",entityType:"pos_order",entityId:order.id,
+      afterData:{folio:order.folio,total,payment:input.paymentMethod,fromOpenCommand:Boolean(pending),
+        splitId:split?.id??null,finalPayment:!split||finalSplitPayment,consumptionCount:consume.size,costOnlyComponents,
         customerId:input.customerId,inventoryEffectApplied:true,loyaltyEffectApplied:Boolean(input.customerId)},
     });
     return {id:order.id,alreadyRecorded:false};
