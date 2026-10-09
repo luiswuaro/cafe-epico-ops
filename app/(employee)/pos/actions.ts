@@ -12,7 +12,7 @@ import { getPosReadiness } from "@/src/application/pos/readiness";
 import { getOpenCashSession } from "@/src/application/pos/cash";
 import { syncLoyverseReceipts } from "@/src/application/loyverse/sync";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
-import { assertEmployeePermission } from "@/src/infrastructure/auth/permissions";
+import { assertEmployeePermission, employeeHasPermission } from "@/src/infrastructure/auth/permissions";
 import { getDb } from "@/src/infrastructure/db/client";
 import {
   auditEvents,
