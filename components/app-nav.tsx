@@ -94,6 +94,8 @@ export async function AppNav() {
         </details>
       )}
 
+      <Link href="/account/security">Mi cuenta</Link>
+
       <form className="nav-signout" action="/auth/signout" method="post">
         <button type="submit">Salir</button>
       </form>
