@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { PosClient } from "./pos-client";
 import { getPosCatalog } from "@/src/application/pos/catalog";
+import { isPosLiveEnabled } from "@/src/application/pos/live";
 import { getCashState } from "@/src/application/pos/cash";
 import { getPosCustomers } from "@/src/application/pos/customers";
 import {
@@ -37,6 +38,7 @@ export default async function PosPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const params = await searchParams;
+  const liveEnabled = isPosLiveEnabled();
   const { employee } = await getCurrentEmployee();
 
   if (!employee.homeStoreId) {
@@ -76,15 +78,15 @@ export default async function PosPage({
     <main className="shell pos-shell">
       <section className="hero pos-hero">
         <div>
-          <p className="eyebrow">POS V0.1 · MODO ESPEJO</p>
+          <p className="eyebrow">{liveEnabled ? "POS · LIVE" : "POS V0.1 · MODO ESPEJO"}</p>
           <h1>Tomar orden</h1>
           <p className="muted">
-            Registra la misma venta que acabas de cobrar en Loyverse. En esta
-            etapa OPS no modifica inventario ni caja; sólo captura la venta y
-            calcula lo que habría consumido.
+            {liveEnabled
+              ? "Cobro operativo: descuenta cada ingrediente mapeado y abona puntos. No aceptará productos con recetas o saldos incompletos."
+              : "Registra la misma venta que acabas de cobrar en Loyverse. En esta etapa OPS captura un espejo sin descontar insumos ni acreditar puntos."}
           </p>
         </div>
-        <span className="status-warn">NO CONTABILIZA INVENTARIO</span>
+        <span className="status-warn">{liveEnabled ? "COBRO LIVE · INVENTARIO EXIGIDO" : "NO CONTABILIZA INVENTARIO"}</span>
       </section>
 
       {saved && (
@@ -237,6 +239,7 @@ export default async function PosPage({
         }))}
         selectedCustomerId={selectedCustomerId}
         cashOpen={Boolean(cash.session)}
+        liveEnabled={liveEnabled}
       />
 
       <section className="card pos-recent">
