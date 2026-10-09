@@ -428,8 +428,8 @@ export default async function AnalyticsPage({
                 <th>Unidades</th>
                 <th>Venta neta</th>
                 <th>Descuento</th>
-                <th>COGS POS</th>
-                <th>Contribución POS</th>
+                <th>COGS Loyverse</th>
+                <th>Contribución Loyverse</th>
                 <th>Margen efectivo</th>
                 <th>Base costo</th>
               </tr>
