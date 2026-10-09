@@ -54,7 +54,7 @@ export default async function PosCashPage() {
           <p className="eyebrow">POS · EFECTIVO</p>
           <h1>Caja</h1>
           <p className="muted">
-            Fondo inicial + ventas en efectivo + entradas − salidas = efectivo esperado.
+            Fondo inicial + ventas − reembolsos + entradas − salidas = efectivo esperado.
             {isPosLiveEnabled() ? " Modo LIVE: caja real de OPS." :
               " Modo espejo: no usar como caja principal hasta activar LIVE y comprobar la migración."}
           </p>
@@ -120,10 +120,14 @@ export default async function PosCashPage() {
               </strong>
             </article>
             <article className="card">
-              <p className="eyebrow">VENTAS EFECTIVO</p>
+              <p className="eyebrow">VENTAS NETAS EFECTIVO</p>
               <strong className="metric">
-                {money.format(state.cashSales)}
+                {money.format(state.netCashSales)}
               </strong>
+              <p className="muted">
+                Venta bruta: {money.format(state.cashSales)}
+                {" · "}Reembolsos: {money.format(state.cashRefunds)}
+              </p>
             </article>
             <article className="card">
               <p className="eyebrow">ENTRADAS / SALIDAS</p>
