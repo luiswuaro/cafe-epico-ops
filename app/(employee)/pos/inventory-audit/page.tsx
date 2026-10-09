@@ -41,6 +41,8 @@ export default async function PosInventoryAuditPage() {
       eq(inventoryMovements.storeId,employee.homeStoreId),
     )).orderBy(desc(inventoryMovements.occurredAt)).limit(100),
   ]);
+  const trackedIds = new Set(items.filter(item=>item.trackingType==="QUANTITY").map(item=>item.id));
+  const trackedBalances=balances.filter(b=>trackedIds.has(b.inventoryItemId));
   const mapped = new Set(mappings.map((row)=>row.loyverseVariantExternalId));
   const byId = new Map(items.map((row)=>[row.id,row]));
   const checks = catalog.map((product)=>{
@@ -55,7 +57,7 @@ export default async function PosInventoryAuditPage() {
   const totalComponents = checks.reduce((sum,p)=>sum+p.recipes.reduce((n,r)=>n+r.stockComponents.length,0),0);
   const costOnlyComponents = checks.reduce((sum,p)=>sum+p.recipes.reduce((n,r)=>n+r.components.length-r.stockComponents.length,0),0);
   const coveredComponents = checks.reduce((sum,p)=>sum+p.recipes.reduce((n,r)=>n+r.covered,0),0);
-  const ready = totalComponents>0 && totalComponents===coveredComponents && balances.length>0;
+  const ready = totalComponents>0 && totalComponents===coveredComponents && trackedBalances.length>0;
 
   return <main className="shell pos-shell">
     <section className="hero pos-hero">
@@ -68,7 +70,7 @@ export default async function PosInventoryAuditPage() {
     </section>
     <section className="card stack">
       <h2>{ready ? "Mapeo revisable; falta validar el motor LIVE" : "No habilitado para descuentos LIVE"}</h2>
-      <p>Insumos registrados: <strong>{items.length}</strong> · Saldos activos: <strong>{balances.length}</strong> · Equivalencias Loyverse → OPS: <strong>{mappings.length}</strong></p>
+      <p>Insumos registrados: <strong>{trackedIds.size}</strong> · Saldos descontables: <strong>{trackedBalances.length}</strong> · Equivalencias Loyverse → OPS: <strong>{mappings.length}</strong></p>
       <p>Componentes con inventario y equivalencia: <strong>{coveredComponents} de {totalComponents}</strong> (recetas aquí y para llevar).</p>
       <p>Componentes de costo sin inventario: <strong>{costOnlyComponents}</strong> (agua e hielo: permanecen en la receta, sin conteo ni descuento).</p>
       <p>Agua: garrafón 19 L por $26.00 MXN. Costo aproximado usando 1 g/ml.</p>
@@ -108,8 +110,8 @@ export default async function PosInventoryAuditPage() {
     </section>
     <section className="card stack">
       <h2>Saldos actuales</h2>
-      {balances.length===0 && <p className="muted">Todavía no se ha inicializado ningún saldo descontable.</p>}
-      {balances.map((b,i)=><p key={i}>
+      {trackedBalances.length===0 && <p className="muted">Todavía no se ha inicializado ningún saldo descontable.</p>}
+      {trackedBalances.map((b,i)=><p key={i}>
         {byId.get(b.inventoryItemId)?.name??"Insumo no identificado"} ·
         <strong> {Number(b.theoreticalQuantity).toFixed(3)} {byId.get(b.inventoryItemId)?.canonicalUnit??""}</strong>
       </p>)}
