@@ -123,6 +123,11 @@ export default async function PosOrdersPage({
                     <div className="command-line-item" key={line.id}>
                       <div>
                         <strong>{Number(line.quantity)}×</strong> {line.name}
+                        {order.mode==="LIVE" && (
+                          <span className="muted" style={{marginLeft:8}}>
+                            · {line.expectedConsumption?.serviceMode==="TAKEAWAY"?"PARA LLEVAR":"AQUÍ"}
+                          </span>
+                        )}
                       </div>
                       {order.mode==="LIVE" && line.isAdditionalRound &&
                         <strong className="status-ok" style={{marginLeft:8}}>Nueva ronda</strong>}
