@@ -59,6 +59,8 @@ export function PosClient({
     useState<"DINE_IN" | "TAKEAWAY">("DINE_IN");
   const [customerId, setCustomerId] = useState(selectedCustomerId ?? "");
   const [liveClientOrderId] = useState(() => globalThis.crypto.randomUUID());
+  const [paymentMethod, setPaymentMethod] = useState<"CASH"|"CARD"|"TRANSFER">(cashOpen ? "CASH" : "CARD");
+  const [tendered, setTendered] = useState("");
 
   const catalogById = useMemo(
     () => new Map(catalog.map((item) => [item.id, item])),
@@ -333,7 +335,8 @@ export function PosClient({
             Método de pago
             <select
               name="paymentMethod"
-              defaultValue={cashOpen ? "CASH" : "CARD"}
+              value={paymentMethod}
+              onChange={(event) => setPaymentMethod(event.target.value as "CASH"|"CARD"|"TRANSFER")}
             >
               <option value="CASH" disabled={!cashOpen}>
                 Efectivo{cashOpen ? "" : " · abre caja"}
@@ -343,7 +346,17 @@ export function PosClient({
             </select>
           </label>
 
-          <label>
+          {liveEnabled && paymentMethod==="CASH" && <div className="stack">
+            <label>Efectivo recibido
+              <input name="tenderedAmount" type="number" inputMode="decimal" min="0" step="0.01"
+                required value={tendered} onChange={(event)=>setTendered(event.target.value)}
+                placeholder="Ej. 100.00" />
+            </label>
+            <p className="muted">Cambio a entregar:
+              <strong> {Number(tendered)>=total && tendered.trim()!=="" ? money.format(Number(tendered)-total) : "Ingresa efectivo suficiente"}</strong>
+            </p>
+          </div>}
+                    <label>
             Nota general de la mesa / orden
             <input
               name="note"
@@ -364,7 +377,7 @@ export function PosClient({
             <button
               type="submit"
               className="pos-pay-button"
-              disabled={cartLines.length === 0}
+              disabled={cartLines.length === 0 || (liveEnabled && paymentMethod==="CASH" && (tendered.trim()==="" || Number(tendered)<total))}
             >
               {liveEnabled ? "Cobrar" : "Registrar espejo"} · {money.format(total)}
             </button>
