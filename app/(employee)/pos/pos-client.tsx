@@ -1,6 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
+import { addProductsToLiveCommand } from "./orders/live-actions";
 import {
   createPosCustomer,
   createLiveCommand,
@@ -24,10 +26,14 @@ type Customer = {
   pointsBalance: number;
 };
 
+type ServiceMode="DINE_IN"|"TAKEAWAY";
 type CartLine = {
-  key: string;
-  externalId: string;
-  note: string;
+  key:string;externalId:string;note:string;serviceMode:ServiceMode;
+};
+type SavedTicket={
+  id:string;folio:string;name:string;total:number;customerId:string|null;
+  status:string;serviceMode:ServiceMode;
+  lines:Array<{id:string;name:string;quantity:number;note:string|null;unitPrice:number;serviceMode:ServiceMode;isAdditionalRound:boolean;roundId:string|null}>;
 };
 
 type Props = {
@@ -36,6 +42,7 @@ type Props = {
   selectedCustomerId?: string | null;
   cashOpen: boolean;
   liveEnabled: boolean;
+  savedTicket?:SavedTicket|null;
 };
 
 function normalizeSearch(value:string) {
@@ -55,6 +62,7 @@ export function PosClient({
   selectedCustomerId = null,
   cashOpen,
   liveEnabled,
+  savedTicket=null,
 }: Props) {
   const [category, setCategory] = useState<"TODAS" | CatalogItem["category"]>(
     "CALIENTES",
@@ -62,8 +70,9 @@ export function PosClient({
   const [query, setQuery] = useState("");
   const [cart, setCart] = useState<CartLine[]>([]);
   const [serviceMode, setServiceMode] =
-    useState<"DINE_IN" | "TAKEAWAY">("DINE_IN");
-  const [customerId, setCustomerId] = useState(selectedCustomerId ?? "");
+    useState<ServiceMode>(savedTicket?.serviceMode??"DINE_IN");
+  const [customerId, setCustomerId] = useState(savedTicket?.customerId??selectedCustomerId??"");
+  const [additionRequestId]=useState(()=>globalThis.crypto.randomUUID());
   const [liveClientOrderId] = useState(() => globalThis.crypto.randomUUID());
   const [paymentMethod, setPaymentMethod] = useState<"CASH"|"CARD"|"TRANSFER">(cashOpen ? "CASH" : "CARD");
   const [tendered, setTendered] = useState("");
@@ -87,7 +96,9 @@ export function PosClient({
     return item ? [{ ...line, item }] : [];
   });
 
-  const total = cartLines.reduce((sum, line) => sum + line.item.price, 0);
+  const historicalRoundIds=[...new Set((savedTicket?.lines??[]).map(line=>line.roundId??"INITIAL"))];
+  const newSubtotal=cartLines.reduce((sum,line)=>sum+line.item.price,0);
+  const total=(savedTicket?.total??0)+newSubtotal;
 
   const selectedCustomer =
     customers.find((customer) => customer.id === customerId) ?? null;
@@ -108,6 +119,7 @@ export function PosClient({
         key: globalThis.crypto.randomUUID(),
         externalId,
         note: "",
+        serviceMode,
       },
     ]);
   }
@@ -123,8 +135,13 @@ export function PosClient({
         key: globalThis.crypto.randomUUID(),
         externalId: line.externalId,
         note: "",
+        serviceMode:line.serviceMode,
       },
     ]);
+  }
+
+  function updateServiceMode(key:string,next:ServiceMode){
+    setCart(current=>current.map(line=>line.key===key?{...line,serviceMode:next}:line));
   }
 
   function updateNote(key: string, note: string) {
@@ -202,12 +219,14 @@ export function PosClient({
       <aside className="card pos-cart">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">{liveEnabled ? "VENTA LIVE" : "ORDEN ESPEJO"}</p>
-            <h2>Cuenta</h2>
+            <p className="eyebrow">{savedTicket?"TICKET GUARDADO":liveEnabled?"VENTA LIVE":"ORDEN ESPEJO"}</p>
+            <h2>{savedTicket?.name??"Cuenta"}</h2>
+            {savedTicket&&<p className="muted">{savedTicket.folio}</p>}
           </div>
-          <span className="pill">{cartLines.length} unidad(es)</span>
+          <span className="pill">{(savedTicket?.lines.reduce((sum,line)=>sum+line.quantity,0)??0)+cartLines.length} unidad(es)</span>
         </div>
 
+        <p className="muted" style={{marginBottom:0}}>Servicio predeterminado de las próximas bebidas. Cada producto puede cambiarse de forma independiente.</p>
         <div className="pos-service-toggle">
           <button
             type="button"
@@ -225,9 +244,41 @@ export function PosClient({
           </button>
         </div>
 
+        {savedTicket&&(
+          <section className="stack" style={{gap:8}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:"2px solid currentColor",paddingBottom:8}}>
+              <strong>Pedido guardado · {money.format(savedTicket.total)}</strong>
+              <span className="muted">Solo lectura</span>
+            </div>
+            {savedTicket.lines.map((line,index)=>(
+              <div key={line.id}>
+                {(index===0 || (savedTicket.lines[index-1].roundId??"INITIAL")!==(line.roundId??"INITIAL")) && (
+                  <div style={{marginTop:10,marginBottom:8,paddingBottom:5,borderBottom:"1px solid currentColor"}}>
+                    <strong>{historicalRoundIds.indexOf(line.roundId??"INITIAL")===0
+                      ?"Primer pedido guardado"
+                      :"Ronda "+(historicalRoundIds.indexOf(line.roundId??"INITIAL")+1)}</strong>
+                  </div>
+                )}
+                <div className="pos-cart-line pos-cart-unit">
+                  <div className="pos-cart-unit-main">
+                    <div className="pos-cart-unit-title">
+                      <strong>{index+1}. {line.quantity}× {line.name}</strong>
+                      <strong>{money.format(line.unitPrice*line.quantity)}</strong>
+                    </div>
+                    <span className="muted">{line.serviceMode==="DINE_IN"?"Aquí · sin empaque":"Para llevar · con empaque"}</span>
+                    {line.note&&<p className="muted">{line.note}</p>}
+                  </div>
+                </div>
+              </div>
+            ))}
+            <div style={{borderTop:"3px solid currentColor",paddingTop:12,display:"flex",justifyContent:"space-between"}}>
+              <strong>+ Productos nuevos</strong><strong>{money.format(newSubtotal)}</strong>
+            </div>
+          </section>
+        )}
         <div className="pos-cart-lines">
           {cartLines.length === 0 ? (
-            <p className="muted">Toca un producto para agregarlo.</p>
+            <p className="muted">{savedTicket?"Selecciona las bebidas de la nueva ronda.":"Toca un producto para agregarlo."}</p>
           ) : (
             cartLines.map((line, index) => (
               <div className="pos-cart-line pos-cart-unit" key={line.key}>
@@ -239,6 +290,15 @@ export function PosClient({
                     <strong>{money.format(line.item.price)}</strong>
                   </div>
 
+                  <label style={{display:"block",marginTop:8}}>
+                    Preparación
+                    <select value={line.serviceMode}
+                      aria-label={"Servicio de "+line.item.name}
+                      onChange={event=>updateServiceMode(line.key,event.target.value as ServiceMode)}>
+                      <option value="DINE_IN">Aquí · sin vaso desechable</option>
+                      <option value="TAKEAWAY">Para llevar · con vaso y tapa</option>
+                    </select>
+                  </label>
                   <input
                     className="pos-line-note"
                     value={line.note}
@@ -273,11 +333,11 @@ export function PosClient({
         </div>
 
         <div className="pos-total">
-          <span>Total</span>
+          <span>{savedTicket?"Total del ticket (incluye lo nuevo)":"Total"}</span>
           <strong>{money.format(total)}</strong>
         </div>
 
-        <div className="pos-customer-box">
+        {!savedTicket&&<div className="pos-customer-box">
           <label>
             Cliente / puntos
             <select
@@ -325,9 +385,14 @@ export function PosClient({
               <button type="submit">Guardar cliente</button>
             </form>
           </details>
-        </div>
+        </div>}
 
-        <form action={liveEnabled ? createLiveSale : createShadowSale} className="stack pos-checkout">
+        <form action={savedTicket?addProductsToLiveCommand:liveEnabled?createLiveSale:createShadowSale} className="stack pos-checkout">
+          {savedTicket&&<>
+            <input type="hidden" name="orderId" value={savedTicket.id}/>
+            <input type="hidden" name="requestId" value={additionRequestId}/>
+            <input type="hidden" name="returnToPos" value="1"/>
+          </>}
           {liveEnabled && <input type="hidden" name="clientOrderId" value={liveClientOrderId} />}
           <input
             type="hidden"
@@ -337,20 +402,22 @@ export function PosClient({
                 externalId: line.externalId,
                 quantity: 1,
                 note: line.note.trim() || null,
+                serviceMode:line.serviceMode,
               })),
             )}
           />
           <input type="hidden" name="serviceMode" value={serviceMode} />
           <input type="hidden" name="customerId" value={customerId} />
 
-          {serviceMode === "DINE_IN" && (
+          {!savedTicket && (
             <label>
-              Mesa / referencia (para comandas aquí)
-              <input name="tableLabel" placeholder="Ej. Mesa 3, balcón 1" maxLength={100} />
+              Nombre del ticket / mesa
+              <input name="tableLabel" placeholder="Ej. Mesa 1, Mesa 2, Balcón 1"
+                maxLength={100} autoComplete="off"/>
             </label>
           )}
 
-          <label>
+          {!savedTicket&&<label>
             Método de pago
             <select
               name="paymentMethod"
@@ -363,9 +430,9 @@ export function PosClient({
               <option value="CARD">Tarjeta</option>
               <option value="TRANSFER">Transferencia</option>
             </select>
-          </label>
+          </label>}
 
-          {liveEnabled && paymentMethod==="CASH" && <div className="stack">
+          {!savedTicket&&liveEnabled && paymentMethod==="CASH" && <div className="stack">
             <label>Efectivo recibido
               <input name="tenderedAmount" type="number" inputMode="decimal" min="0" step="0.01"
                 required value={tendered} onChange={(event)=>setTendered(event.target.value)}
@@ -385,6 +452,12 @@ export function PosClient({
           </label>
 
           <div className="pos-command-actions">
+            {savedTicket?<>
+              <button type="submit" className="pos-command-button" disabled={cartLines.length===0}>
+                Guardar ticket · añadir {cartLines.length} producto(s)
+              </button>
+              <Link href="/pos/orders" className="button">Ir a comandas y cobrar</Link>
+            </>:<>
             <button
               type="submit"
               formAction={liveEnabled ? createLiveCommand : createShadowCommand}
@@ -401,6 +474,7 @@ export function PosClient({
             >
               {liveEnabled ? "Cobrar ahora" : "Registrar espejo"} · {money.format(total)}
             </button>
+            </>}
           </div>
         </form>
 

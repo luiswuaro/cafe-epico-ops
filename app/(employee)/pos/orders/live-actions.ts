@@ -15,6 +15,8 @@ const OPEN=["SENT","PREPARING","READY"];
 const additionSchema=z.array(z.object({
   externalId:z.string().min(1),
   quantity:z.number().int().min(1).max(20),
+  serviceMode:z.enum(["DINE_IN","TAKEAWAY"]).optional(),
+  note:z.string().max(180).nullable().optional(),
 })).min(1).max(30);
 
 function message(error:unknown) {
@@ -60,10 +62,15 @@ export async function addProductsToLiveCommand(data:FormData){
         if(!item||!item.active)throw new Error("Producto no disponible.");
         if(pilot && item.name.toLocaleUpperCase("es-MX")!==pilot)
           throw new Error("Piloto LIVE limitado a "+pilot);
-        const state=readyById.get(item.id)?.recipes.find(r=>r.mode===order.serviceMode);
-        if(!state?.ready)throw new Error(item.name+": "+(state?.errors.join("; ")||"Receta no confirmada"));
-        const recipe=item.serviceRecipes[order.serviceMode as "DINE_IN"|"TAKEAWAY"];
-        return {item,recipe,quantity:line.quantity,
+        const rawMode=line.serviceMode??order.serviceMode;
+        if(rawMode!=="DINE_IN"&&rawMode!=="TAKEAWAY")throw new Error("Servicio inválido.");
+        const lineMode: "DINE_IN"|"TAKEAWAY"=rawMode;
+        const state=readyById.get(item.id)?.recipes.find(r=>r.mode===lineMode);
+        if(!state?.ready)throw new Error(item.name+" ("+(lineMode==="DINE_IN"?"aquí":"para llevar")+"): "+(state?.errors.join("; ")||"Receta no confirmada"));
+        if(line.note?.trim() && line.note.trim().toLocaleLowerCase("es-MX")!=="extra caliente")
+          throw new Error("Nota modifica ingredientes; configura la receta de "+item.name);
+        const recipe=item.serviceRecipes[lineMode];
+        return {item,recipe,lineMode,quantity:line.quantity,note:line.note?.trim()||null,
           lineTotal:Math.round(item.price*line.quantity*100)/100};
       });
       if(splits.length)await tx.delete(posOrderSplits).where(eq(posOrderSplits.orderId,order.id));
@@ -72,9 +79,9 @@ export async function addProductsToLiveCommand(data:FormData){
         catalogExternalId:line.item.id,variantExternalId:line.item.variantExternalId,
         nameSnapshot:line.item.name,categorySnapshot:line.item.category,
         unitPrice:line.item.price.toFixed(2),quantity:String(line.quantity),
-        lineTotal:line.lineTotal.toFixed(2),note:null,
+        lineTotal:line.lineTotal.toFixed(2),note:line.note,
         expectedConsumption:{
-          mode:"LIVE",additionalRound:true,serviceMode:order.serviceMode,
+          mode:"LIVE",additionalRound:true,roundId:requestId,serviceMode:line.lineMode,
           sourceRecipeExternalId:line.recipe.externalId,
           components:line.recipe.components.map(c=>({
             variantExternalId:c.variantExternalId,itemExternalId:c.itemExternalId,
@@ -94,14 +101,16 @@ export async function addProductsToLiveCommand(data:FormData){
         actorUserId:user.id,actorEmployeeId:employee.id,
         action:"POS_LIVE_ORDER_ITEMS_ADDED",entityType:"pos_order",entityId:order.id,
         beforeData:{status:order.status,total:Number(order.total)},
-        afterData:{requestId,added,lines:lines.map(x=>({name:x.item.name,quantity:x.quantity})),
+        afterData:{requestId,added,lines:lines.map(x=>({name:x.item.name,quantity:x.quantity,serviceMode:x.lineMode})),
           total,status:"SENT",divisionReset:splits.length>0},
       });
     });
   }catch(error){
     redirect("/pos/orders?error="+encodeURIComponent(message(error)));
   }
-  redirect("/pos/orders?added="+orderId);
+  redirect(String(data.get("returnToPos")??"")==="1"
+    ? "/pos?ticket="+orderId+"&updated=1&savedRound="+requestId
+    : "/pos/orders?added="+orderId);
 }
 
 export async function setLiveCommandCustomer(data:FormData){

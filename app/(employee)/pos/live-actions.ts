@@ -10,6 +10,7 @@ const cartSchema = z.array(z.object({
   externalId:z.string().min(1),
   quantity:z.number().int().min(1).max(20),
   note:z.string().max(180).nullable().optional(),
+  serviceMode:z.enum(["DINE_IN","TAKEAWAY"]).optional(),
 })).min(1).max(30);
 
 export async function createLiveSale(formData:FormData) {

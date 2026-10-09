@@ -107,6 +107,7 @@ export default async function ReceiptPage({
           nameSnapshot: posOrderLines.nameSnapshot,
           lineTotal: posOrderSplitLines.lineTotal,
           note: posOrderLines.note,
+          expectedConsumption: posOrderLines.expectedConsumption,
         })
         .from(posOrderSplitLines)
         .innerJoin(
@@ -121,6 +122,7 @@ export default async function ReceiptPage({
           nameSnapshot: posOrderLines.nameSnapshot,
           lineTotal: posOrderLines.lineTotal,
           note: posOrderLines.note,
+          expectedConsumption: posOrderLines.expectedConsumption,
         })
         .from(posOrderLines)
         .where(eq(posOrderLines.orderId, id));
@@ -183,10 +185,8 @@ export default async function ReceiptPage({
   const pointsBalance=order.order.status!=="CANCELLED"&&recipients.size===1
     ? Number(applicable[0].balance).toFixed(2):null;
 
-  const service =
-    order.order.serviceMode === "TAKEAWAY"
-      ? "Para llevar"
-      : order.order.tableLabel || "Aquí";
+  const service = order.order.tableLabel ||
+    (order.order.serviceMode==="TAKEAWAY"?"Para llevar":"Aquí");
 
   return (
     <main className="receipt-shell">
@@ -214,7 +214,8 @@ export default async function ReceiptPage({
             items: lines.map((line) => ({
               quantity: Number(line.quantity),
               name: line.nameSnapshot,
-              note: line.note,
+              note: (line.expectedConsumption?.serviceMode==="TAKEAWAY"?"Para llevar":"Aquí")+
+                (line.note?" · "+line.note:""),
               total: money.format(Number(line.lineTotal)),
             })),
             total: money.format(total),
@@ -335,6 +336,9 @@ export default async function ReceiptPage({
                   {Number(line.quantity)}× {line.nameSnapshot}
                 </span>
                 <span>{money.format(Number(line.lineTotal))}</span>
+              </div>
+              <div className="receipt-line-note">
+                {line.expectedConsumption?.serviceMode==="TAKEAWAY"?"Para llevar":"Para consumir aquí"}
               </div>
               {printSettings.showItemNotes && line.note && (
                 <div className="receipt-line-note">↳ {line.note}</div>
