@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { getOpenCashSession } from "@/src/application/pos/cash";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
-import { assertEmployeePermission } from "@/src/infrastructure/auth/permissions";
+import { assertEmployeePermission,employeeHasPermission } from "@/src/infrastructure/auth/permissions";
 import { getDb } from "@/src/infrastructure/db/client";
 import {
   auditEvents,
@@ -258,6 +258,9 @@ async function payOrderSplitUnsafe(formData: FormData) {
     });
     const customerId=formData.has("customerId") ? (String(formData.get("customerId")??"").trim()||null) : order.customerId;
     const tenderedRaw=String(formData.get("tenderedAmount")??"").trim();
+    const allowStockShortage=formData.get("allowStockShortage")==="on";
+    if(allowStockShortage && !await employeeHasPermission(employee.id,"inventory.adjust",employee.homeStoreId))
+      throw new Error("Sólo el propietario puede autorizar diferencias de inventario.");
     const result=await checkoutLiveOrder({
       organizationId:employee.organizationId,storeId:employee.homeStoreId,
       employeeId:employee.id,actorUserId:user.id,
@@ -265,6 +268,7 @@ async function payOrderSplitUnsafe(formData: FormData) {
       cart,serviceMode:order.serviceMode as "DINE_IN"|"TAKEAWAY",
       paymentMethod,tenderedAmount:paymentMethod==="CASH"?(tenderedRaw?Number(tenderedRaw):Number(split.total)):null,
       customerId,tableLabel:order.tableLabel,note:order.note,
+      allowStockShortage,
     });
     return "/pos/receipt/"+result.id+"?split="+split.id;
   }
