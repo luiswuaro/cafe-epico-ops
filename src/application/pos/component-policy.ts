@@ -11,12 +11,11 @@ const WATER_ITEM_ID = "eab0af54-b569-4b87-bb65-e12b84bc7797";
 
 export function isCostOnlyComponent(component: Pick<
   PosRecipeComponent,
-  "variantExternalId" | "itemExternalId" | "name"
+  "variantExternalId" | "itemExternalId"
 >) {
   return (
     component.variantExternalId === WATER_VARIANT_ID &&
-    component.itemExternalId === WATER_ITEM_ID &&
-    component.name.trim().toLocaleUpperCase("es-MX") === "AGUA"
+    component.itemExternalId === WATER_ITEM_ID
   );
 }
 
