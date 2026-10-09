@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useActionState, useMemo, useState } from "react";
 import Link from "next/link";
 import { addProductsToLiveCommand } from "./orders/live-actions";
 import {
@@ -9,7 +9,7 @@ import {
   createShadowCommand,
   createShadowSale,
 } from "./actions";
-import { createLiveSale } from "./live-actions";
+import { submitLiveSale } from "./live-actions";
 
 type CatalogItem = {
   id: string;
@@ -43,6 +43,7 @@ type Props = {
   cashOpen: boolean;
   liveEnabled: boolean;
   savedTicket?:SavedTicket|null;
+  canOverrideStock:boolean;
 };
 
 function normalizeSearch(value:string) {
@@ -63,6 +64,7 @@ export function PosClient({
   cashOpen,
   liveEnabled,
   savedTicket=null,
+  canOverrideStock,
 }: Props) {
   const [category, setCategory] = useState<"TODAS" | CatalogItem["category"]>(
     "CALIENTES",
@@ -76,6 +78,11 @@ export function PosClient({
   const [liveClientOrderId] = useState(() => globalThis.crypto.randomUUID());
   const [paymentMethod, setPaymentMethod] = useState<"CASH"|"CARD"|"TRANSFER">(cashOpen ? "CASH" : "CARD");
   const [tendered, setTendered] = useState("");
+  const [checkoutOpen,setCheckoutOpen]=useState(false);
+  const [allowStockShortage,setAllowStockShortage]=useState(false);
+  const [tableLabel,setTableLabel]=useState("");
+  const [orderNote,setOrderNote]=useState("");
+  const [checkoutState,checkoutAction,checkoutPending]=useActionState(submitLiveSale,{error:null});
 
   const catalogById = useMemo(
     () => new Map(catalog.map((item) => [item.id, item])),
@@ -148,6 +155,73 @@ export function PosClient({
     setCart((current) =>
       current.map((line) => (line.key === key ? { ...line, note } : line)),
     );
+  }
+
+  if(checkoutOpen&&liveEnabled&&!savedTicket){
+    return <div className="pos-layout" style={{gridTemplateColumns:"minmax(0,1fr)"}}>
+      <section className="card stack" style={{maxWidth:780,margin:"0 auto",width:"100%"}}>
+        <p className="eyebrow">POS · COBRAR</p>
+        <h2>Elegir método de pago</h2>
+        <p className="muted">El pedido sigue en memoria hasta confirmar el cobro. Puedes volver sin perder productos ni notas.</p>
+        {checkoutState.error&&<div className="status-bad" role="alert">
+          No se cobró. {checkoutState.error}
+        </div>}
+        <div className="stack">
+          {cartLines.map((line,index)=><div key={line.key} style={{display:"flex",justifyContent:"space-between",gap:12}}>
+            <div>
+              <strong>{index+1}. {line.item.name}</strong>
+              <p className="muted">{line.serviceMode==="DINE_IN"?"Aquí":"Para llevar"}{line.note?" · "+line.note:""}</p>
+            </div>
+            <strong>{money.format(line.item.price)}</strong>
+          </div>)}
+        </div>
+        <div className="pos-total"><strong>TOTAL</strong><strong>{money.format(total)}</strong></div>
+        <form action={checkoutAction} className="stack">
+          <input type="hidden" name="clientOrderId" value={liveClientOrderId}/>
+          <input type="hidden" name="cart" value={JSON.stringify(cartLines.map(line=>({
+            externalId:line.externalId,quantity:1,note:line.note.trim()||null,
+            serviceMode:line.serviceMode
+          })))}/>
+          <input type="hidden" name="serviceMode" value={serviceMode}/>
+          <input type="hidden" name="customerId" value={customerId}/>
+          <input type="hidden" name="tableLabel" value={tableLabel}/>
+          <input type="hidden" name="note" value={orderNote}/>
+          <label>Forma de pago
+            <select name="paymentMethod" value={paymentMethod}
+              onChange={e=>setPaymentMethod(e.target.value as "CASH"|"CARD"|"TRANSFER")}>
+              <option value="CASH" disabled={!cashOpen}>Efectivo{cashOpen?"":" · abre caja"}</option>
+              <option value="CARD">Tarjeta · cobrar primero en la terminal</option>
+              <option value="TRANSFER">Transferencia · confirmar depósito</option>
+            </select>
+          </label>
+          {paymentMethod==="CASH"?<div className="stack">
+            <label>Efectivo recibido
+              <input name="tenderedAmount" inputMode="decimal" type="number" min={total}
+                step="0.01" value={tendered} onChange={e=>setTendered(e.target.value)} required/>
+            </label>
+            <p className="muted">Cambio: <strong>{tendered.trim()!==""&&Number(tendered)>=total
+              ?money.format(Number(tendered)-total):"Ingresa el importe recibido"}</strong></p>
+          </div>:<>
+            <input type="hidden" name="tenderedAmount" value=""/>
+            <p className="muted">OPS registra el pago; confirma el dinero en tu banco o terminal externa.</p>
+          </>}
+          {canOverrideStock&&<label className="stack">
+            <span><input type="checkbox" name="allowStockShortage"
+              checked={allowStockShortage} onChange={e=>setAllowStockShortage(e.target.checked)}/>
+              {" "}Autorizar cobro con faltante teórico (solo pedido físicamente entregado)
+            </span>
+            <small className="muted">Registra inventario negativo y auditoría; exige reconteo posterior. No crea existencias ficticias.</small>
+          </label>}
+          <button className="pos-pay-button" type="submit" disabled={checkoutPending ||
+            (paymentMethod==="CASH"&&(!tendered.trim()||Number(tendered)<total))}>
+            {checkoutPending?"Procesando...":"Confirmar cobro · "+money.format(total)}
+          </button>
+        </form>
+        <button type="button" className="button" onClick={()=>setCheckoutOpen(false)}>
+          ← Volver a editar pedido (sin perder notas)
+        </button>
+      </section>
+    </div>;
   }
 
   return (
@@ -305,7 +379,7 @@ export function PosClient({
                     onChange={(event) =>
                       updateNote(line.key, event.target.value)
                     }
-                    placeholder="Nota: sin hielo, deslactosada, extra caliente..."
+                    placeholder="Nota para barra: 2 azúcares, sin hielo, extra caliente..."
                     maxLength={180}
                     aria-label={"Nota para " + line.item.name}
                   />
@@ -387,7 +461,7 @@ export function PosClient({
           </details>
         </div>}
 
-        <form action={savedTicket?addProductsToLiveCommand:liveEnabled?createLiveSale:createShadowSale} className="stack pos-checkout">
+        <form action={savedTicket?addProductsToLiveCommand:liveEnabled?createLiveCommand:createShadowSale} className="stack pos-checkout">
           {savedTicket&&<>
             <input type="hidden" name="orderId" value={savedTicket.id}/>
             <input type="hidden" name="requestId" value={additionRequestId}/>
@@ -413,11 +487,12 @@ export function PosClient({
             <label>
               Nombre del ticket / mesa
               <input name="tableLabel" placeholder="Ej. Mesa 1, Mesa 2, Balcón 1"
-                maxLength={100} autoComplete="off"/>
+                maxLength={100} autoComplete="off" value={tableLabel}
+                onChange={e=>setTableLabel(e.target.value)}/>
             </label>
           )}
 
-          {!savedTicket&&<label>
+          {!savedTicket&&!liveEnabled&&<label>
             Método de pago
             <select
               name="paymentMethod"
@@ -432,7 +507,7 @@ export function PosClient({
             </select>
           </label>}
 
-          {!savedTicket&&liveEnabled && paymentMethod==="CASH" && <div className="stack">
+          {!savedTicket&&!liveEnabled && paymentMethod==="CASH" && <div className="stack">
             <label>Efectivo recibido
               <input name="tenderedAmount" type="number" inputMode="decimal" min="0" step="0.01"
                 required value={tendered} onChange={(event)=>setTendered(event.target.value)}
@@ -447,7 +522,8 @@ export function PosClient({
             <input
               name="note"
               placeholder="Ej. entregar todo junto, cumpleaños..."
-              maxLength={300}
+              maxLength={300} value={orderNote}
+              onChange={e=>setOrderNote(e.target.value)}
             />
           </label>
 
@@ -456,7 +532,12 @@ export function PosClient({
               <button type="submit" className="pos-command-button" disabled={cartLines.length===0}>
                 Guardar ticket · añadir {cartLines.length} producto(s)
               </button>
-              <Link href="/pos/orders" className="button">Ir a comandas y cobrar</Link>
+              {cartLines.length===0?<Link href={"/pos/checkout?ticket="+savedTicket.id}
+                className="button">Cobrar ticket · {money.format(savedTicket.total)}</Link>
+                :<p className="muted">Guarda estos productos nuevos antes de cobrar la mesa.</p>}
+              <Link href={"/pos/orders/"+savedTicket.id+"/split"} className="button">
+                Dividir cuenta
+              </Link>
             </>:<>
             <button
               type="submit"
@@ -468,18 +549,19 @@ export function PosClient({
               Enviar comanda · cobrar después
             </button>
             <button
-              type="submit"
+              type={liveEnabled?"button":"submit"}
               className="pos-pay-button"
-              disabled={cartLines.length === 0 || (liveEnabled && paymentMethod==="CASH" && (tendered.trim()==="" || Number(tendered)<total))}
+              onClick={liveEnabled?()=>setCheckoutOpen(true):undefined}
+              disabled={cartLines.length===0}
             >
-              {liveEnabled ? "Cobrar ahora" : "Registrar espejo"} · {money.format(total)}
+              {liveEnabled?"Ir a cobrar":"Registrar espejo"} · {money.format(total)}
             </button>
             </>}
           </div>
         </form>
 
         {liveEnabled
-          ? <p className="pos-shadow-warning">MODO LIVE: enviar comanda no cobra ni descuenta inventario. El cobro definitivo descuenta las recetas y registra caja y puntos. No cambies ingredientes mediante notas libres.</p>
+          ? <p className="pos-shadow-warning">Notas libres permitidas para preparación. No cambian costos ni inventario: los extras que agregan insumos requieren modificadores estructurados. El inventario se descuenta al cobrar.</p>
           : <p className="pos-shadow-warning">MODO ESPEJO: comandas, puntos e inventario son simulación. Nada se descuenta ni se acredita todavía.</p>}
       </aside>
     </div>
