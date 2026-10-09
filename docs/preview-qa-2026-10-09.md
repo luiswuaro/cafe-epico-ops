@@ -61,3 +61,20 @@ La ejecución de GitHub Actions prueba estructura, tipos, lint y compilación, *
 - Auditado en `audit_events`: `POS_LIVE_COMMAND_SENT`, `POS_ORDER_SPLIT_SAVED`, dos `POS_LIVE_SPLIT_PAID`; el último marca `finalPayment=true`.
 - **Pendiente:** verificación física de las dos impresiones individuales en navegador/ESC-POS. El estado de base no prueba el resultado impreso.
 - **Siguiente QA:** para probar cancelación y reversas de inventario, crear otro pedido con **ambas cuentas en efectivo**. El ticket mixto de esta prueba debe rechazar la cancelación automática mientras no se confirme administrativamente el reembolso externo.
+
+
+## QA-02 — CANCELACIÓN DE DOS CUENTAS EN EFECTIVO: aprobado (2026-10-09)
+
+- Orden de prueba `SH-261009174215-B713` (id `97864bff-fa9f-4290-8854-a991b0afa1e7`), 2 americanos QA calientes en `DINE_IN` a $30 por cuenta.
+- Se registraron 2 `pos_order_splits` en `PAID`, 2 pagos `CASH` de $30, y dos movimientos `SALE` de caja +$30.
+- Inventario: dos movimientos de café por `-18.900 g`; al cancelar se insertó un **único** movimiento `POS_LIVE_CANCEL` de `+37.800 g`, con proveedor `OPS_POS_CANCEL`, sin conflicto por clave repetida.
+- Se registraron dos movimientos `REFUND` de `-$30` en caja. Caja abierta QA: fondo $500 +$30 de QA-01 +$60 de QA-02 -$60 de reversa = **$530 esperado**.
+- Café QA: 6,000 -37.8 de QA-01 -37.8 de QA-02 +37.8 de reversa = **5,962.2 g**.
+- Orden principal `CANCELLED`, `inventory_effect_applied=false`, motivo `prueba`. Auditoría `POS_LIVE_CANCELLED_REVERSED` confirma 2 movimientos de consumo, 2 devoluciones de caja y 0 movimientos de puntos.
+- La organización de producción `cafe-epico` conservó sus 19 órdenes, la QA tiene 2 (1 PAID, 1 CANCELLED).
+- **Regla operativa:** esta reversa es teórica. Si el café ya fue preparado, registrar merma física independientemente (no retornar café real a una tolva ficticia).
+
+### UI: error encontrado y corrección propuesta
+- La vista del ticket aplicaba `max-width:58mm` a `.receipt-shell` en pantalla, por eso el panel de desechables tenía una columna de 58 mm y el nombre del americano se partía por letra.
+- Corrección en Preview: ancho de lectura para pantalla; solo `.receipt-paper` conserva 48 mm, con `@media print` intacta. Nuevo acceso «Vaso para llevar», filas legibles y etiqueta de pago original cuando se cancela.
+- **Pendiente:** prueba visual sobre Preview corregido y prueba funcional de `POS_EXTRA_TAKEAWAY_PACKAGING` en una venta QA nueva, incluyendo evitar doble descuento del café.
