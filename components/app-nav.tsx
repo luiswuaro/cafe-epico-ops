@@ -1,51 +1,23 @@
 import { AppNavClient } from "./app-nav-client";
-import { and, eq } from "drizzle-orm";
-import { createSupabaseServerClient } from "@/src/infrastructure/auth/server";
 import { employeeHasPermission } from "@/src/infrastructure/auth/permissions";
-import { getDb } from "@/src/infrastructure/db/client";
-import { employees } from "@/src/infrastructure/db/schema";
+import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
+import { createSupabaseServerClient } from "@/src/infrastructure/auth/server";
 
 export async function AppNav() {
+  // En un Preview QA el usuario inicia sesión en Supabase real, pero el
+  // empleado autorizado debe resolverse dentro de la organización QA.
+  // Si no hay sesión, ocultar la navegación sin redirigir desde el layout global.
   const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const {data:{user}}=await supabase.auth.getUser();
+  if(!user)return null;
 
-  if (!user) return null;
-
-  const [employee] = await getDb()
-    .select({
-      id: employees.id,
-      homeStoreId: employees.homeStoreId,
-    })
-    .from(employees)
-    .where(
-      and(
-        eq(employees.userId, user.id),
-        eq(employees.isActive, true),
-      ),
-    )
-    .limit(1);
-
-  if (!employee) return null;
-
-  const [canAdmin, canPos, canCash] = await Promise.all([
-    employeeHasPermission(
-      employee.id,
-      "admin.access",
-      employee.homeStoreId ?? undefined,
-    ),
-    employeeHasPermission(
-      employee.id,
-      "pos.sell",
-      employee.homeStoreId ?? undefined,
-    ),
-    employeeHasPermission(
-      employee.id,
-      "pos.cash.manage",
-      employee.homeStoreId ?? undefined,
-    ),
+  const {employee}=await getCurrentEmployee();
+  const storeId=employee.homeStoreId??undefined;
+  const [canAdmin,canPos,canCash]=await Promise.all([
+    employeeHasPermission(employee.id,"admin.access",storeId),
+    employeeHasPermission(employee.id,"pos.sell",storeId),
+    employeeHasPermission(employee.id,"pos.cash.manage",storeId),
   ]);
 
-  return <AppNavClient canAdmin={canAdmin} canPos={canPos} canCash={canCash} />;
+  return <AppNavClient canAdmin={canAdmin} canPos={canPos} canCash={canCash}/>;
 }
