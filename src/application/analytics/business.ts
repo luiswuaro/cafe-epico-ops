@@ -8,6 +8,8 @@ import {
   loyverseReceiptLines,
   loyverseReceipts,
   loyverseVariants,
+  posOrderLines,
+  posOrders,
 } from "@/src/infrastructure/db/schema";
 
 type LineRollup = {
@@ -627,6 +629,46 @@ export async function getBusinessAnalytics(organizationId: string) {
         : 0,
   };
 
+  const todayBusinessDate = localParts(new Date()).date;
+  const [liveTodayTotals, liveTodayUnits] = await Promise.all([
+    db
+      .select({
+        sales: sql<string>`coalesce(sum(${posOrders.total}), 0)`,
+        tickets: sql<number>`count(*)::int`,
+      })
+      .from(posOrders)
+      .where(
+        and(
+          eq(posOrders.organizationId, organizationId),
+          eq(posOrders.mode, "LIVE"),
+          eq(posOrders.status, "PAID"),
+          eq(posOrders.businessDate, todayBusinessDate),
+        ),
+      )
+      .then((rows) => rows[0]),
+    db
+      .select({
+        units: sql<string>`coalesce(sum(${posOrderLines.quantity}), 0)`,
+      })
+      .from(posOrderLines)
+      .innerJoin(posOrders, eq(posOrders.id, posOrderLines.orderId))
+      .where(
+        and(
+          eq(posOrders.organizationId, organizationId),
+          eq(posOrders.mode, "LIVE"),
+          eq(posOrders.status, "PAID"),
+          eq(posOrders.businessDate, todayBusinessDate),
+        ),
+      )
+      .then((rows) => rows[0]),
+  ]);
+
+  const livePosToday = {
+    sales: Number(liveTodayTotals?.sales ?? 0),
+    tickets: Number(liveTodayTotals?.tickets ?? 0),
+    units: Number(liveTodayUnits?.units ?? 0),
+  };
+
   const period30 = periods.find((period) => period.key === "30d")!;
   const loyaltyNewPerDay7 = loyalty.new7 / 7;
   const loyaltyNewPerDay30 = loyalty.new30 / 30;
@@ -694,6 +736,7 @@ export async function getBusinessAnalytics(organizationId: string) {
   }
 
   return {
+    livePosToday,
     periods,
     daily,
     hourly: hourly.filter((row) => row.tickets > 0),
