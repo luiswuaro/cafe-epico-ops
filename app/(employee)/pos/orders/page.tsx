@@ -211,7 +211,8 @@ export default async function PosOrdersPage() {
                           <label>
                             Efectivo recibido (si es efectivo)
                             <input name="tenderedAmount" type="number" min={0}
-                              step="0.01" placeholder={Number(order.total).toFixed(2)} />
+                              step="0.01" defaultValue={Number(order.total).toFixed(2)}
+                              aria-label="Efectivo recibido para cobrar comanda" />
                           </label>
                         </>
                       )}
