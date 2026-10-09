@@ -79,6 +79,7 @@ export default async function PosInventoryAuditPage() {
         <Link href="/admin/loyverse/inventory" className="button">Administrar equivalencias</Link>
         <Link href="/admin/pos/catalog" className="button">Revisar recetas POS</Link>
         <Link href="/inventory/ops" className="button">Inventario OPS: ajustar y reabastecer</Link>
+        <Link href="/pos/launch-check" className="button">Ver bloqueo de cobros por receta</Link>
         <Link href="/inventory" className="button">Histórico Loyverse</Link>
       </div>
     </section>
