@@ -23,6 +23,12 @@ export default function RootLayout({
     <html lang="es">
       <body>
         <ServiceWorkerRegister />
+        {process.env.OPS_QA_MODE==="true" && process.env.DEFAULT_ORGANIZATION_SLUG==="cafe-epico-qa" && (
+          <div className="ops-qa-banner" role="status">
+            <strong>ENTORNO QA</strong>
+            <span>Operación simulada · sin ventas ni inventario reales · misma infraestructura PostgreSQL</span>
+          </div>
+        )}
         <header className="topbar">
           <Link className="brand" href="/today">Café Épico Ops</Link>
           <AppNav />
