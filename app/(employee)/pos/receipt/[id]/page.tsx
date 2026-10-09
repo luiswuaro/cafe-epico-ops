@@ -166,7 +166,9 @@ export default async function ReceiptPage({
     ? money.format(Number(cashPayment.changeAmount))
     : null;
   const pointsEarned =
-    !split && order.customerName
+    !split &&
+    order.customerName &&
+    order.order.loyaltyEffectApplied
       ? Number(order.order.loyaltyPointsPreview).toFixed(2)
       : null;
   const pointsBalance =
@@ -382,9 +384,6 @@ export default async function ReceiptPage({
         <footer>
           {printSettings.footerMessage && (
             <p><strong>{printSettings.footerMessage}</strong></p>
-          )}
-          {!split && (
-            <p>Puntos en simulación mientras POS esté en modo espejo.</p>
           )}
           {printSettings.showNoCfdi && <p>Este ticket no es CFDI.</p>}
         </footer>
