@@ -47,17 +47,22 @@ export async function getPosInventorySetup(organizationId:string,storeId:string)
     const variant=variantById.get(component.id);
     const sourceItem=variant?.loyverseItemExternalId ? itemById.get(variant.loyverseItemExternalId):null;
     const weighted=sourceItem?.payload.sold_by_weight===true;
+    // Política confirmada para la barra: sólo la leche deslactosada se mide
+    // en litros/mililitros; los demás ingredientes fraccionarios se pesan.
+    const officialUnit: "g" | "ml" | "pz" = !weighted ? "pz" :
+      (sourceItem?.itemName.trim().toUpperCase()==="LECHE DESLACTOSADA" ? "ml" : "g");
     const sourceQty=stockByVariant.get(component.id)?.inStock;
     return {
       id:component.id,
       name:sourceItem?.itemName||component.name,
       recipeAppearances:component.uses,
       weighted,
+      officialUnit,
       mapped:mapped.has(component.id),
       sourceAvailable:Boolean(sourceItem&&variant),
       sourceQuantity:sourceQty==null?null:Number(sourceQty),
       suggested:sourceQty==null?null:Math.round(Number(sourceQty)*(weighted?1000:1)*1000)/1000,
-      unit:weighted?"g" as const:"pz" as const,
+      unit:officialUnit,
     };
   }).sort((a,b)=>Number(a.mapped)-Number(b.mapped)||b.recipeAppearances-a.recipeAppearances||a.name.localeCompare(b.name,"es"));
   const inUse=new Set(internalBalances.map(b=>b.inventoryItemId));
