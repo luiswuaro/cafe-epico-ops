@@ -33,7 +33,13 @@ function statusLabel(status: string) {
   return status;
 }
 
-export default async function PosOrdersPage() {
+export default async function PosOrdersPage({
+  searchParams,
+}:{
+  searchParams:Promise<Record<string,string|string[]|undefined>>;
+}) {
+  const params=await searchParams;
+  const error=typeof params.error==="string"?params.error.slice(0,260):null;
   const { employee } = await getCurrentEmployee();
   if (!employee.homeStoreId) throw new Error("Sin sucursal asignada");
 
@@ -56,6 +62,9 @@ export default async function PosOrdersPage() {
   return (
     <main className="shell pos-shell">
       <CommandBoardAutoRefresh />
+      {error && <section className="card status-bad" role="alert">
+        Comanda no cobrada: {error}
+      </section>}
 
       <section className="hero pos-hero">
         <div>
