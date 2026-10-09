@@ -178,9 +178,6 @@ async function createShadowOrder(
     const readiness=await getPosReadiness(employee.organizationId,employee.homeStoreId);
     const byId=new Map(readiness.products.map(p=>[p.id,p]));
     for(const line of input.lines){
-      if(line.note && line.note.toLocaleLowerCase("es-MX")!=="extra caliente"){
-        throw new Error("Modificador no autorizado en LIVE: "+line.item.name+". Ajusta la receta.");
-      }
       const state=byId.get(line.item.id)?.recipes.find(r=>r.mode===line.lineMode);
       if(!state?.ready) throw new Error("Comanda bloqueada: "+line.item.name+" — "+
         (state?.errors.join("; ")||"receta incompleta"));
