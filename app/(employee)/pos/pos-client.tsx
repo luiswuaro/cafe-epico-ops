@@ -400,10 +400,11 @@ export function PosClient({
           <input type="hidden" name="serviceMode" value={serviceMode} />
           <input type="hidden" name="customerId" value={customerId} />
 
-          {!savedTicket && serviceMode === "DINE_IN" && (
+          {!savedTicket && (
             <label>
-              Mesa / referencia (para comandas aquí)
-              <input name="tableLabel" placeholder="Ej. Mesa 3, balcón 1" maxLength={100} />
+              Nombre del ticket / mesa
+              <input name="tableLabel" placeholder="Ej. Mesa 1, Mesa 2, Balcón 1"
+                maxLength={100} autoComplete="off"/>
             </label>
           )}
 
