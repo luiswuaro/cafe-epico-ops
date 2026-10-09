@@ -3,7 +3,7 @@ import { getDb } from "@/src/infrastructure/db/client";
 import {
   auditEvents, inventoryBalances, inventoryMovements,
   posCashMovements, posCashSessions, posCustomers, posLoyaltyEntries,
-  posOrderSplits, posOrders,
+  posOrderSplits, posOrders, posPayments,
 } from "@/src/infrastructure/db/schema";
 
 export async function cancelLiveOrder(input:{
@@ -22,7 +22,7 @@ export async function cancelLiveOrder(input:{
     if(order.status==="CANCELLED") return;
     if(order.status!=="PAID") throw new Error("La orden no está cobrada.");
 
-    const [splits,cashMovements,inventoryMovementsApplied,points] = await Promise.all([
+    const [splits,cashMovements,inventoryMovementsApplied,points,payments] = await Promise.all([
       tx.select().from(posOrderSplits).where(eq(posOrderSplits.orderId,order.id)),
       tx.select().from(posCashMovements).where(and(
         eq(posCashMovements.orderId,order.id),eq(posCashMovements.movementType,"SALE"),
@@ -36,8 +36,12 @@ export async function cancelLiveOrder(input:{
       tx.select().from(posLoyaltyEntries).where(and(
         eq(posLoyaltyEntries.orderId,order.id),eq(posLoyaltyEntries.entryType,"EARN"),
       )),
+      tx.select().from(posPayments).where(eq(posPayments.orderId,order.id)),
     ]);
     if(splits.some(split=>split.status==="PAID")) throw new Error("Cuenta dividida: se requiere reversa especial.");
+    if(payments.some(payment=>payment.method!=="CASH")) {
+      throw new Error("Los pagos por tarjeta o transferencia requieren confirmar el reembolso externo con administración.");
+    }
     if(order.inventoryEffectApplied && inventoryMovementsApplied.length===0){
       throw new Error("Falta el movimiento de inventario; intervención administrativa requerida.");
     }
