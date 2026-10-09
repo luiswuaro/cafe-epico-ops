@@ -1,5 +1,4 @@
 import { AppNavClient } from "./app-nav-client";
-import Link from "next/link";
 import { and, eq } from "drizzle-orm";
 import { createSupabaseServerClient } from "@/src/infrastructure/auth/server";
 import { employeeHasPermission } from "@/src/infrastructure/auth/permissions";
