@@ -54,7 +54,7 @@ export default async function PosCashPage() {
           <h1>Caja</h1>
           <p className="muted">
             Fondo inicial + ventas en efectivo + entradas − salidas = efectivo
-            esperado. En modo espejo sirve para comparar contra tu caja física.
+            esperado. Esta caja es el registro operativo de efectivo de OPS.
           </p>
         </div>
         <Link href="/pos" className="button">
