@@ -199,7 +199,7 @@ export async function saveOrderSplit(formData: FormData) {
   redirect("/pos/orders/" + order.id + "/split?saved=1");
 }
 
-export async function payOrderSplit(formData: FormData) {
+async function payOrderSplitUnsafe(formData: FormData) {
   const { user, employee } = await getCurrentEmployee();
   if (!employee.homeStoreId) throw new Error("Sin sucursal asignada");
 
@@ -228,7 +228,7 @@ export async function payOrderSplit(formData: FormData) {
 
   if (!split) throw new Error("Cuenta dividida no encontrada");
   if (split.status === "PAID") {
-    redirect("/pos/receipt/" + split.orderId + "?split=" + split.id);
+    return "/pos/receipt/" + split.orderId + "?split=" + split.id;
   }
 
   const [order] = await db
@@ -266,7 +266,7 @@ export async function payOrderSplit(formData: FormData) {
       paymentMethod,tenderedAmount:paymentMethod==="CASH"?(tenderedRaw?Number(tenderedRaw):Number(split.total)):null,
       customerId,tableLabel:order.tableLabel,note:order.note,
     });
-    redirect("/pos/receipt/"+result.id+"?split="+split.id);
+    return "/pos/receipt/"+result.id+"?split="+split.id;
   }
 
 
@@ -364,7 +364,29 @@ export async function payOrderSplit(formData: FormData) {
     });
   });
 
-  redirect("/pos/receipt/" + order.id + "?split=" + split.id);
+  return "/pos/receipt/" + order.id + "?split=" + split.id;
+}
+
+export async function payOrderSplit(formData:FormData){
+  const orderId=String(formData.get("orderId")??"").trim();
+  const back=/^[0-9a-f-]{36}$/i.test(orderId)
+    ? "/pos/orders/"+orderId+"/split" : "/pos/orders";
+  let destination:string;
+  try{
+    destination=await payOrderSplitUnsafe(formData);
+  }catch(error){
+    // El error queda registrado en Vercel; el cajero conserva la cuenta y puede revisar su estado.
+    console.error("POS_SPLIT_PAYMENT_FAILED",{
+      orderId,splitId:String(formData.get("splitId")??""),
+      error,
+    });
+    const raw=error instanceof Error?error.message:"";
+    const safe=/^(Falta |Abre |La cuenta |La comanda |Esta cuenta |El total |Los datos |Producto |Cuenta |Insumo |Unidad |Sólo |El efectivo |Cliente |Hay cuentas |Piloto |Cobros LIVE)/.test(raw)
+      ?raw.slice(0,260)
+      :"No se pudo confirmar el cobro. Verifica el estado de la cuenta y los movimientos antes de reintentar.";
+    redirect(back+"?error="+encodeURIComponent(safe));
+  }
+  redirect(destination);
 }
 
 export async function resetUnpaidOrderSplit(formData:FormData){
