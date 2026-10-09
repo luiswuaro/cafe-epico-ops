@@ -185,10 +185,8 @@ export default async function ReceiptPage({
   const pointsBalance=order.order.status!=="CANCELLED"&&recipients.size===1
     ? Number(applicable[0].balance).toFixed(2):null;
 
-  const service =
-    order.order.serviceMode === "TAKEAWAY"
-      ? "Para llevar"
-      : order.order.tableLabel || "Aquí";
+  const service = order.order.tableLabel ||
+    (order.order.serviceMode==="TAKEAWAY"?"Para llevar":"Aquí");
 
   return (
     <main className="receipt-shell">
