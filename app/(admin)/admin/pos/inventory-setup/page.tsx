@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SearchableCollection } from "@/components/searchable-collection";
 import { getPosInventorySetup } from "@/src/application/pos/inventory-setup";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
 import { assertEmployeePermission } from "@/src/infrastructure/auth/permissions";
@@ -40,13 +41,24 @@ export default async function InventorySetupPage({
     {setup.sourceStore && missing.length>0 && <form action={confirmPosInventorySetup} className="stack">
       <section className="card stack">
         <h2>Saldos físicos y unidades</h2>
-        {missing.map(item=>{
+        <p className="muted">Al filtrar se ocultan renglones, pero los insumos ya marcados siguen seleccionados. Verifica tus casillas antes de registrar saldos iniciales.</p>
+        <SearchableCollection
+          label="insumos pendientes"
+          placeholder="Buscar leche, jarabe, vasos, hielo..."
+          categoryLabel="Unidad"
+          entries={missing.map(item=>{
           const quantity = item.sourceQuantity;
           const sourceUnit=item.officialUnit==="ml" ? "L" : item.officialUnit==="g" ? "kg" : "pz";
           const sourceLabel=quantity==null ? "Sin saldo reportado" :
             quantity.toFixed(item.weighted?3:0)+" "+sourceUnit+" → "+
             (item.suggested ?? 0).toFixed(item.weighted?3:0)+" "+item.officialUnit;
-          return <div key={item.id} style={{
+          return {
+            id:item.id,
+            name:item.name,
+            category:item.officialUnit,
+            status:item.sourceAvailable?"DISPONIBLE":"SIN DATOS DE ORIGEN",
+            searchText:item.id+" "+item.recipeAppearances,
+            content:<div style={{
             display:"flex",flexWrap:"wrap",gap:14,alignItems:"flex-start",
             padding:"14px 0",borderBottom:"1px solid #d9d3ca",
           }}>
@@ -89,8 +101,10 @@ export default async function InventorySetupPage({
                 </select>
               </label>
             </div>
-          </div>;
+          </div>,
+          };
         })}
+        />
         <label style={{display:"flex",gap:10,alignItems:"center"}}>
           <input name="physicalConfirmed" type="checkbox" value="yes" required
             style={{width:20,height:20,flex:"none",margin:0}} />
