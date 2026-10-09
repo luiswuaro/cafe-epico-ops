@@ -3,10 +3,7 @@ import { PosClient } from "./pos-client";
 import { getPosCatalog } from "@/src/application/pos/catalog";
 import { getCashState } from "@/src/application/pos/cash";
 import { getPosCustomers } from "@/src/application/pos/customers";
-import {
-  getRecentShadowOrders,
-  getShadowOrderMirror,
-} from "@/src/application/pos/mirror";
+import { getShadowOrderMirror } from "@/src/application/pos/mirror";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
 import {
   assertEmployeePermission,
@@ -53,14 +50,9 @@ export default async function PosPage({
   const selectedCustomerId =
     typeof params.customer === "string" ? params.customer : null;
 
-  const [catalog, customers, recent, saved, canCancel, cash] = await Promise.all([
+  const [catalog, customers, saved, canCancel, cash] = await Promise.all([
     getPosCatalog(employee.organizationId),
     getPosCustomers(employee.organizationId),
-    getRecentShadowOrders(
-      employee.organizationId,
-      employee.homeStoreId,
-      6,
-    ),
     savedId
       ? getShadowOrderMirror(employee.organizationId, savedId)
       : Promise.resolve(null),
@@ -72,19 +64,21 @@ export default async function PosPage({
     getCashState(employee.organizationId, employee.homeStoreId),
   ]);
 
+  const savedIsLive = saved?.order.mode === "LIVE";
+
   return (
     <main className="shell pos-shell">
       <section className="hero pos-hero">
         <div>
-          <p className="eyebrow">POS V0.1 · MODO ESPEJO</p>
+          <p className="eyebrow">CAFÉ ÉPICO · POS OPERATIVO</p>
           <h1>Tomar orden</h1>
           <p className="muted">
-            Registra la misma venta que acabas de cobrar en Loyverse. En esta
-            etapa OPS no modifica inventario ni caja; sólo captura la venta y
-            calcula lo que habría consumido.
+            Cobro, caja, comanda, ticket, lealtad e inventario por receta se
+            registran en OPS. Loyverse queda como referencia histórica durante
+            la transición.
           </p>
         </div>
-        <span className="status-warn">NO CONTABILIZA INVENTARIO</span>
+        <span className="status-ok">OPERACIÓN LIVE</span>
       </section>
 
       {saved && (
@@ -101,17 +95,19 @@ export default async function PosPage({
               <h2>
                 {saved.order.status === "CANCELLED"
                   ? "Venta cancelada"
-                  : saved.mirror?.exact
-                    ? "Espejo exacto encontrado"
-                    : saved.mirror
-                      ? "Encontré una venta para revisar"
-                      : "OPS guardó la venta; falta encontrar su espejo"}
+                  : savedIsLive
+                    ? "Venta registrada en OPS"
+                    : saved.mirror?.exact
+                      ? "Espejo exacto encontrado"
+                      : saved.mirror
+                        ? "Encontré una venta para revisar"
+                        : "OPS guardó la venta de prueba; falta encontrar su espejo"}
               </h2>
             </div>
             <strong className="metric">{money.format(Number(saved.order.total))}</strong>
           </div>
 
-          {saved.mirror ? (
+          {!savedIsLive && saved.mirror ? (
             <div className="pos-mirror-grid">
               <div>
                 <span className="muted">Recibo Loyverse</span>
@@ -146,11 +142,12 @@ export default async function PosPage({
                 </strong>
               </div>
             </div>
-          ) : (
+          ) : !savedIsLive ? (
             <div className="stack compact-stack">
               <p className="muted">
-                La venta todavía no está en el espejo local de Loyverse.
-                Puedes traer los recibos recientes y volver a comparar ahora.
+                La venta de prueba todavía no está en el espejo local de
+                Loyverse. Puedes traer los recibos recientes y volver a
+                comparar ahora.
               </p>
               <form action={refreshShadowMirror}>
                 <input type="hidden" name="orderId" value={saved.order.id} />
@@ -159,6 +156,11 @@ export default async function PosPage({
                 </button>
               </form>
             </div>
+          ) : (
+            <p className="status-ok">
+              Cobro confirmado. El efecto de inventario y, cuando aplica, los
+              puntos del cliente se registran junto con la venta.
+            </p>
           )}
 
           {saved.payment?.method === "CASH" &&
@@ -192,7 +194,7 @@ export default async function PosPage({
               Imprimir ticket
             </Link>
             <Link href="/pos" className="button">
-              Nueva orden espejo
+              Nueva orden
             </Link>
           </div>
 
@@ -229,7 +231,9 @@ export default async function PosPage({
         </Link>
         <Link href="/pos/cash" className="button">
           {cash.session
-            ? "Caja abierta · " + money.format(cash.expectedCash)
+            ? cash.isStale
+              ? "Caja anterior · cerrar"
+              : "Caja abierta · " + money.format(cash.expectedCash)
             : "Abrir caja"}
         </Link>
         <Link href="/pos/printer" className="button">
@@ -252,43 +256,10 @@ export default async function PosPage({
           pointsBalance: Number(customer.pointsBalance),
         }))}
         selectedCustomerId={selectedCustomerId}
-        cashOpen={Boolean(cash.session)}
+        cashOpen={Boolean(cash.session && !cash.isStale)}
       />
 
-      <section className="card pos-recent">
-        <div className="section-heading">
-          <div>
-            <p className="eyebrow">PRUEBAS RECIENTES</p>
-            <h2>Ventas espejo</h2>
-          </div>
-          <span className="pill">{recent.length}</span>
-        </div>
-        {recent.length === 0 ? (
-          <p className="muted">Todavía no hay ventas de prueba.</p>
-        ) : (
-          <div className="stack compact-stack">
-            {recent.map((order) => (
-              <Link
-                href={"/pos?saved=" + order.id}
-                className="task"
-                key={order.id}
-              >
-                <div style={{ flex: 1 }}>
-                  <strong>{order.folio}</strong>
-                  <div className="muted">
-                    {order.serviceMode === "TAKEAWAY"
-                      ? "Para llevar"
-                      : order.tableLabel || "Aquí"}
-                    {" · "}
-                    {time(order.paidAt)}
-                  </div>
-                </div>
-                <strong>{money.format(Number(order.total))}</strong>
-              </Link>
-            ))}
-          </div>
-        )}
-      </section>
+
     </main>
   );
 }
