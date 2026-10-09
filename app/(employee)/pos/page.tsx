@@ -81,6 +81,7 @@ export default async function PosPage({
         <div>
           <p className="eyebrow">{liveEnabled ? "POS · LIVE" : "POS V0.1 · MODO ESPEJO"}</p>
           <h1>Tomar orden</h1>
+          <p><Link href="/inventory/ops">Consultar inventario OPS y registrar reabastos</Link></p>
           <p className="muted">
             {liveEnabled
               ? "Cobro operativo: descuenta cada ingrediente mapeado y abona puntos. No aceptará productos con recetas o saldos incompletos."
