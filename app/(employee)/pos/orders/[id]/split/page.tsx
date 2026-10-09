@@ -45,6 +45,8 @@ export default async function SplitOrderPage({
 
   if (!state) throw new Error("Orden no encontrada");
 
+  const isClosed=state.order.status==="CANCELLED" || 
+    (state.order.status==="PAID"&&state.splits.some(split=>split.status!=="PAID"));
   const hasPaidSplit = state.splits.some(
     (split) => split.status === "PAID",
   );
@@ -65,6 +67,12 @@ export default async function SplitOrderPage({
         </Link>
       </section>
 
+      {isClosed&&<section className="card" role="status">
+        <p className="status-warn">Ticket cerrado: {state.order.status==="CANCELLED"?"cancelado":"pagado"}.</p>
+        <p className="muted">Se conserva el historial de cuentas, pero ya no permite nuevos cobros ni modificar la división.</p>
+        <Link className="button" href={"/pos/receipt/"+state.order.id}>Ver ticket completo</Link>
+      </section>}
+
       {paymentError && <section className="card" role="alert">
         <p className="status-bad">Cobro no confirmado: {paymentError}</p>
         <p className="muted">Comprueba cuáles cuentas siguen pendientes antes de repetir un pago. No se borró la división de la mesa.</p>
@@ -75,7 +83,7 @@ export default async function SplitOrderPage({
           {state.splits.map((split) => (
             <article className="card" key={split.id}>
               <p className="eyebrow">
-                {split.status === "PAID" ? "PAGADA" : "PENDIENTE"}
+                {split.status === "PAID" ? "PAGADA" : isClosed ? "CERRADA" : "PENDIENTE"}
               </p>
               <h2>{split.label}</h2>
               <strong className="metric">
@@ -111,6 +119,8 @@ export default async function SplitOrderPage({
                 >
                   Ver ticket
                 </Link>
+              ) : isClosed ? (
+                <p className="muted">Cuenta bloqueada: folio cerrado.</p>
               ) : (
                 <form action={payOrderSplit} className="stack">
                   <input type="hidden" name="splitId" value={split.id} />
@@ -157,7 +167,7 @@ export default async function SplitOrderPage({
         </section>
       )}
 
-      {state.splits.length>0 && !hasPaidSplit && (
+      {state.splits.length>0 && !hasPaidSplit && !isClosed && (
         <form action={resetUnpaidOrderSplit} className="card stack">
           <input type="hidden" name="orderId" value={state.order.id}/>
           <p className="muted">¿Cambió la forma de pago? Puedes quitar la división y cobrar la mesa completa. No se ha cobrado ninguna cuenta.</p>
@@ -165,7 +175,7 @@ export default async function SplitOrderPage({
         </form>
       )}
 
-      {!hasPaidSplit && (
+      {!hasPaidSplit && !isClosed && (
         <section className="card">
           <div className="section-heading">
             <div>
