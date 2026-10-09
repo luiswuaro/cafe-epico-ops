@@ -22,6 +22,7 @@ export async function createLiveSale(formData:FormData) {
     cart:cartSchema,
     serviceMode:z.enum(["DINE_IN","TAKEAWAY"]),
     paymentMethod:z.enum(["CASH","CARD","TRANSFER"]),
+    tenderedAmount:z.string(),
     customerId:z.union([z.string().uuid(),z.literal("")]),
     tableLabel:z.string().max(100),
     note:z.string().max(300),
@@ -30,18 +31,27 @@ export async function createLiveSale(formData:FormData) {
     cart:JSON.parse(String(formData.get("cart")??"[]")),
     serviceMode:String(formData.get("serviceMode")??""),
     paymentMethod:String(formData.get("paymentMethod")??""),
+    tenderedAmount:String(formData.get("tenderedAmount")??""),
     customerId:String(formData.get("customerId")??""),
     tableLabel:String(formData.get("tableLabel")??""),
     note:String(formData.get("note")??""),
   });
-  const result=await checkoutLiveOrder({
+  let result;
+  try {
+    result=await checkoutLiveOrder({
     organizationId:employee.organizationId,storeId:employee.homeStoreId,
     actorUserId:user.id,employeeId:employee.id,
     clientOrderId:parsed.clientOrderId,
     cart:parsed.cart.map(line=>({...line,note:line.note??null})),
     serviceMode:parsed.serviceMode,paymentMethod:parsed.paymentMethod,
+    tenderedAmount:parsed.paymentMethod==="CASH" && parsed.tenderedAmount.trim()!==""
+      ? Number(parsed.tenderedAmount) : null,
     customerId:parsed.customerId||null,tableLabel:parsed.tableLabel||null,
     note:parsed.note||null,
-  });
+    });
+  } catch (error) {
+    const message=error instanceof Error ? error.message : "No se pudo cobrar. Revisa caja, receta e inventario.";
+    redirect("/pos?error="+encodeURIComponent(message.slice(0,260)));
+  }
   redirect("/pos/receipt/"+result.id);
 }
