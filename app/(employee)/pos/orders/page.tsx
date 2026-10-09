@@ -112,9 +112,7 @@ export default async function PosOrdersPage({
                       {elapsedMinutes(order.createdAt)} min
                     </p>
                     <h2>
-                      {order.serviceMode === "TAKEAWAY"
-                        ? "Para llevar"
-                        : order.tableLabel || "Aquí"}
+                      {order.tableLabel||(order.serviceMode==="TAKEAWAY"?"Para llevar":"Aquí")}
                     </h2>
                   </div>
                   <strong>{money.format(Number(order.total))}</strong>
