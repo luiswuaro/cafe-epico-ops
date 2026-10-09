@@ -70,7 +70,7 @@ export async function getTicketHistory(input: {
               when nullif(r.payload->>'cancelled_at','') is not null then 'CANCELLED'
               else 'PAID' end)::text as status,
         coalesce(r.total_money,0) as total,
-        nullif(r.payload->>'customer_name','')::text as customer,
+        coalesce(pc.name, lc.name, nullif(r.payload->>'customer_name',''))::text as customer,
         coalesce((select string_agg(distinct p->>'name', ', ')
           from jsonb_array_elements(
             case when jsonb_typeof(r.payload->'payments')='array' then r.payload->'payments' else '[]'::jsonb end
@@ -82,6 +82,10 @@ export async function getTicketHistory(input: {
         false as loyalty_effect_applied,
         coalesce(r.payload->'line_items','[]'::jsonb) as lines
       from loyverse_receipts r
+      left join pos_customers pc on pc.organization_id=r.organization_id
+        and pc.source_external_id = nullif(r.payload->>'customer_id','')
+      left join loyverse_customers lc on lc.organization_id=r.organization_id
+        and lc.external_id = nullif(r.payload->>'customer_id','')
       where r.organization_id=${input.organizationId}::uuid
     )
     select * from tickets
