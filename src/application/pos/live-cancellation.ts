@@ -20,9 +20,9 @@ export async function cancelLiveOrder(input:{
     )).limit(1);
     if(!order || order.mode!=="LIVE") throw new Error("Pedido LIVE inexistente.");
     if(order.status==="CANCELLED") return;
-    if(order.status!=="PAID") throw new Error("La orden no está cobrada.");
+    if(!["PAID","PARTIALLY_PAID"].includes(order.status)) throw new Error("La orden no tiene pagos que revertir.");
 
-    const [splits,cashMovements,inventoryMovementsApplied,points,payments] = await Promise.all([
+    const [_splits,cashMovements,inventoryMovementsApplied,points,payments] = await Promise.all([
       tx.select().from(posOrderSplits).where(eq(posOrderSplits.orderId,order.id)),
       tx.select().from(posCashMovements).where(and(
         eq(posCashMovements.orderId,order.id),eq(posCashMovements.movementType,"SALE"),
@@ -38,7 +38,8 @@ export async function cancelLiveOrder(input:{
       )),
       tx.select().from(posPayments).where(eq(posPayments.orderId,order.id)),
     ]);
-    if(splits.some(split=>split.status==="PAID")) throw new Error("Cuenta dividida: se requiere reversa especial.");
+    // Una comanda dividida se revierte completa: todos los movimientos de inventario,
+    // efectivo y puntos vinculados al folio, nunca sólo el último cobro.
     if(payments.some(payment=>payment.method!=="CASH")) {
       throw new Error("Los pagos por tarjeta o transferencia requieren confirmar el reembolso externo con administración.");
     }
@@ -59,7 +60,7 @@ export async function cancelLiveOrder(input:{
       status:"CANCELLED",cancelledAt:now,cancelledByEmployeeId:input.employeeId,
       cancelReason:input.reason,updatedAt:now,
       inventoryEffectApplied:false,loyaltyEffectApplied:false,
-    }).where(and(eq(posOrders.id,order.id),eq(posOrders.status,"PAID")))
+    }).where(and(eq(posOrders.id,order.id),eq(posOrders.status,order.status)))
       .returning({id:posOrders.id});
     if(!updated.length) throw new Error("La orden cambió de estado. Actualiza la pantalla.");
 
