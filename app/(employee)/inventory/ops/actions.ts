@@ -1,7 +1,6 @@
 "use server";
 
-import { randomUUID } from "node:crypto";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, sql, ilike } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
@@ -127,4 +126,85 @@ export async function registerOpsInventoryMovement(formData: FormData) {
   });
   // La acción redirige tras confirmar la transacción; no se reenvía al recargar.
   redirect("/inventory/ops?posted=" + (movementId ? encodeURIComponent(movementId) : "nochange"));
+}
+
+const newItemSchema = z.object({
+  operationId: z.string().uuid(),
+  locationId: z.string().uuid(),
+  name: z.string().trim().min(2).max(150),
+  sku: z.string().trim().max(80).optional(),
+  category: z.string().trim().min(2).max(80),
+  unit: z.enum(["g", "ml", "pz"]),
+  initialQuantity: z.coerce.number().finite().min(0).max(10000000),
+  note: z.string().trim().min(3).max(500),
+});
+
+export async function createOpsInventoryItem(formData: FormData) {
+  const { user, employee } = await getCurrentEmployee();
+  if (!employee.homeStoreId) throw new Error("Sin sucursal asignada.");
+  await assertEmployeePermission(employee.id, "inventory.item.manage", employee.homeStoreId);
+  await assertEmployeePermission(employee.id, "inventory.adjust", employee.homeStoreId);
+  const parsed = newItemSchema.safeParse({
+    operationId: formData.get("operationId"),
+    locationId: formData.get("locationId"),
+    name: formData.get("name"),
+    sku: String(formData.get("sku") ?? "").trim() || undefined,
+    category: formData.get("category"),
+    unit: formData.get("unit"),
+    initialQuantity: formData.get("initialQuantity"),
+    note: formData.get("note"),
+  });
+  if (!parsed.success) throw new Error("Alta inválida: revisa nombre, ubicación, unidad y saldo.");
+  const data = parsed.data;
+  if (Math.abs(Math.round(data.initialQuantity*1000)-data.initialQuantity*1000)>0.00001)
+    throw new Error("Cantidad inicial: máximo tres decimales.");
+  const db = getDb();
+  const itemId = await db.transaction(async tx=>{
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${employee.homeStoreId!}))`);
+    const [sameOperation] = await tx.select({ inventoryItemId: inventoryMovements.inventoryItemId })
+      .from(inventoryMovements).where(and(
+        eq(inventoryMovements.organizationId, employee.organizationId),
+        eq(inventoryMovements.externalProvider, "OPS_NEW_ITEM"),
+        eq(inventoryMovements.externalId, data.operationId),
+      )).limit(1);
+    if(sameOperation) return sameOperation.inventoryItemId;
+    const [location] = await tx.select({id: inventoryLocations.id}).from(inventoryLocations)
+      .where(and(eq(inventoryLocations.id,data.locationId),
+        eq(inventoryLocations.storeId,employee.homeStoreId!),
+        eq(inventoryLocations.organizationId,employee.organizationId),
+        eq(inventoryLocations.isActive,true))).limit(1);
+    if(!location) throw new Error("Ubicación no válida.");
+    const [existing] = await tx.select({id:inventoryItems.id}).from(inventoryItems)
+      .where(and(eq(inventoryItems.organizationId,employee.organizationId),
+        ilike(inventoryItems.name,data.name))).limit(1);
+    if(existing) throw new Error("Ya existe un insumo con ese nombre. Evita duplicarlo.");
+    const now = new Date();
+    const [item]=await tx.insert(inventoryItems).values({
+      organizationId:employee.organizationId,name:data.name,sku:data.sku??null,
+      category:data.category,canonicalUnit:data.unit,trackingType:"QUANTITY",
+    }).returning({id:inventoryItems.id});
+    await tx.insert(inventoryBalances).values({
+      organizationId:employee.organizationId,storeId:employee.homeStoreId!,
+      locationId:data.locationId,inventoryItemId:item.id,
+      theoreticalQuantity:data.initialQuantity.toFixed(3),
+    });
+    if(data.initialQuantity>0){
+      await tx.insert(inventoryMovements).values({
+        organizationId:employee.organizationId,storeId:employee.homeStoreId!,
+        locationId:data.locationId,inventoryItemId:item.id,
+        movementType:"OPENING_BALANCE",quantityDelta:data.initialQuantity.toFixed(3),
+        sourceType:"OPS_ITEM_INITIAL",sourceId:data.operationId,occurredAt:now,
+        employeeId:employee.id,note:data.note,
+        externalProvider:"OPS_NEW_ITEM",externalId:data.operationId,
+      });
+    }
+    await tx.insert(auditEvents).values({
+      organizationId:employee.organizationId,storeId:employee.homeStoreId!,
+      actorUserId:user.id,actorEmployeeId:employee.id,
+      action:"OPS_INVENTORY_ITEM_CREATED",entityType:"inventory_item",entityId:item.id,
+      afterData:{name:data.name,unit:data.unit,category:data.category,initial:data.initialQuantity,note:data.note},
+    });
+    return item.id;
+  });
+  redirect("/inventory/ops?created="+encodeURIComponent(itemId));
 }
