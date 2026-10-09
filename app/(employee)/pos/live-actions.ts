@@ -18,6 +18,7 @@ export async function submitLiveSale(_previous:{error:string|null},formData:Form
   if(!employee.homeStoreId) throw new Error("No hay sucursal asignada.");
   await assertEmployeePermission(employee.id,"pos.sell",employee.homeStoreId);
 
+  let savedOrderId:string;
   try {
   const parsed=z.object({
     clientOrderId:z.string().uuid(),
@@ -56,9 +57,10 @@ export async function submitLiveSale(_previous:{error:string|null},formData:Form
     note:parsed.note||null,
     allowStockShortage:parsed.allowStockShortage,
     });
-  redirect("/pos/receipt/"+result.id);
+  savedOrderId=result.id;
   }catch(error){
     const message=error instanceof Error?error.message:"No se pudo cobrar. Revisa caja, receta e inventario.";
     return {error:message.slice(0,350)};
   }
+  redirect("/pos/receipt/"+savedOrderId);
 }
