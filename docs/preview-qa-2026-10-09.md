@@ -45,3 +45,19 @@
 
 ## Regla de QA
 La ejecución de GitHub Actions prueba estructura, tipos, lint y compilación, **no** los efectos de las transacciones SQL ni el comportamiento en teléfonos físicos. Estas pruebas deben completarse en un ambiente Preview aislado, no en la base de datos de producción.
+
+
+## QA-01 — COBROS DIVIDIDOS: aprobado mediante transacciones reales QA (2026-10-09)
+
+- Orden QA: `SH-261009173749-DC3A` (UUID `d2256e98-126a-43ac-924e-5baafc0fe278`), única orden QA de la prueba, `mode=LIVE`, `status=PAID`, `inventory_effect_applied=true`.
+- Dos líneas de `Americano QA caliente`, 1 pieza a $30 cada una, `serviceMode=DINE_IN`, insumo de receta congelada: 18.900 g café por unidad.
+- `Cuenta 1` pagada $30 `CASH`, importe entregado $30, cambio $0; `Cuenta 2` pagada $30 `TRANSFER` simulada.
+- Totales conciliados: 2 splits = $60, 2 pagos = $60, total del folio = $60.
+- Dos movimientos distintos de café `SALE -18.900 g` (uno por split, IDs diferentes), total -37.800 g.
+- Inventario QA `QA_CAFE_G` pasó de 6000.000 g a 5962.200 g. Insumos de vaso/tapa/servilleta sin consumo para `DINE_IN`.
+- Caja QA sigue `OPEN`: fondo inicial $500 + único `pos_cash_movements SALE $30` de Cuenta 1 = **$530 en efectivo esperado**; la transferencia no afectó caja en efectivo.
+- Sin cliente: 0 `pos_loyalty_entries`, sin puntos acreditados, comportamiento esperado.
+- Integridad de referencias: 0 pagos cruzando organizaciones; 0 movimientos de inventario `POS_LIVE_ORDER` cruzando organizaciones. Entre 23:35 UTC y la consulta, QA generó 1 orden/2 pagos/2 movimientos; producción 0 órdenes/0 pagos/0 movimientos.
+- Auditado en `audit_events`: `POS_LIVE_COMMAND_SENT`, `POS_ORDER_SPLIT_SAVED`, dos `POS_LIVE_SPLIT_PAID`; el último marca `finalPayment=true`.
+- **Pendiente:** verificación física de las dos impresiones individuales en navegador/ESC-POS. El estado de base no prueba el resultado impreso.
+- **Siguiente QA:** para probar cancelación y reversas de inventario, crear otro pedido con **ambas cuentas en efectivo**. El ticket mixto de esta prueba debe rechazar la cancelación automática mientras no se confirme administrativamente el reembolso externo.
