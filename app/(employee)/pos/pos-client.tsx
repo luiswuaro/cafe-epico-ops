@@ -6,6 +6,7 @@ import {
   createShadowCommand,
   createShadowSale,
 } from "./actions";
+import { createLiveSale } from "./live-actions";
 
 type CatalogItem = {
   id: string;
@@ -33,7 +34,13 @@ type Props = {
   customers: Customer[];
   selectedCustomerId?: string | null;
   cashOpen: boolean;
+  liveEnabled: boolean;
 };
+
+function normalizeSearch(value:string) {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g,"")
+    .toLocaleLowerCase("es-MX").trim();
+}
 
 const money = new Intl.NumberFormat("es-MX", {
   style: "currency",
@@ -46,6 +53,7 @@ export function PosClient({
   customers,
   selectedCustomerId = null,
   cashOpen,
+  liveEnabled,
 }: Props) {
   const [category, setCategory] = useState<"TODAS" | CatalogItem["category"]>(
     "CALIENTES",
@@ -55,6 +63,9 @@ export function PosClient({
   const [serviceMode, setServiceMode] =
     useState<"DINE_IN" | "TAKEAWAY">("DINE_IN");
   const [customerId, setCustomerId] = useState(selectedCustomerId ?? "");
+  const [liveClientOrderId] = useState(() => globalThis.crypto.randomUUID());
+  const [paymentMethod, setPaymentMethod] = useState<"CASH"|"CARD"|"TRANSFER">(cashOpen ? "CASH" : "CARD");
+  const [tendered, setTendered] = useState("");
 
   const catalogById = useMemo(
     () => new Map(catalog.map((item) => [item.id, item])),
@@ -62,10 +73,10 @@ export function PosClient({
   );
 
   const visible = useMemo(() => {
-    const q = query.trim().toLocaleLowerCase("es-MX");
+    const q = normalizeSearch(query);
     return catalog.filter((item) => {
       const categoryOk = category === "TODAS" || item.category === category;
-      const queryOk = !q || item.name.toLocaleLowerCase("es-MX").includes(q);
+      const queryOk = !q || normalizeSearch(item.name).includes(q);
       return categoryOk && queryOk;
     });
   }, [catalog, category, query]);
@@ -128,10 +139,20 @@ export function PosClient({
           <input
             type="search"
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => {
+              setQuery(event.target.value);
+              if(event.target.value.trim()) setCategory("TODAS");
+            }}
             placeholder="Buscar bebida o alimento..."
             aria-label="Buscar producto"
+            autoComplete="off"
           />
+          {query && <button type="button" className="button" onClick={()=>setQuery("")}>
+            Limpiar búsqueda
+          </button>}
+          <p className="muted" aria-live="polite" style={{margin:0}}>
+            {visible.length} de {catalog.length} productos
+          </p>
           <div className="pos-category-tabs">
             {(["TODAS", "CALIENTES", "FRÍAS", "ALIMENTOS"] as const).map(
               (value) => (
@@ -154,6 +175,9 @@ export function PosClient({
           </div>
         </div>
 
+        {visible.length===0 && <p className="card muted" role="status">
+          No encontramos productos con esa búsqueda. Cambia el término o selecciona «Todas».
+        </p>}
         <div className="pos-product-grid">
           {visible.map((item) => {
             const count = productCount(item.id);
@@ -177,7 +201,7 @@ export function PosClient({
       <aside className="card pos-cart">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">ORDEN ESPEJO</p>
+            <p className="eyebrow">{liveEnabled ? "VENTA LIVE" : "ORDEN ESPEJO"}</p>
             <h2>Cuenta</h2>
           </div>
           <span className="pill">{cartLines.length} unidad(es)</span>
@@ -302,7 +326,8 @@ export function PosClient({
           </details>
         </div>
 
-        <form action={createShadowSale} className="stack pos-checkout">
+        <form action={liveEnabled ? createLiveSale : createShadowSale} className="stack pos-checkout">
+          {liveEnabled && <input type="hidden" name="clientOrderId" value={liveClientOrderId} />}
           <input
             type="hidden"
             name="cart"
@@ -328,7 +353,8 @@ export function PosClient({
             Método de pago
             <select
               name="paymentMethod"
-              defaultValue={cashOpen ? "CASH" : "CARD"}
+              value={paymentMethod}
+              onChange={(event) => setPaymentMethod(event.target.value as "CASH"|"CARD"|"TRANSFER")}
             >
               <option value="CASH" disabled={!cashOpen}>
                 Efectivo{cashOpen ? "" : " · abre caja"}
@@ -338,7 +364,17 @@ export function PosClient({
             </select>
           </label>
 
-          <label>
+          {liveEnabled && paymentMethod==="CASH" && <div className="stack">
+            <label>Efectivo recibido
+              <input name="tenderedAmount" type="number" inputMode="decimal" min="0" step="0.01"
+                required value={tendered} onChange={(event)=>setTendered(event.target.value)}
+                placeholder="Ej. 100.00" />
+            </label>
+            <p className="muted">Cambio a entregar:
+              <strong> {Number(tendered)>=total && tendered.trim()!=="" ? money.format(Number(tendered)-total) : "Ingresa efectivo suficiente"}</strong>
+            </p>
+          </div>}
+                    <label>
             Nota general de la mesa / orden
             <input
               name="note"
@@ -348,28 +384,27 @@ export function PosClient({
           </label>
 
           <div className="pos-command-actions">
-            <button
+            {!liveEnabled && <button
               type="submit"
               formAction={createShadowCommand}
               className="pos-command-button"
               disabled={cartLines.length === 0}
             >
               Enviar comanda
-            </button>
+            </button>}
             <button
               type="submit"
               className="pos-pay-button"
-              disabled={cartLines.length === 0}
+              disabled={cartLines.length === 0 || (liveEnabled && paymentMethod==="CASH" && (tendered.trim()==="" || Number(tendered)<total))}
             >
-              Registrar espejo · {money.format(total)}
+              {liveEnabled ? "Cobrar" : "Registrar espejo"} · {money.format(total)}
             </button>
           </div>
         </form>
 
-        <p className="pos-shadow-warning">
-          MODO ESPEJO: comandas, puntos e inventario son simulación. Nada se
-          descuenta ni se acredita todavía.
-        </p>
+        {liveEnabled
+          ? <p className="pos-shadow-warning">MODO LIVE: sólo cobro directo con receta completa y saldo confirmado. Las notas no cambian insumos: usa recetas verificadas y evita modificaciones no estructuradas.</p>
+          : <p className="pos-shadow-warning">MODO ESPEJO: comandas, puntos e inventario son simulación. Nada se descuenta ni se acredita todavía.</p>}
       </aside>
     </div>
   );

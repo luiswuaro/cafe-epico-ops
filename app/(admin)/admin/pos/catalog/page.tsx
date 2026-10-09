@@ -4,6 +4,7 @@ import {
   togglePosCatalogItem,
 } from "./actions";
 import { RecipeServiceEditor } from "./recipe-editor";
+import { SearchableCollection } from "@/components/searchable-collection";
 import { getPosCatalog } from "@/src/application/pos/catalog";
 import { requirePermission } from "@/src/infrastructure/auth/permissions";
 
@@ -78,9 +79,22 @@ export default async function PosCatalogAdminPage() {
         </form>
       </details>
 
-      <section className="pos-admin-list">
-        {catalog.map((item) => (
-          <article className="card pos-admin-item" key={item.id}>
+      <SearchableCollection
+        label="bebidas y productos"
+        placeholder="Ej. maracuyá, latte, moka, jarabe, hielo..."
+        listClassName="pos-admin-list"
+        entries={catalog.map((item) => ({
+          id: item.id,
+          name: item.name,
+          category: item.category,
+          status: item.active ? "ACTIVO" : "OCULTO",
+          searchText: [
+            item.sourceType,
+            ...item.serviceRecipes.DINE_IN.components.map(c=>c.name),
+            ...item.serviceRecipes.TAKEAWAY.components.map(c=>c.name),
+          ].join(" "),
+          content: (
+            <article className="card pos-admin-item">
             <div className="section-heading">
               <div>
                 <p className="eyebrow">
@@ -127,9 +141,10 @@ export default async function PosCatalogAdminPage() {
                 <button type="submit">Guardar receta</button>
               </form>
             </details>
-          </article>
-        ))}
-      </section>
+            </article>
+          ),
+        }))}
+      />
     </main>
   );
 }

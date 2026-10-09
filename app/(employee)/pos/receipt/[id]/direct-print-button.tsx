@@ -10,6 +10,8 @@ const CONTENT_WIDTH = PAPER_WIDTH - SIDE_MARGIN * 2;
 
 export type DirectReceiptPayload = {
   folio: string;
+  status: string;
+  cancelReason?: string | null;
   date: string;
   employee: string;
   service: string;
@@ -387,13 +389,25 @@ async function buildRasterTicket(
   }
 
   y = drawRule(context, y);
-  y = drawPair(context, "TOTAL", ticket.total, y, {
+  y = drawPair(context, ticket.status === "CANCELLED" ? "TOTAL ORIGINAL" : "TOTAL", ticket.total, y, {
     font: "900 31px Arial, Helvetica, sans-serif",
     lineHeight: 37,
   });
 
   y += 3;
-  y = drawPair(context, "Pago", ticket.payment || "—", y);
+  y = drawPair(context, "Pago original", ticket.payment || "—", y);
+  if (ticket.status === "CANCELLED") {
+    y += 5;
+    y = drawRule(context, y);
+    y = drawCentered(
+      context, "CANCELADO · NO ES VENTA VIGENTE", y,
+      "900 25px Arial, Helvetica, sans-serif", 31,
+    );
+    if (ticket.cancelReason) {
+      y = drawCentered(context, ticket.cancelReason, y,
+        "700 19px Arial, Helvetica, sans-serif", 24);
+    }
+  }
 
   if (template.showCustomer && ticket.customer) {
     y = drawWrappedLeft(
@@ -405,7 +419,7 @@ async function buildRasterTicket(
     );
   }
 
-  if (template.showPoints && ticket.pointsEarned) {
+  if (template.showPoints && ticket.status !== "CANCELLED" && ticket.pointsEarned) {
     y = drawPair(
       context,
       "Puntos ganados",
@@ -414,7 +428,7 @@ async function buildRasterTicket(
     );
   }
 
-  if (template.showPoints && ticket.pointsBalance) {
+  if (template.showPoints && ticket.status !== "CANCELLED" && ticket.pointsBalance) {
     y = drawPair(context, "Saldo puntos", ticket.pointsBalance, y);
   }
 

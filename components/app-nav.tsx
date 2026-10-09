@@ -52,6 +52,18 @@ export async function AppNav() {
       <Link href="/today">Hoy</Link>
       {canPos && <Link href="/pos">POS</Link>}
       {canPos && <Link href="/pos/orders">Comandas</Link>}
+      {canPos && (
+        <details className="nav-menu">
+          <summary>Auditoría POS</summary>
+          <div className="nav-popover">
+            <Link href="/pos/tickets">Todos los tickets</Link>
+            <Link href="/pos/customers">Clientes y puntos</Link>
+            <Link href="/pos/customers/insights">Visitas y preferencias</Link>
+            <Link href="/pos/inventory-audit">Inventario por venta</Link>
+            <Link href="/pos/cash/history">Historial de cajas</Link>
+          </div>
+        </details>
+      )}
       {canCash && <Link href="/pos/cash">Caja</Link>}
       <Link href="/checklists">Checklist</Link>
       <Link href="/handoff">Entrega</Link>
@@ -81,6 +93,8 @@ export async function AppNav() {
           </div>
         </details>
       )}
+
+      <Link href="/account/security">Mi cuenta</Link>
 
       <form className="nav-signout" action="/auth/signout" method="post">
         <button type="submit">Salir</button>

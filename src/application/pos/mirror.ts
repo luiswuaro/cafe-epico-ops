@@ -97,6 +97,17 @@ export async function getShadowOrderMirror(
       .where(eq(posPayments.orderId, order.id)),
   ]);
 
+  // Las ventas LIVE son cobros originados en OPS; no tienen ni requieren
+  // comprobante espejo de Loyverse. Evitar emparejamientos accidentales por total.
+  if (order.mode === "LIVE") {
+    return {
+      order,
+      lines,
+      payment: payments[0] ?? null,
+      mirror: null,
+    };
+  }
+
   const paidAt = order.paidAt ?? order.createdAt;
   const from = new Date(paidAt.getTime() - 60 * 60 * 1000);
   const to = new Date(paidAt.getTime() + 15 * 60 * 1000);

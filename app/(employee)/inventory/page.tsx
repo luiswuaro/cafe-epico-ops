@@ -115,6 +115,11 @@ export default async function InventoryPage({ searchParams }: PageProps) {
       {error && <p className="alert">No se pudo actualizar: {error}</p>}
 
       <section className="card" style={{ marginBottom: "1rem" }}>
+        <h2>Inventario interno OPS · caja nueva</h2>
+        <p>Entradas de compra, salidas, mermas, ajustes por conteo y saldos reales de OPS. Esta pantalla se mantiene separada de los saldos históricos de Loyverse.</p>
+        <Link className="button" href="/inventory/ops">Abrir Inventario OPS</Link>
+      </section>
+      <section className="card" style={{ marginBottom: "1rem" }}>
         <div
           style={{
             display: "flex",

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { PosClient } from "./pos-client";
 import { getPosCatalog } from "@/src/application/pos/catalog";
+import { isPosLiveEnabled } from "@/src/application/pos/live";
 import { getCashState } from "@/src/application/pos/cash";
 import { getPosCustomers } from "@/src/application/pos/customers";
 import {
@@ -37,6 +38,8 @@ export default async function PosPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const params = await searchParams;
+  const liveEnabled = isPosLiveEnabled();
+  const pilotItem = liveEnabled ? process.env.POS_LIVE_PILOT_ITEM?.trim() : undefined;
   const { employee } = await getCurrentEmployee();
 
   if (!employee.homeStoreId) {
@@ -49,6 +52,7 @@ export default async function PosPage({
     employee.homeStoreId,
   );
 
+  const payError = typeof params.error === "string" ? params.error.slice(0,260) : null;
   const savedId = typeof params.saved === "string" ? params.saved : null;
   const selectedCustomerId =
     typeof params.customer === "string" ? params.customer : null;
@@ -76,16 +80,22 @@ export default async function PosPage({
     <main className="shell pos-shell">
       <section className="hero pos-hero">
         <div>
-          <p className="eyebrow">POS V0.1 · MODO ESPEJO</p>
+          <p className="eyebrow">{liveEnabled ? "POS · LIVE" : "POS V0.1 · MODO ESPEJO"}</p>
           <h1>Tomar orden</h1>
+          <p><Link href="/inventory/ops">Consultar inventario OPS y registrar reabastos</Link> · <Link href="/pos/launch-check">Validación para activar POS LIVE</Link></p>
+          {pilotItem && <p className="status-warn">
+            PILOTO LIVE · Únicamente {pilotItem}. Cada cobro sí modificará inventario, caja y puntos reales de OPS.
+          </p>}
           <p className="muted">
-            Registra la misma venta que acabas de cobrar en Loyverse. En esta
-            etapa OPS no modifica inventario ni caja; sólo captura la venta y
-            calcula lo que habría consumido.
+            {liveEnabled
+              ? "Cobro operativo: descuenta cada ingrediente mapeado y abona puntos. No aceptará productos con recetas o saldos incompletos."
+              : "Registra la misma venta que acabas de cobrar en Loyverse. En esta etapa OPS captura un espejo sin descontar insumos ni acreditar puntos."}
           </p>
         </div>
-        <span className="status-warn">NO CONTABILIZA INVENTARIO</span>
+        <span className="status-warn">{liveEnabled ? "COBRO LIVE · INVENTARIO EXIGIDO" : "NO CONTABILIZA INVENTARIO"}</span>
       </section>
+
+      {payError && <section className="card"><p className="status-bad" role="alert">No se registró el cobro: {payError}</p></section>}
 
       {saved && (
         <section
@@ -97,21 +107,38 @@ export default async function PosPage({
         >
           <div className="section-heading">
             <div>
-              <p className="eyebrow">VENTA REGISTRADA · {saved.order.folio}</p>
+              <p className="eyebrow">{saved.order.mode === "LIVE" ? "VENTA OPS LIVE" : "VENTA ESPEJO"} · {saved.order.folio}</p>
               <h2>
                 {saved.order.status === "CANCELLED"
                   ? "Venta cancelada"
-                  : saved.mirror?.exact
-                    ? "Espejo exacto encontrado"
-                    : saved.mirror
-                      ? "Encontré una venta para revisar"
-                      : "OPS guardó la venta; falta encontrar su espejo"}
+                  : saved.order.mode === "LIVE"
+                    ? "Cobro LIVE registrado en OPS"
+                    : saved.mirror?.exact
+                      ? "Espejo exacto encontrado"
+                      : saved.mirror
+                        ? "Encontré una venta para revisar"
+                        : "OPS guardó la venta; falta encontrar su espejo"}
               </h2>
             </div>
             <strong className="metric">{money.format(Number(saved.order.total))}</strong>
           </div>
 
-          {saved.mirror ? (
+          {saved.order.mode === "LIVE" ? (
+            <div className="stack compact-stack">
+              <p className={saved.order.status === "CANCELLED" ? "status-warn" : "status-ok"}>
+                {saved.order.status === "CANCELLED"
+                  ? "Venta LIVE cancelada. Se conservaron folio, pago y movimientos de reversa para auditoría."
+                  : "Venta cobrada directamente en OPS. No requiere sincronizar ni buscar un recibo de Loyverse."}
+              </p>
+              <p className="muted">
+                Método de pago: {saved.payment?.method === "CASH" ? "Efectivo" :
+                  saved.payment?.method === "CARD" ? "Tarjeta" :
+                  saved.payment?.method === "TRANSFER" ? "Transferencia" : "No registrado"}
+                {" · "}Servicio: {saved.order.serviceMode === "DINE_IN" ? "Aquí" : "Para llevar"}
+                {" · "}Inventario: {saved.order.inventoryEffectApplied ? "Descontado" : "Sin descuento activo"}
+              </p>
+            </div>
+          ) : saved.mirror ? (
             <div className="pos-mirror-grid">
               <div>
                 <span className="muted">Recibo Loyverse</span>
@@ -173,7 +200,7 @@ export default async function PosPage({
               Imprimir ticket
             </Link>
             <Link href="/pos" className="button">
-              Nueva orden espejo
+              {saved.order.mode === "LIVE" ? "Nueva orden" : "Nueva orden espejo"}
             </Link>
           </div>
 
@@ -213,13 +240,16 @@ export default async function PosPage({
             ? "Caja abierta · " + money.format(cash.expectedCash)
             : "Abrir caja"}
         </Link>
+        <Link href="/pos/tickets" className="button">Historial de tickets</Link>
+        <Link href="/pos/customers" className="button">Clientes y puntos</Link>
+        <Link href="/pos/inventory-audit" className="button">Auditoría inventario</Link>
         <Link href="/pos/printer" className="button">
           Impresora
         </Link>
       </div>
 
       <PosClient
-        catalog={catalog.map((item) => ({
+        catalog={catalog.filter(item=>!pilotItem || item.name.toLocaleUpperCase("es-MX")===pilotItem.toLocaleUpperCase("es-MX")).map((item) => ({
           id: item.id,
           name: item.name,
           category: item.category,
@@ -234,13 +264,14 @@ export default async function PosPage({
         }))}
         selectedCustomerId={selectedCustomerId}
         cashOpen={Boolean(cash.session)}
+        liveEnabled={liveEnabled}
       />
 
       <section className="card pos-recent">
         <div className="section-heading">
           <div>
             <p className="eyebrow">PRUEBAS RECIENTES</p>
-            <h2>Ventas espejo</h2>
+            <h2>Historial de órdenes espejo</h2>
           </div>
           <span className="pill">{recent.length}</span>
         </div>
