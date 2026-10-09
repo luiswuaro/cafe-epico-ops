@@ -325,7 +325,13 @@ export async function createShadowCommand(formData: FormData) {
 }
 
 export async function createLiveCommand(formData:FormData) {
-  const orderId=await createShadowOrder(formData,"SENT",undefined,"LIVE");
+  let orderId:string;
+  try{
+    orderId=await createShadowOrder(formData,"SENT",undefined,"LIVE");
+  }catch(error){
+    const message=error instanceof Error?error.message:"No se pudo registrar la comanda.";
+    redirect("/pos?error="+encodeURIComponent(message.slice(0,260)));
+  }
   redirect("/pos/orders?created="+orderId);
 }
 
@@ -350,7 +356,9 @@ export async function payLiveCommand(formData:FormData) {
   if(!["SENT","PREPARING","READY"].includes(order.status))
     throw new Error("Comanda ya no disponible para cobro.");
   if(!lines.length)throw new Error("Comanda sin productos.");
-  const result=await checkoutLiveOrder({
+  let result:{id:string;alreadyRecorded:boolean};
+  try{
+    result=await checkoutLiveOrder({
     organizationId:employee.organizationId,storeId:employee.homeStoreId,
     actorUserId:user.id,employeeId:employee.id,
     existingOrderId:order.id,clientOrderId:order.clientOrderId,
@@ -362,7 +370,11 @@ export async function payLiveCommand(formData:FormData) {
     serviceMode:order.serviceMode as PosServiceMode,
     paymentMethod,tenderedAmount,
     tableLabel:order.tableLabel,note:order.note,
-  });
+    });
+  }catch(error){
+    const message=error instanceof Error?error.message:"No se pudo cobrar la comanda.";
+    redirect("/pos/orders?error="+encodeURIComponent(message.slice(0,260)));
+  }
   redirect("/pos/receipt/"+result.id);
 }
 
