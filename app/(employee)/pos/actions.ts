@@ -616,7 +616,7 @@ export async function cancelPosOrder(formData: FormData) {
 
   if (!order) throw new Error("Orden no encontrada");
   if (order.mode === "LIVE" && order.status !== "CANCELLED") {
-    if(order.status==="PAID"){
+    if(order.status==="PAID" || order.status==="PARTIALLY_PAID"){
       await cancelLiveOrder({
         organizationId:employee.organizationId,
         storeId:employee.homeStoreId,orderId:order.id,
