@@ -53,6 +53,7 @@ export async function getOpenPosOrders(
       quantity: posOrderLines.quantity,
       note: posOrderLines.note,
       createdAt:posOrderLines.createdAt,
+      expectedConsumption:posOrderLines.expectedConsumption,
     })
     .from(posOrderLines)
     .where(inArray(posOrderLines.orderId, rows.map((row) => row.id)))
@@ -60,6 +61,8 @@ export async function getOpenPosOrders(
 
   return rows.map((row) => ({
     ...row,
-    lines: lines.filter((line) => line.orderId === row.id),
+    lines: lines.filter((line) => line.orderId === row.id).map(line=>({
+      ...line,isAdditionalRound:line.expectedConsumption?.additionalRound===true,
+    })),
   }));
 }
