@@ -1,6 +1,6 @@
 "use server";
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { getPosInventorySetup } from "@/src/application/pos/inventory-setup";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
@@ -34,12 +34,24 @@ export async function confirmPosInventorySetup(formData:FormData){
     if(!Number.isFinite(n)||n<0||n>10000000||Math.round(n*1000)/1000!==n){
       throw new Error("Saldo inválido en "+row.name+"; usa máximo tres decimales.");
     }
+    const unit=String(formData.get("unit:"+row.id)??"");
+    if(row.weighted ? !["g","ml"].includes(unit) : unit!=="pz") {
+      throw new Error("Debes confirmar la unidad real (g, ml o pz) de "+row.name);
+    }
+    const existingItemId=String(formData.get("existingItem:"+row.id)??"");
+    if(existingItemId && !setup.reusableItems.some(item=>item.id===existingItemId && item.unit===unit)) {
+      throw new Error("Insumo interno incompatible o no disponible para "+row.name);
+    }
     const locationId=String(formData.get("location:"+row.id)??"");
     if(!locationIds.has(locationId)) throw new Error("Ubicación inválida para "+row.name);
-    return {...row,quantity:n,locationId};
+    return {...row,quantity:n,locationId,unit:unit as "g"|"ml"|"pz",existingItemId};
   });
+  if(new Set(data.filter(x=>x.existingItemId).map(x=>x.existingItemId)).size !== data.filter(x=>x.existingItemId).length) {
+    throw new Error("Un mismo insumo interno no puede asignarse dos veces.");
+  }
   const now=new Date(),db=getDb();
   await db.transaction(async tx=>{
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${employee.homeStoreId!}))`);
     const inserted:{id:string,name:string,qty:number,unit:string}[]=[];
     for(const row of data){
       const [existing]=await tx.select().from(loyverseInventoryMappings).where(and(
@@ -49,23 +61,38 @@ export async function confirmPosInventorySetup(formData:FormData){
         eq(loyverseInventoryMappings.loyverseVariantExternalId,row.id),
       )).limit(1);
       if(existing) throw new Error("El mapeo de "+row.name+" cambió; actualiza la página.");
-      const [item]=await tx.insert(inventoryItems).values({
-        organizationId:employee.organizationId,
-        sku:"POS-LV-"+row.id.slice(0,32),
-        name:row.name,
-        category:"INSUMO_LOYVERSE",
-        canonicalUnit:row.unit,
-        trackingType:"QUANTITY",
-      }).returning({id:inventoryItems.id});
+      let itemId=row.existingItemId;
+      if(itemId){
+        const [item]=await tx.select({id:inventoryItems.id,canonicalUnit:inventoryItems.canonicalUnit})
+          .from(inventoryItems).where(and(eq(inventoryItems.id,itemId),
+            eq(inventoryItems.organizationId,employee.organizationId),
+            eq(inventoryItems.isActive,true))).limit(1);
+        const [existingBalance]=await tx.select({inventoryItemId:inventoryBalances.inventoryItemId})
+          .from(inventoryBalances).where(and(eq(inventoryBalances.inventoryItemId,itemId),
+            eq(inventoryBalances.storeId,employee.homeStoreId!))).limit(1);
+        if(!item||item.canonicalUnit!==row.unit||existingBalance){
+          throw new Error("El insumo interno seleccionado ya no está disponible: "+row.name);
+        }
+      } else {
+        const [item]=await tx.insert(inventoryItems).values({
+          organizationId:employee.organizationId,
+          sku:"POS-LV-"+row.id.slice(0,32),
+          name:row.name,
+          category:"INSUMO_LOYVERSE",
+          canonicalUnit:row.unit,
+          trackingType:"QUANTITY",
+        }).returning({id:inventoryItems.id});
+        itemId=item.id;
+      }
       await tx.insert(loyverseInventoryMappings).values({
         organizationId:employee.organizationId,
         storeId:employee.homeStoreId!,
         locationId:row.locationId,
-        inventoryItemId:item.id,
+        inventoryItemId:itemId,
         loyverseStoreExternalId:setup.sourceStore!,
         loyverseVariantExternalId:row.id,
         sourceMode:row.weighted?"FRACTIONAL":"UNIT",
-        sourceUnit:row.weighted?"kg":"pz",
+        sourceUnit:row.weighted?(row.unit==="ml"?"L":"kg"):"pz",
         factorToCanonical:row.weighted?"1000":"1",
         isActive:true,
       });
@@ -88,7 +115,7 @@ export async function confirmPosInventorySetup(formData:FormData){
         employeeId:employee.id,
         note:"Saldo inicial declarado y confirmado por responsable; origen Loyverse",
       });
-      inserted.push({id:item.id,name:row.name,qty:row.quantity,unit:row.unit});
+      inserted.push({id:itemId,name:row.name,qty:row.quantity,unit:row.unit});
     }
     await tx.insert(auditEvents).values({
       organizationId:employee.organizationId,
