@@ -93,9 +93,16 @@ export default async function PosCashPage() {
               Último cierre: esperado{" "}
               {money.format(Number(state.lastClosed.expectedCashSnapshot ?? 0))}
               {" · "}contado{" "}
-              {money.format(Number(state.lastClosed.countedCash ?? 0))}
+              {state.lastClosed.countedCash == null
+                ? "Sin arqueo"
+                : money.format(Number(state.lastClosed.countedCash))}
               {" · "}diferencia{" "}
-              {money.format(Number(state.lastClosed.difference ?? 0))}
+              {state.lastClosed.difference == null
+                ? "No determinada"
+                : money.format(Number(state.lastClosed.difference))}
+              {state.lastClosed.countedCash == null && (
+                <>{" · "}Cierre administrativo de pruebas</>
+              )}
             </p>
           )}
         </section>
