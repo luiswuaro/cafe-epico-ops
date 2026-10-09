@@ -31,6 +31,7 @@ const cartSchema = z
       externalId: z.string().min(1),
       quantity: z.number().int().min(1).max(20),
       note: z.string().trim().max(180).nullable().optional(),
+      serviceMode: z.enum(["DINE_IN","TAKEAWAY"]).optional(),
     }),
   )
   .min(1)
@@ -87,17 +88,18 @@ async function buildOrderInput(
     if (!item) throw new Error("Producto no disponible en el catálogo POS");
 
     const lineTotal = item.price * line.quantity;
-    const serviceRecipe =
-      item.serviceRecipes[serviceMode as PosServiceMode];
+    const lineMode = line.serviceMode ?? serviceMode;
+    const serviceRecipe = item.serviceRecipes[lineMode as PosServiceMode];
 
     return {
       item,
       quantity: line.quantity,
       note: line.note?.trim() || null,
+      lineMode,
       lineTotal,
       expectedConsumption: {
         mode,
-        serviceMode,
+        serviceMode: lineMode,
         sourceRecipeExternalId: serviceRecipe.externalId,
         sourceCategory: serviceRecipe.sourceCategory,
         components: serviceRecipe.components.map((component) => ({
@@ -179,7 +181,7 @@ async function createShadowOrder(
       if(line.note && line.note.toLocaleLowerCase("es-MX")!=="extra caliente"){
         throw new Error("Modificador no autorizado en LIVE: "+line.item.name+". Ajusta la receta.");
       }
-      const state=byId.get(line.item.id)?.recipes.find(r=>r.mode===input.serviceMode);
+      const state=byId.get(line.item.id)?.recipes.find(r=>r.mode===line.lineMode);
       if(!state?.ready) throw new Error("Comanda bloqueada: "+line.item.name+" — "+
         (state?.errors.join("; ")||"receta incompleta"));
     }
@@ -225,8 +227,7 @@ async function createShadowOrder(
         mode: orderMode,
         status,
         serviceMode: input.serviceMode,
-        tableLabel:
-          input.serviceMode === "DINE_IN" ? input.tableLabel : null,
+        tableLabel: input.tableLabel,
         employeeId: employee.id,
         customerId: input.customerId,
         businessDate: businessDate(now),
