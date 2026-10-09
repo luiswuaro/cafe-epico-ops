@@ -91,9 +91,10 @@ export async function getTicketHistory(input: {
     order by occurred_at desc nulls last, id desc
     limit ${limit + 1} offset ${offset}
   `);
+  const tickets = rows as unknown as TicketHistoryRow[];
   return {
-    tickets: [...rows].slice(0, limit),
-    hasNext: rows.length > limit,
+    tickets: tickets.slice(0, limit),
+    hasNext: tickets.length > limit,
     page,
   };
 }
