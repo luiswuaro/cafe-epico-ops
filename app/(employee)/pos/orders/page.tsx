@@ -102,6 +102,9 @@ export default async function PosOrdersPage({
         <section className="command-board">
           {orders.map((order) => {
             const partiallyPaid = order.status === "PARTIALLY_PAID";
+            const roundKey=(line:typeof order.lines[number])=>
+              typeof line.expectedConsumption?.roundId==="string"?line.expectedConsumption.roundId:"INITIAL";
+            const roundKeys=[...new Set(order.lines.map(roundKey))];
 
             return (
               <article className="card command-card" key={order.id}>
@@ -119,21 +122,26 @@ export default async function PosOrdersPage({
                 </div>
 
                 <div className="command-lines">
-                  {order.lines.map((line) => (
-                    <div className="command-line-item" key={line.id}>
-                      <div>
-                        <strong>{Number(line.quantity)}×</strong> {line.name}
-                        {order.mode==="LIVE" && (
-                          <span className="muted" style={{marginLeft:8}}>
-                            · {line.expectedConsumption?.serviceMode==="TAKEAWAY"?"PARA LLEVAR":"AQUÍ"}
-                          </span>
-                        )}
-                      </div>
-                      {order.mode==="LIVE" && line.isAdditionalRound &&
-                        <strong className="status-ok" style={{marginLeft:8}}>Nueva ronda</strong>}
-                      {line.note && (
-                        <div className="command-line-note">↳ {line.note}</div>
+                  {order.lines.map((line,index) => (
+                    <div key={line.id}>
+                      {order.mode==="LIVE" &&
+                        (index===0 || roundKey(order.lines[index-1])!==roundKey(line)) && (
+                        <div style={{padding:"8px 0",borderBottom:"1px solid currentColor"}}>
+                          <strong>{roundKeys.indexOf(roundKey(line))===0
+                            ?"PRIMER PEDIDO":"RONDA "+(roundKeys.indexOf(roundKey(line))+1)}</strong>
+                        </div>
                       )}
+                      <div className="command-line-item">
+                        <div>
+                          <strong>{Number(line.quantity)}×</strong> {line.name}
+                          {order.mode==="LIVE" && (
+                            <span className="muted" style={{marginLeft:8}}>
+                              · {line.expectedConsumption?.serviceMode==="TAKEAWAY"?"PARA LLEVAR":"AQUÍ"}
+                            </span>
+                          )}
+                        </div>
+                        {line.note && <div className="command-line-note">↳ {line.note}</div>}
+                      </div>
                     </div>
                   ))}
                 </div>
