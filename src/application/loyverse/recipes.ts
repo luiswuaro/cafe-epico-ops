@@ -229,6 +229,8 @@ export async function getLoyverseRecipeSource(organizationId: string) {
         isDisposable: false,
         sku: null,
         unitCost: null,
+        inventoryTracked: false,
+        inventoryResolved: false,
       };
     }
 
@@ -251,6 +253,8 @@ export async function getLoyverseRecipeSource(organizationId: string) {
       isDisposable: disposablePattern.test(sourceName),
       sku: variant.sku,
       unitCost: configuredUnitCost(variant),
+      inventoryTracked: asBool(item.payload.track_stock),
+      inventoryResolved: true,
     };
   }
 
@@ -269,6 +273,8 @@ export async function getLoyverseRecipeSource(organizationId: string) {
         category: string;
         sku: string | null;
         unitCost: number | null;
+        inventoryTracked: boolean;
+        inventoryResolved: boolean;
       }
     >,
   ) {
@@ -290,6 +296,8 @@ export async function getLoyverseRecipeSource(organizationId: string) {
         category: "Sin resolver",
         sku: null,
         unitCost: null,
+        inventoryTracked: false,
+        inventoryResolved: false,
       });
       return;
     }
@@ -311,6 +319,8 @@ export async function getLoyverseRecipeSource(organizationId: string) {
             : "Sin categoría"),
         sku: variant.sku,
         unitCost: configuredUnitCost(variant),
+        inventoryTracked: asBool(item.payload.track_stock),
+        inventoryResolved: true,
       });
       return;
     }
