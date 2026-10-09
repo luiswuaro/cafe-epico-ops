@@ -3,7 +3,10 @@
 import { and, eq, inArray, ne, sql } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { getOpenCashSession } from "@/src/application/pos/cash";
+import {
+  getOpenCashSession,
+  isCashSessionCurrentBusinessDate,
+} from "@/src/application/pos/cash";
 import { resolveCashTender } from "@/src/application/pos/payment";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
 import { assertEmployeePermission } from "@/src/infrastructure/auth/permissions";
@@ -241,6 +244,16 @@ export async function payOrderSplit(formData: FormData) {
     throw new Error("Abre la caja antes de cobrar en efectivo");
   }
 
+  if (
+    paymentMethod === "CASH" &&
+    cashSession &&
+    !isCashSessionCurrentBusinessDate(cashSession.openedAt)
+  ) {
+    throw new Error(
+      "La caja abierta corresponde a otro día. Ciérrala antes de cobrar en efectivo.",
+    );
+  }
+
   const tender = resolveCashTender(formData, split.total, paymentMethod);
   const now = new Date();
 
@@ -325,6 +338,14 @@ export async function payOrderSplit(formData: FormData) {
           ${employee.id}::uuid
         )`,
       );
+
+      if (order.customerId) {
+        await tx.execute(
+          sql`select public.apply_pos_order_loyalty(
+            ${order.id}::uuid
+          )`,
+        );
+      }
     }
 
     await tx.insert(auditEvents).values({
@@ -343,6 +364,8 @@ export async function payOrderSplit(formData: FormData) {
         cashChange: tender.change,
         orderId: order.id,
         inventoryEffectApplied: remaining.length === 0,
+        loyaltyEffectApplied:
+          remaining.length === 0 && Boolean(order.customerId),
       },
     });
   });
