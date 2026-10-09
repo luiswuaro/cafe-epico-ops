@@ -51,6 +51,7 @@ export default async function PosPage({
     employee.homeStoreId,
   );
 
+  const payError = typeof params.error === "string" ? params.error.slice(0,260) : null;
   const savedId = typeof params.saved === "string" ? params.saved : null;
   const selectedCustomerId =
     typeof params.customer === "string" ? params.customer : null;
@@ -88,6 +89,8 @@ export default async function PosPage({
         </div>
         <span className="status-warn">{liveEnabled ? "COBRO LIVE · INVENTARIO EXIGIDO" : "NO CONTABILIZA INVENTARIO"}</span>
       </section>
+
+      {payError && <section className="card"><p className="status-bad" role="alert">No se registró el cobro: {payError}</p></section>}
 
       {saved && (
         <section
