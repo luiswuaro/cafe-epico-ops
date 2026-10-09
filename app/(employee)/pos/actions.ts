@@ -613,7 +613,7 @@ export async function createPosCustomer(formData: FormData) {
   redirect("/pos?customer=" + customer.id);
 }
 
-export async function cancelPosOrder(formData: FormData) {
+async function cancelPosOrderUnsafe(formData: FormData) {
   const { user, employee } = await getCurrentEmployee();
   if (!employee.homeStoreId) {
     throw new Error("El empleado no tiene sucursal asignada");
@@ -651,7 +651,7 @@ export async function cancelPosOrder(formData: FormData) {
         storeId:employee.homeStoreId,orderId:order.id,
         employeeId:employee.id,actorUserId:user.id,reason,
       });
-      redirect("/pos/receipt/" + order.id);
+      return "/pos/receipt/" + order.id;
     }
     if(!["SENT","PREPARING","READY"].includes(order.status))
       throw new Error("No se puede cancelar esta comanda en su estado actual.");
@@ -671,10 +671,10 @@ export async function cancelPosOrder(formData: FormData) {
         afterData:{status:"CANCELLED",reason,hadPayment:false,inventoryApplied:false},
       });
     });
-    redirect("/pos/receipt/"+order.id);
+    return "/pos/receipt/"+order.id;
   }
   if (order.status === "CANCELLED") {
-    redirect("/pos?saved=" + order.id);
+    return "/pos?saved=" + order.id;
   }
   if (order.inventoryEffectApplied || order.loyaltyEffectApplied) {
     throw new Error(
@@ -769,7 +769,25 @@ export async function cancelPosOrder(formData: FormData) {
     });
   });
 
-  redirect("/pos?saved=" + order.id + "&cancelled=1");
+  return "/pos?saved=" + order.id + "&cancelled=1";
+}
+
+export async function cancelPosOrder(formData:FormData){
+  const orderId=String(formData.get("orderId")??"").trim();
+  let destination:string;
+  try{
+    destination=await cancelPosOrderUnsafe(formData);
+  }catch(error){
+    console.error("POS_CANCEL_FAILED",{orderId,error});
+    const raw=error instanceof Error?error.message:"";
+    const safe=/^(Los pagos |El efectivo |Esta venta |Esta orden |La orden |La comanda |No se puede |No se encontró |Falta |Escribe |La mesa |Movimiento |Insumo |Pedido LIVE |La cuenta |Esta cuenta |Orden )/.test(raw)
+      ?raw.slice(0,260)
+      :"La cancelación no se pudo confirmar. Revisa el estado y solicita apoyo administrativo antes de intentar otra vez.";
+    const back=/^[0-9a-f-]{36}$/i.test(orderId)
+      ?"/pos/receipt/"+orderId:"/pos";
+    redirect(back+"?cancelError="+encodeURIComponent(safe));
+  }
+  redirect(destination);
 }
 
 export async function refreshShadowMirror(formData: FormData) {
