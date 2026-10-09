@@ -177,7 +177,18 @@ export default async function OpsInventoryPage({
       <h2>Historial de movimientos OPS</h2>
       <p className="muted">Últimos 70 movimientos: apertura, ventas, entradas, pérdidas y correcciones. Los cambios nunca sobrescriben el historial.</p>
       {movements.length===0&&<p>Sin movimientos todavía.</p>}
-      {movements.map(m=><div className="task" key={m.id}>
+      <SearchableCollection
+        label="movimientos de inventario"
+        placeholder="Ej. Azucena, leche, merma, compra, conteo..."
+        categoryLabel="Unidad"
+        statusLabel="Movimiento"
+        entries={movements.map(m=>({
+          id:m.id,
+          name:m.itemName,
+          category:m.unit,
+          status:operationTitle(m.type),
+          searchText:[m.note??"",m.source,m.type,when(m.occurredAt),m.employeeId??""].join(" "),
+          content:<div className="task">
         <div>
           <strong>{m.itemName}</strong> · {operationTitle(m.type)}
           <p className="muted">{when(m.occurredAt)} · {m.note||"Sin nota"} · Ref. {m.source}</p>
@@ -185,7 +196,9 @@ export default async function OpsInventoryPage({
         <strong className={Number(m.delta)<0?"status-warn":"status-ok"}>
           {Number(m.delta)>0?"+":""}{qty.format(Number(m.delta))} {m.unit}
         </strong>
-      </div>)}
+          </div>,
+        }))}
+      />
     </section>
   </main>;
 }
