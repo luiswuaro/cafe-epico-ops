@@ -12,6 +12,7 @@ export type LiveCart = Array<{
   externalId: string;
   quantity: number;
   note: string | null;
+  serviceMode?:PosServiceMode;
 }>;
 
 export function isPosLiveEnabled() {
@@ -61,7 +62,8 @@ export async function checkoutLiveOrder(input:{
     if(line.note?.trim() && line.note.trim().toLocaleLowerCase("es-MX")!=="extra caliente"){
       throw new Error("Modificador libre no permitido en LIVE ("+item.name+"). Usa receta configurada; sólo se admite la nota extra caliente.");
     }
-    const recipeComponents=item.serviceRecipes[input.serviceMode].components;
+    const lineMode=line.serviceMode??input.serviceMode;
+    const recipeComponents=item.serviceRecipes[lineMode].components;
     if(recipeComponents.length===0) {
       throw new Error("La receta de "+item.name+" no tiene insumos configurados.");
     }
@@ -70,20 +72,20 @@ export async function checkoutLiveOrder(input:{
       const hasCup=names.some(name=>/VASO/.test(name));
       const hasLid=names.some(name=>/TAPA/.test(name));
       const hasStraw=names.some(name=>/POPOTE|PAJILLA/.test(name));
-      if(input.serviceMode==="TAKEAWAY" && (!hasCup || !hasLid)){
+      if(lineMode==="TAKEAWAY" && (!hasCup || !hasLid)){
         throw new Error("Receta de "+item.name+" para llevar incompleta: falta vaso o tapa.");
       }
-      if(input.serviceMode==="DINE_IN" && names.some(name=>/VASO|TAPA|MANGA|FAJILLA|SERVILLETA/.test(name))){
+      if(lineMode==="DINE_IN" && names.some(name=>/VASO|TAPA|MANGA|FAJILLA|SERVILLETA/.test(name))){
         throw new Error("Receta de "+item.name+" para consumir aquí incluye desechables: revisa la receta.");
       }
-      if(input.serviceMode==="DINE_IN" && item.category==="FRÍAS" && !hasStraw){
+      if(lineMode==="DINE_IN" && item.category==="FRÍAS" && !hasStraw){
         throw new Error("Receta fría de "+item.name+" para consumir aquí no incluye popote.");
       }
     }
     return {
-      ...line,item,price:item.price,
+      ...line,item,lineMode,price:item.price,
       total:Number((item.price*line.quantity).toFixed(2)),
-      components:item.serviceRecipes[input.serviceMode].components.map(c=>({
+      components:item.serviceRecipes[lineMode].components.map(c=>({
         ...c,quantity:c.quantity*line.quantity,
       })),
     };
@@ -147,16 +149,18 @@ export async function checkoutLiveOrder(input:{
           .where(eq(posOrderLines.orderId,pending.id));
         const expected=assignment.filter(x=>assignedMap.has(x.id)).map(x=>({
           catalogExternalId:x.catalogExternalId,
-          quantity:assignedMap.get(x.id)!,note:x.note,price:Number(x.unitPrice)
+          quantity:assignedMap.get(x.id)!,note:x.note,price:Number(x.unitPrice),
+          serviceMode: typeof x.expectedConsumption?.serviceMode==="string"
+            ? x.expectedConsumption.serviceMode : pending!.serviceMode
         }));
         const expectedTotal=expected.reduce((sum,line)=>sum+line.quantity*line.price,0);
         if(Math.abs(expectedTotal-Number(split.total))>0.005||Math.abs(expectedTotal-total)>0.005)
           throw new Error("El total de esta cuenta no coincide con los productos asignados.");
-        const signature=(values:Array<{catalogExternalId:string;quantity:number;note:string|null;price:number}>)=>
-          values.map(v=>[v.catalogExternalId,v.quantity,v.note||"",v.price.toFixed(2)].join("|"))
+        const signature=(values:Array<{catalogExternalId:string;quantity:number;note:string|null;price:number;serviceMode:string}>)=>
+          values.map(v=>[v.catalogExternalId,v.quantity,v.note||"",v.price.toFixed(2),v.serviceMode].join("|"))
             .sort().join("::");
         const checkout=signature(lines.map(l=>({
-          catalogExternalId:l.item.id,quantity:l.quantity,note:l.note,price:l.price
+          catalogExternalId:l.item.id,quantity:l.quantity,note:l.note,price:l.price,serviceMode:l.lineMode
         })));
         if(checkout!==signature(expected))throw new Error("La cuenta cambió desde que se abrió.");
       } else if(allSplits.length){
@@ -164,15 +168,18 @@ export async function checkoutLiveOrder(input:{
       }
       const savedLines=await tx.select().from(posOrderLines)
         .where(eq(posOrderLines.orderId,pending.id));
-      const signature=(values:Array<{catalogExternalId:string;quantity:number;note:string|null;price:number}>)=>
-        values.map(v=>[v.catalogExternalId,v.quantity,v.note||"",v.price.toFixed(2)].join("|"))
+      const signature=(values:Array<{catalogExternalId:string;quantity:number;note:string|null;price:number;serviceMode:string}>)=>
+        values.map(v=>[v.catalogExternalId,v.quantity,v.note||"",v.price.toFixed(2),v.serviceMode].join("|"))
           .sort().join("::");
       const snapshot=signature(savedLines.map(l=>({
         catalogExternalId:l.catalogExternalId,
         quantity:Number(l.quantity),note:l.note,price:Number(l.unitPrice),
+        serviceMode: typeof l.expectedConsumption?.serviceMode==="string"
+          ? l.expectedConsumption.serviceMode : pending!.serviceMode,
       })));
       const checkout=signature(lines.map(l=>({
         catalogExternalId:l.item.id,quantity:l.quantity,note:l.note,price:l.price,
+        serviceMode:l.lineMode,
       })));
       if(!split&&(snapshot!==checkout || Number(pending.total)!==total))
         throw new Error("La comanda cambió de precio, producto o cantidad. No se ha cobrado; solicita revisión.");
@@ -282,7 +289,7 @@ export async function checkoutLiveOrder(input:{
       nameSnapshot:line.item.name,categorySnapshot:line.item.category,
       unitPrice:line.price.toFixed(2),quantity:String(line.quantity),lineTotal:line.total.toFixed(2),
       note:line.note,expectedConsumption:{
-        mode:"LIVE",serviceMode:input.serviceMode,
+        mode:"LIVE",serviceMode:line.lineMode,
         components:line.components.map(component => ({
           ...component,
           inventoryPolicy:isCostOnlyComponent(component) ? "COST_ONLY" : "TRACKED",
