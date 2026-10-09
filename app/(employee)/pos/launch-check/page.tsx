@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SearchableCollection } from "@/components/searchable-collection";
 import { getPosReadiness } from "@/src/application/pos/readiness";
 import { isPosLiveEnabled } from "@/src/application/pos/live";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
@@ -12,7 +13,6 @@ export default async function LaunchCheckPage(){
   await assertEmployeePermission(employee.id,"pos.sell",employee.homeStoreId);
   const readiness=await getPosReadiness(employee.organizationId,employee.homeStoreId);
   const live=isPosLiveEnabled();
-  const failed=readiness.products.filter(p=>p.recipes.some(r=>!r.ready));
   const successful=readiness.products.filter(p=>p.recipes.every(r=>r.ready));
   return <main className="shell pos-shell">
     <section className="hero pos-hero">
@@ -41,22 +41,35 @@ export default async function LaunchCheckPage(){
       </div>
     </section>
     <section className="card stack">
-      <h2>Requieren trabajo · {failed.length} productos</h2>
-      {failed.length===0&&<p className="status-ok">Sin productos bloqueados por esta auditoría.</p>}
-      {failed.map(p=><details className="task" key={p.id}>
-        <summary><strong>{p.name}</strong> · {p.category}
-          {p.recipes.map(r=><span key={r.mode} className={r.ready?"status-ok":"status-warn"}>
-            {" · "}{r.mode==="DINE_IN"?"Aquí":"Llevar"}: {r.ready?"Listo":"BLOQUEADO"}
-          </span>)}
-        </summary>
-        <div className="stack" style={{paddingTop:12}}>
-          {p.recipes.map(r=><div key={r.mode}>
-            <strong>{r.mode==="DINE_IN"?"Aquí":"Para llevar"}</strong>
-            {r.ready?<p className="status-ok">Receta y saldo suficientes para una unidad.</p>:
-            <ul>{r.errors.map((error,i)=><li key={i}>{error}</li>)}</ul>}
-          </div>)}
-        </div>
-      </details>)}
+      <h2>Buscar y revisar recetas por bebida</h2>
+      <p className="muted">Filtra por bebida, categoría o motivo de bloqueo. Inicia con las recetas bloqueadas; puedes cambiar a «Todos» o «LISTO».</p>
+      <SearchableCollection
+        label="bebidas del checklist"
+        placeholder="Ej. tónico, maracuyá, sin equivalencia, leche..."
+        defaultStatus="BLOQUEADO"
+        statusLabel="Preparación"
+        entries={readiness.products.map(p=>({
+          id:p.id,
+          name:p.name,
+          category:p.category,
+          status:p.recipes.every(r=>r.ready)?"LISTO":"BLOQUEADO",
+          searchText:p.recipes.flatMap(r=>r.errors).join(" "),
+          content:<details className="task">
+            <summary><strong>{p.name}</strong> · {p.category}
+              {p.recipes.map(r=><span key={r.mode} className={r.ready?"status-ok":"status-warn"}>
+                {" · "}{r.mode==="DINE_IN"?"Aquí":"Llevar"}: {r.ready?"Listo":"BLOQUEADO"}
+              </span>)}
+            </summary>
+            <div className="stack" style={{paddingTop:12}}>
+              {p.recipes.map(r=><div key={r.mode}>
+                <strong>{r.mode==="DINE_IN"?"Aquí":"Para llevar"}</strong>
+                {r.ready?<p className="status-ok">Receta y saldo suficientes para una unidad.</p>:
+                <ul>{r.errors.map((error,i)=><li key={i}>{error}</li>)}</ul>}
+              </div>)}
+            </div>
+          </details>,
+        }))}
+      />
     </section>
     <section className="card stack">
       <h2>Listos en ambos servicios · {successful.length}</h2>
