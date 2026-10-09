@@ -126,7 +126,7 @@ export default async function PosOrdersPage({
                       <div>
                         <strong>{Number(line.quantity)}×</strong> {line.name}
                       </div>
-                      {order.mode==="LIVE" && line.createdAt.getTime()-order.createdAt.getTime()>30000 &&
+                      {order.mode==="LIVE" && line.isAdditionalRound &&
                         <strong className="status-ok" style={{marginLeft:8}}>Nueva ronda</strong>}
                       {line.note && (
                         <div className="command-line-note">↳ {line.note}</div>
