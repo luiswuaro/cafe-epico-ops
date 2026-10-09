@@ -107,6 +107,7 @@ export default async function ReceiptPage({
           nameSnapshot: posOrderLines.nameSnapshot,
           lineTotal: posOrderSplitLines.lineTotal,
           note: posOrderLines.note,
+          expectedConsumption: posOrderLines.expectedConsumption,
         })
         .from(posOrderSplitLines)
         .innerJoin(
@@ -121,6 +122,7 @@ export default async function ReceiptPage({
           nameSnapshot: posOrderLines.nameSnapshot,
           lineTotal: posOrderLines.lineTotal,
           note: posOrderLines.note,
+          expectedConsumption: posOrderLines.expectedConsumption,
         })
         .from(posOrderLines)
         .where(eq(posOrderLines.orderId, id));
@@ -214,7 +216,8 @@ export default async function ReceiptPage({
             items: lines.map((line) => ({
               quantity: Number(line.quantity),
               name: line.nameSnapshot,
-              note: line.note,
+              note: (line.expectedConsumption?.serviceMode==="TAKEAWAY"?"Para llevar":"Aquí")+
+                (line.note?" · "+line.note:""),
               total: money.format(Number(line.lineTotal)),
             })),
             total: money.format(total),
