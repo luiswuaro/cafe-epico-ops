@@ -1,5 +1,6 @@
 import { and, eq, sql } from "drizzle-orm";
 import { getPosCatalog, type PosServiceMode } from "@/src/application/pos/catalog";
+import { isCostOnlyComponent, costOnlyRecipeMeasure } from "@/src/application/pos/component-policy";
 import { getDb } from "@/src/infrastructure/db/client";
 import {
   auditEvents, inventoryBalances, inventoryItems, inventoryMovements,
@@ -129,8 +130,13 @@ export async function checkoutLiveOrder(input:{
       ));
     const byExternal=new Map(mappings.map(mapping=>[mapping.externalId,mapping]));
     const consume=new Map<string,{locationId:string;itemId:string;amount:number;unit:string;names:Set<string>}>();
+    let costOnlyComponents = 0;
     for(const line of lines){
       for(const component of line.components){
+        if(isCostOnlyComponent(component)){
+          costOnlyComponents++;
+          continue;
+        }
         const map=component.variantExternalId ? byExternal.get(component.variantExternalId) : undefined;
         if(!map) throw new Error("Insumo sin equivalencia confirmada: "+component.name+" ("+line.item.name+").");
         const factor=Number(map.factor);
@@ -182,7 +188,11 @@ export async function checkoutLiveOrder(input:{
       unitPrice:line.price.toFixed(2),quantity:String(line.quantity),lineTotal:line.total.toFixed(2),
       note:line.note,expectedConsumption:{
         mode:"LIVE",serviceMode:input.serviceMode,
-        components:line.components,
+        components:line.components.map(component => ({
+          ...component,
+          inventoryPolicy:isCostOnlyComponent(component) ? "COST_ONLY" : "TRACKED",
+          costOnlyMeasure:costOnlyRecipeMeasure(component, component.quantity),
+        })),
       },
     })));
     await tx.insert(posPayments).values({
@@ -235,7 +245,7 @@ export async function checkoutLiveOrder(input:{
       organizationId:input.organizationId,storeId:input.storeId,
       actorUserId:input.actorUserId,actorEmployeeId:input.employeeId,
       action:"POS_LIVE_SALE_PAID",entityType:"pos_order",entityId:order.id,
-      afterData:{folio:order.folio,total,payment:input.paymentMethod,consumptionCount:consume.size,
+      afterData:{folio:order.folio,total,payment:input.paymentMethod,consumptionCount:consume.size,costOnlyComponents,
         customerId:input.customerId,inventoryEffectApplied:true,loyaltyEffectApplied:Boolean(input.customerId)},
     });
     return {id:order.id,alreadyRecorded:false};
