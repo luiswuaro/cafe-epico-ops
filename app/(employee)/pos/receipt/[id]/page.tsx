@@ -13,6 +13,7 @@ import { getDb } from "@/src/infrastructure/db/client";
 import {
   employees,
   posCustomers,
+  posLoyaltyEntries,
   posOrderLines,
   posOrderSplitLines,
   posOrderSplits,
@@ -158,14 +159,29 @@ export default async function ReceiptPage({
 
   const total = split ? Number(split.total) : Number(order.order.total);
   const paymentMethod = payments.map((payment) => payment.method).join(" + ");
-  const pointsEarned =
-    !split && order.order.status !== "CANCELLED" && order.customerName
-      ? Number(order.order.loyaltyPointsPreview).toFixed(2)
-      : null;
-  const pointsBalance =
-    !split && order.order.status !== "CANCELLED" && order.customerName
-      ? Number(order.customerPoints ?? 0).toFixed(2)
-      : null;
+  const loyalty=await db.select({
+    customerId:posLoyaltyEntries.customerId,
+    name:posCustomers.name,
+    balance:posCustomers.pointsBalance,
+    points:posLoyaltyEntries.points,
+    note:posLoyaltyEntries.note,
+  }).from(posLoyaltyEntries)
+    .innerJoin(posCustomers,eq(posLoyaltyEntries.customerId,posCustomers.id))
+    .where(and(
+      eq(posLoyaltyEntries.orderId,id),
+      eq(posLoyaltyEntries.entryType,"EARN"),
+    ));
+  const applicable=split
+    ? loyalty.filter(row=>row.note?.startsWith(split.label+" · "))
+    : loyalty;
+  const recipients=new Set(applicable.map(row=>row.customerId));
+  const receiptCustomer=recipients.size===1
+    ? applicable[0].name
+    : recipients.size>1?"Varios clientes":split?null:order.customerName;
+  const pointsEarned=order.order.status!=="CANCELLED"&&applicable.length
+    ? applicable.reduce((sum,row)=>sum+Number(row.points),0).toFixed(2):null;
+  const pointsBalance=order.order.status!=="CANCELLED"&&recipients.size===1
+    ? Number(applicable[0].balance).toFixed(2):null;
 
   const service =
     order.order.serviceMode === "TAKEAWAY"
@@ -203,7 +219,7 @@ export default async function ReceiptPage({
             })),
             total: money.format(total),
             payment: paymentMethod || "-",
-            customer: order.customerName,
+            customer: receiptCustomer,
             pointsEarned,
             pointsBalance,
           }}
@@ -336,10 +352,10 @@ export default async function ReceiptPage({
           <span>Pago</span>
           <span>{paymentMethod || "—"}</span>
 
-          {printSettings.showCustomer && order.customerName && (
+          {printSettings.showCustomer && receiptCustomer && (
             <>
               <span>Cliente</span>
-              <span>{order.customerName}</span>
+              <span>{receiptCustomer}</span>
             </>
           )}
 
