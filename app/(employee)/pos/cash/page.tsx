@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getCashState } from "@/src/application/pos/cash";
+import { isPosLiveEnabled } from "@/src/application/pos/live";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
 import { assertEmployeePermission } from "@/src/infrastructure/auth/permissions";
 import {
@@ -53,12 +54,14 @@ export default async function PosCashPage() {
           <p className="eyebrow">POS · EFECTIVO</p>
           <h1>Caja</h1>
           <p className="muted">
-            Fondo inicial + ventas en efectivo + entradas − salidas = efectivo
-            esperado. En modo espejo sirve para comparar contra tu caja física.
+            Fondo inicial + ventas en efectivo + entradas − salidas = efectivo esperado.
+            {isPosLiveEnabled() ? " Modo LIVE: caja real de OPS." :
+              " Modo espejo: no usar como caja principal hasta activar LIVE y comprobar la migración."}
           </p>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <Link href="/pos/cash/history" className="button">Historial de cortes</Link>
+          <Link href="/pos/launch-check" className="button">Ver checklist de arranque</Link>
           <Link href="/pos" className="button">Volver al POS</Link>
         </div>
       </section>
