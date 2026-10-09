@@ -68,7 +68,11 @@ export default async function PosOrdersPage() {
         </div>
         <div className="pos-result-actions">
           <Link href="/pos/cash" className="button">
-            {cash.session ? "Caja abierta" : "Abrir caja"}
+            {cash.session
+              ? cash.isStale
+                ? "Caja anterior · cerrar"
+                : "Caja abierta"
+              : "Abrir caja"}
           </Link>
           <Link href="/pos" className="button">
             + Nueva orden
@@ -189,7 +193,7 @@ export default async function PosOrdersPage() {
                       />
                       <PosPaymentFields
                         total={Number(order.total)}
-                        cashOpen={Boolean(cash.session)}
+                        cashOpen={Boolean(cash.session && !cash.isStale)}
                       />
                       <button type="submit">
                         Marcar pagada ·{" "}
