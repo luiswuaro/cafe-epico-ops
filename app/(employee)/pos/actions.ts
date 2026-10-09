@@ -1,7 +1,7 @@
 "use server";
 
 import { randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -412,21 +412,22 @@ export async function updateCommandStatus(formData: FormData) {
   }
 
   await db.transaction(async (tx) => {
-    await tx
-      .update(posOrders)
-      .set({ status, updatedAt: new Date() })
-      .where(eq(posOrders.id, order.id));
-
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${employee.homeStoreId!}))`);
+    const [current]=await tx.select().from(posOrders).where(and(
+      eq(posOrders.id,order.id),eq(posOrders.organizationId,employee.organizationId),
+      eq(posOrders.storeId,employee.homeStoreId!),
+    )).for("update").limit(1);
+    if(!current || !["SENT","PREPARING","READY"].includes(current.status))
+      throw new Error("La comanda cambió y ya no admite cambios de preparación.");
+    if(current.status===status)return;
+    await tx.update(posOrders)
+      .set({status,updatedAt:new Date()})
+      .where(and(eq(posOrders.id,current.id),eq(posOrders.status,current.status)));
     await tx.insert(auditEvents).values({
-      organizationId: employee.organizationId,
-      storeId: employee.homeStoreId,
-      actorUserId: user.id,
-      actorEmployeeId: employee.id,
-      action: "POS_COMMAND_STATUS_CHANGED",
-      entityType: "pos_order",
-      entityId: order.id,
-      beforeData: { status: order.status },
-      afterData: { status },
+      organizationId:employee.organizationId,storeId:employee.homeStoreId,
+      actorUserId:user.id,actorEmployeeId:employee.id,
+      action:"POS_COMMAND_STATUS_CHANGED",entityType:"pos_order",entityId:current.id,
+      beforeData:{status:current.status},afterData:{status},
     });
   });
 
@@ -616,7 +617,7 @@ export async function cancelPosOrder(formData: FormData) {
 
   if (!order) throw new Error("Orden no encontrada");
   if (order.mode === "LIVE" && order.status !== "CANCELLED") {
-    if(order.status==="PAID"){
+    if(order.status==="PAID" || order.status==="PARTIALLY_PAID"){
       await cancelLiveOrder({
         organizationId:employee.organizationId,
         storeId:employee.homeStoreId,orderId:order.id,

@@ -1,6 +1,7 @@
 "use server";
 
-import { and, eq, inArray, ne } from "drizzle-orm";
+import { and, eq, inArray, ne, sql } from "drizzle-orm";
+import { checkoutLiveOrder } from "@/src/application/pos/live";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { getOpenCashSession } from "@/src/application/pos/cash";
@@ -59,7 +60,7 @@ export async function saveOrderSplit(formData: FormData) {
     .limit(1);
 
   if (!order) throw new Error("Orden no encontrada");
-  if(order.mode==="LIVE")throw new Error("Dividir una cuenta LIVE requiere cobro de inventario por cuenta. Por ahora cobra la cuenta completa desde Comandas.");
+
   if (!["SENT", "PREPARING", "READY"].includes(order.status)) {
     throw new Error(
       "Sólo puedes dividir una comanda abierta sin pagos parciales",
@@ -113,6 +114,21 @@ export async function saveOrderSplit(formData: FormData) {
   }
 
   await db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${employee.homeStoreId!}))`);
+    const [current]=await tx.select().from(posOrders).where(eq(posOrders.id,order.id))
+      .for("update").limit(1);
+    if(!current || !["SENT","PREPARING","READY"].includes(current.status) ||
+      Number(current.total)!==Number(order.total))
+      throw new Error("La comanda cambió. Recarga antes de dividir.");
+    const currentLines=await tx.select().from(posOrderLines)
+      .where(eq(posOrderLines.orderId,order.id));
+    if(currentLines.length!==lines.length||
+      currentLines.some(line=>!lineById.has(line.id)))
+      throw new Error("Se agregaron productos. Recarga antes de dividir.");
+    const currentSplits=await tx.select().from(posOrderSplits)
+      .where(eq(posOrderSplits.orderId,order.id));
+    if(currentSplits.some(x=>x.status==="PAID"))
+      throw new Error("Ya existe una cuenta pagada.");
     if (existingSplits.length > 0) {
       await tx
         .delete(posOrderSplits)
@@ -228,7 +244,30 @@ export async function payOrderSplit(formData: FormData) {
     .limit(1);
 
   if (!order) throw new Error("Orden no encontrada");
-  if(order.mode==="LIVE")throw new Error("Dividir una cuenta LIVE requiere cobro de inventario por cuenta. Por ahora cobra la cuenta completa desde Comandas.");
+  if(order.mode==="LIVE"){
+    const dbLines=await db.select().from(posOrderLines).where(eq(posOrderLines.orderId,order.id));
+    const shares=await db.select().from(posOrderSplitLines)
+      .where(eq(posOrderSplitLines.splitId,split.id));
+    if(!shares.length)throw new Error("Cuenta sin productos.");
+    const byLine=new Map(dbLines.map(l=>[l.id,l]));
+    const cart=shares.map(share=>{
+      const line=byLine.get(share.orderLineId);
+      if(!line)throw new Error("Producto no encontrado en la comanda.");
+      return {externalId:line.catalogExternalId,quantity:Number(share.quantity),note:line.note};
+    });
+    const customerId=formData.has("customerId") ? (String(formData.get("customerId")??"").trim()||null) : order.customerId;
+    const tenderedRaw=String(formData.get("tenderedAmount")??"").trim();
+    const result=await checkoutLiveOrder({
+      organizationId:employee.organizationId,storeId:employee.homeStoreId,
+      employeeId:employee.id,actorUserId:user.id,
+      existingOrderId:order.id,existingSplitId:split.id,clientOrderId:order.clientOrderId,
+      cart,serviceMode:order.serviceMode as "DINE_IN"|"TAKEAWAY",
+      paymentMethod,tenderedAmount:paymentMethod==="CASH"?(tenderedRaw?Number(tenderedRaw):Number(split.total)):null,
+      customerId,tableLabel:order.tableLabel,note:order.note,
+    });
+    redirect("/pos/receipt/"+result.id+"?split="+split.id);
+  }
+
 
   const cashSession =
     paymentMethod === "CASH"
@@ -325,4 +364,35 @@ export async function payOrderSplit(formData: FormData) {
   });
 
   redirect("/pos/receipt/" + order.id + "?split=" + split.id);
+}
+
+export async function resetUnpaidOrderSplit(formData:FormData){
+  const {user,employee}=await getCurrentEmployee();
+  if(!employee.homeStoreId)throw new Error("Sin sucursal.");
+  await assertEmployeePermission(employee.id,"pos.sell",employee.homeStoreId);
+  const orderId=z.string().uuid().parse(formData.get("orderId"));
+  const db=getDb();
+  await db.transaction(async tx=>{
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${employee.homeStoreId!}))`);
+    const [order]=await tx.select().from(posOrders).where(and(
+      eq(posOrders.id,orderId),eq(posOrders.organizationId,employee.organizationId),
+      eq(posOrders.storeId,employee.homeStoreId!),
+    )).for("update").limit(1);
+    if(!order||!["SENT","PREPARING","READY"].includes(order.status))
+      throw new Error("La mesa ya tiene pagos o está cerrada.");
+    const splitRows=await tx.select().from(posOrderSplits)
+      .where(eq(posOrderSplits.orderId,order.id));
+    if(splitRows.some(x=>x.status==="PAID"))
+      throw new Error("No se puede eliminar una cuenta ya cobrada.");
+    if(splitRows.length){
+      await tx.delete(posOrderSplits).where(eq(posOrderSplits.orderId,order.id));
+      await tx.insert(auditEvents).values({
+        organizationId:employee.organizationId,storeId:employee.homeStoreId,
+        actorUserId:user.id,actorEmployeeId:employee.id,
+        action:"POS_LIVE_SPLIT_RESET",entityType:"pos_order",entityId:order.id,
+        afterData:{clearedAccounts:splitRows.length,reason:"Volver a cuenta completa sin pagos"},
+      });
+    }
+  });
+  redirect("/pos/orders");
 }

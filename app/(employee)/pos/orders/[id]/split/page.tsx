@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { SplitAccountBuilder } from "./split-client";
-import { payOrderSplit } from "./actions";
+import { payOrderSplit, resetUnpaidOrderSplit } from "./actions";
 import { getCashState } from "@/src/application/pos/cash";
+import { getPosCustomers } from "@/src/application/pos/customers";
 import { getOrderSplitState } from "@/src/application/pos/splits";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
 import { assertEmployeePermission } from "@/src/infrastructure/auth/permissions";
@@ -28,13 +29,14 @@ export default async function SplitOrderPage({
     employee.homeStoreId,
   );
 
-  const [state, cash] = await Promise.all([
+  const [state, cash, customers] = await Promise.all([
     getOrderSplitState(
       employee.organizationId,
       employee.homeStoreId,
       id,
     ),
     getCashState(employee.organizationId, employee.homeStoreId),
+    getPosCustomers(employee.organizationId),
   ]);
 
   if (!state) throw new Error("Orden no encontrada");
@@ -51,7 +53,7 @@ export default async function SplitOrderPage({
           <h1>{state.order.tableLabel || "Orden " + state.order.folio}</h1>
           <p className="muted">
             Asigna cada unidad a una cuenta. Cada cuenta se cobra por separado
-            y puede generar su propio ticket.
+            y puede generar su propio ticket. En LIVE, cada cuenta descuenta sólo los productos asignados al pagar.
           </p>
         </div>
         <Link href="/pos/orders" className="button">
@@ -116,6 +118,20 @@ export default async function SplitOrderPage({
                       <option value="TRANSFER">Transferencia</option>
                     </select>
                   </label>
+                  {state.order.mode==="LIVE" && <>
+                    <label>Cliente que recibe los puntos (5%)
+                      <select name="customerId" defaultValue={state.order.customerId??""}>
+                        <option value="">Sin cliente · no acreditar puntos</option>
+                        {customers.map(customer=><option key={customer.id} value={customer.id}>
+                          {customer.name} · {Number(customer.pointsBalance).toFixed(2)} pts
+                        </option>)}
+                      </select>
+                    </label>
+                    <label>Efectivo recibido (si paga en efectivo)
+                      <input type="number" name="tenderedAmount" step="0.01" min={0}
+                        defaultValue={Number(split.total).toFixed(2)}/>
+                    </label>
+                  </>}
                   <button type="submit">
                     Cobrar {money.format(Number(split.total))}
                   </button>
@@ -124,6 +140,14 @@ export default async function SplitOrderPage({
             </article>
           ))}
         </section>
+      )}
+
+      {state.splits.length>0 && !hasPaidSplit && (
+        <form action={resetUnpaidOrderSplit} className="card stack">
+          <input type="hidden" name="orderId" value={state.order.id}/>
+          <p className="muted">¿Cambió la forma de pago? Puedes quitar la división y cobrar la mesa completa. No se ha cobrado ninguna cuenta.</p>
+          <button type="submit">Quitar división · regresar a cuenta completa</button>
+        </form>
       )}
 
       {!hasPaidSplit && (
