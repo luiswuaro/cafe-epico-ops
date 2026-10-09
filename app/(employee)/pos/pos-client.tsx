@@ -178,7 +178,7 @@ export function PosClient({
       <aside className="card pos-cart">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">ORDEN ESPEJO</p>
+            <p className="eyebrow">ORDEN</p>
             <h2>Cuenta</h2>
           </div>
           <span className="pill">{cartLines.length} unidad(es)</span>
@@ -351,14 +351,14 @@ export function PosClient({
               className="pos-pay-button"
               disabled={cartLines.length === 0}
             >
-              Registrar espejo · {money.format(total)}
+              Cobrar · {money.format(total)}
             </button>
           </div>
         </form>
 
-        <p className="pos-shadow-warning">
-          MODO ESPEJO: comandas, puntos e inventario son simulación. Nada se
-          descuenta ni se acredita todavía.
+        <p className="muted compact-copy">
+          Al cobrar, OPS registra caja, inventario por receta y puntos del
+          cliente cuando corresponda.
         </p>
       </aside>
     </div>
