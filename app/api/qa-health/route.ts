@@ -1,7 +1,7 @@
 import {and,eq,sql} from "drizzle-orm";
 import {NextResponse} from "next/server";
 import {getDb} from "@/src/infrastructure/db/client";
-import {checklistTemplates,employees,inventoryBalances,organizations,posCashSessions,posManualProducts,stores} from "@/src/infrastructure/db/schema";
+import {organizations,stores} from "@/src/infrastructure/db/schema";
 
 export const dynamic="force-dynamic";
 export async function GET(){
