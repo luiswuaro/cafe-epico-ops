@@ -70,6 +70,7 @@ export default async function PosInventoryAuditPage() {
       <p>Movimientos de inventario visibles: <strong>{movements.length}</strong> (últimos 100).</p>
       <p className="muted">La cobertura de equivalencias es sólo una comprobación preliminar. También debemos verificar unidades, densidades, mermas, saldos físicos y modificación por pedido antes de pasar a LIVE.</p>
       <div className="pos-result-actions">
+        <Link href="/admin/pos/inventory-setup" className="button">Confirmar inventario inicial en lote</Link>
         <Link href="/admin/loyverse/inventory" className="button">Administrar equivalencias</Link>
         <Link href="/admin/pos/catalog" className="button">Revisar recetas POS</Link>
         <Link href="/inventory" className="button">Consultar inventario</Link>
