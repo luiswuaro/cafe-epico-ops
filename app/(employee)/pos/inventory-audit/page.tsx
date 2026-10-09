@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SearchableCollection } from "@/components/searchable-collection";
 import { and, desc, eq } from "drizzle-orm";
 import { getPosCatalog } from "@/src/application/pos/catalog";
 import { isCostOnlyComponent, costOnlyRecipeMeasure } from "@/src/application/pos/component-policy";
@@ -52,7 +53,7 @@ export default async function PosInventoryAuditPage() {
       const covered = stockComponents.filter((x)=>Boolean(x.variantExternalId && mapped.has(x.variantExternalId)));
       return { mode, components, stockComponents, covered:covered.length };
     });
-    return { id:product.id, name:product.name, recipes };
+    return { id:product.id, name:product.name, category:product.category, recipes };
   });
   const totalComponents = checks.reduce((sum,p)=>sum+p.recipes.reduce((n,r)=>n+r.stockComponents.length,0),0);
   const costOnlyComponents = checks.reduce((sum,p)=>sum+p.recipes.reduce((n,r)=>n+r.components.length-r.stockComponents.length,0),0);
@@ -88,7 +89,16 @@ export default async function PosInventoryAuditPage() {
     </section>
     <section className="card stack">
       <h2>Auditoría por bebida</h2>
-      {checks.map((p)=> <details key={p.id} className="task">
+      <SearchableCollection
+        label="bebidas de auditoría"
+        placeholder="Ej. tónico, matcha, jarabe, hielo, leche..."
+        entries={checks.map(p=>({
+          id:p.id,
+          name:p.name,
+          category:p.category,
+          status:p.recipes.every(r=>r.covered===r.stockComponents.length && r.components.length>0)?"MAPEADA":"INCOMPLETA",
+          searchText:p.recipes.flatMap(r=>r.components.map(c=>c.name)).join(" "),
+          content: <details className="task">
         <summary><strong>{p.name}</strong> · {p.recipes.map((r)=>r.covered+"/"+r.stockComponents.length).join(" / ")} componentes mapeados (aquí / llevar)</summary>
         <div className="stack" style={{paddingTop:12}}>
           {p.recipes.map((recipe)=><div key={recipe.mode}>
@@ -106,7 +116,9 @@ export default async function PosInventoryAuditPage() {
             </p>)}
           </div>)}
         </div>
-      </details>)}
+          </details>,
+        }))}
+      />
     </section>
     <section className="card stack">
       <h2>Saldos actuales</h2>
