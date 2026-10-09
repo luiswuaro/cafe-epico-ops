@@ -1,5 +1,9 @@
 import Link from "next/link";
 import { CommandBoardAutoRefresh } from "./auto-refresh";
+import { AddLiveProducts } from "./add-live-products";
+import { createLiveCommandCustomer, setLiveCommandCustomer } from "./live-actions";
+import { getPosCatalog } from "@/src/application/pos/catalog";
+import { getPosCustomers } from "@/src/application/pos/customers";
 import {
   cancelPosOrder,
   payLiveCommand,
@@ -49,7 +53,7 @@ export default async function PosOrdersPage({
     employee.homeStoreId,
   );
 
-  const [orders, canCancel, cash] = await Promise.all([
+  const [orders, canCancel, cash, catalog, customers] = await Promise.all([
     getOpenPosOrders(employee.organizationId, employee.homeStoreId),
     employeeHasPermission(
       employee.id,
@@ -57,6 +61,8 @@ export default async function PosOrdersPage({
       employee.homeStoreId,
     ),
     getCashState(employee.organizationId, employee.homeStoreId),
+    getPosCatalog(employee.organizationId),
+    getPosCustomers(employee.organizationId),
   ]);
 
   return (
@@ -120,6 +126,8 @@ export default async function PosOrdersPage({
                       <div>
                         <strong>{Number(line.quantity)}×</strong> {line.name}
                       </div>
+                      {order.mode==="LIVE" && line.createdAt.getTime()-order.createdAt.getTime()>30000 &&
+                        <strong className="status-ok" style={{marginLeft:8}}>Nueva ronda</strong>}
                       {line.note && (
                         <div className="command-line-note">↳ {line.note}</div>
                       )}
@@ -180,13 +188,49 @@ export default async function PosOrdersPage({
                   </div>
                 )}
 
-                {order.mode !== "LIVE" && (
+                {(
                   <Link
                     href={"/pos/orders/" + order.id + "/split"}
                     className="button"
                   >
-                    {partiallyPaid ? "Continuar cuentas divididas" : "Dividir cuenta"}
+                    {partiallyPaid ? "Continuar cobros divididos" : "Dividir cuenta"}
                   </Link>
+                )}
+
+                {order.mode==="LIVE" && !partiallyPaid && (
+                  <>
+                    <AddLiveProducts orderId={order.id}
+                      products={catalog.filter(item=>item.active).map(item=>({
+                        id:item.id,name:item.name,category:item.category,price:item.price
+                      }))}/>
+                    <details className="pos-cancel-panel">
+                      <summary>Cliente y puntos · 5%</summary>
+                      <div className="stack" style={{paddingTop:12}}>
+                        <form action={setLiveCommandCustomer} className="stack">
+                          <input name="orderId" type="hidden" value={order.id}/>
+                          <label>Cliente asociado
+                            <select name="customerId" defaultValue={order.customerId??""}>
+                              <option value="">Sin cliente · no genera puntos</option>
+                              {customers.map(customer=><option key={customer.id} value={customer.id}>
+                                {customer.name} · {Number(customer.pointsBalance).toFixed(2)} pts
+                              </option>)}
+                            </select>
+                          </label>
+                          <button type="submit">Guardar cliente de la mesa</button>
+                        </form>
+                        <details>
+                          <summary>+ Registrar nuevo cliente</summary>
+                          <form action={createLiveCommandCustomer} className="stack">
+                            <input name="orderId" type="hidden" value={order.id}/>
+                            <label>Nombre<input name="name" required minLength={2} maxLength={150}/></label>
+                            <label>Teléfono (opcional)<input name="phone" type="tel"/></label>
+                            <button type="submit">Registrar y asociar a mesa</button>
+                          </form>
+                        </details>
+                        <p className="muted">Los puntos se acreditan únicamente cuando se cobra. En cuentas divididas puedes elegir un cliente distinto para cada pago.</p>
+                      </div>
+                    </details>
+                  </>
                 )}
 
                 {!partiallyPaid && (
