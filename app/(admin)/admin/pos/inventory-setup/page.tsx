@@ -31,7 +31,7 @@ export default async function InventorySetupPage({
       <p>Productos analizados: {setup.products} · Componentes sin identificador: {setup.unsupported} · Equivalencias existentes: {setup.alreadyMapped}.</p>
       {params.added && <p role="status">Se crearon {params.added} registros iniciales. Revisa los pendientes.</p>}
       <p><strong>Las cifras de Loyverse son referencias, no un conteo físico validado.</strong></p>
-      <p className="muted">Una fuente fraccionaria puede representar kilogramos o litros. Confirma la unidad: g cuando el origen es kg, ml cuando el origen es L. Si Loyverse registra masa y necesitas volumen, primero debes calcular la conversión con la densidad medida; no elijas ml por el nombre del líquido.</p>
+      <p className="muted">Unidades de barra confirmadas: leche deslactosada L → ml; demás ingredientes fraccionarios kg → g; empaques y desechables → pz. Las cantidades físicas siguen pendientes de conteo.</p>
       <p className="muted">La cifra «apariciones» cuenta las recetas/configuraciones que usan el ingrediente (aquí y para llevar), no ventas realizadas.</p>
       <p className="muted">Agua y hielo sin saldo en Loyverse requieren tu decisión y un conteo/estimación autorizada antes de incorporarlos al inventario. El sistema no asignará cero o cantidades inventadas.</p>
       {!setup.sourceStore && <p className="alert">No hay una tienda Loyverse única identificada. No se puede importar.</p>}
@@ -41,9 +41,10 @@ export default async function InventorySetupPage({
         <h2>Saldos físicos y unidades</h2>
         {missing.map(item=>{
           const quantity = item.sourceQuantity;
-          const sourceLabel=quantity==null ? "Sin saldo reportado" : item.weighted
-            ? quantity.toFixed(3)+" (fraccionario) · factor 1000 pendiente de unidad"
-            : quantity.toFixed(0)+" pz";
+          const sourceUnit=item.officialUnit==="ml" ? "L" : item.officialUnit==="g" ? "kg" : "pz";
+          const sourceLabel=quantity==null ? "Sin saldo reportado" :
+            quantity.toFixed(item.weighted?3:0)+" "+sourceUnit+" → "+
+            (item.suggested ?? 0).toFixed(item.weighted?3:0)+" "+item.officialUnit;
           return <div key={item.id} style={{
             display:"flex",flexWrap:"wrap",gap:14,alignItems:"flex-start",
             padding:"14px 0",borderBottom:"1px solid #d9d3ca",
@@ -60,14 +61,8 @@ export default async function InventorySetupPage({
             </div>
             <div style={{flex:"1 1 130px",minWidth:120}}>
               <label>Unidad confirmada
-                {item.weighted
-                  ? <select name={"unit:"+item.id} defaultValue="">
-                    <option value="">Seleccionar</option>
-                    <option value="g">g (origen kg)</option>
-                    <option value="ml">ml (origen L)</option>
-                  </select>
-                  : <><input name={"unit:"+item.id} type="hidden" value="pz"/>
-                    <p><strong>pz</strong></p></>}
+                <input name={"unit:"+item.id} type="hidden" value={item.officialUnit}/>
+                <p><strong>{item.officialUnit}</strong></p>
               </label>
             </div>
             <div style={{flex:"1 1 140px",minWidth:125}}>
