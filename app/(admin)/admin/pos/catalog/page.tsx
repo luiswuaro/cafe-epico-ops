@@ -2,6 +2,7 @@ import {
   createManualPosProduct,
   savePosRecipe,
   togglePosCatalogItem,
+  updatePosCatalogPrice,
 } from "./actions";
 import { RecipeServiceEditor } from "./recipe-editor";
 import { SearchableCollection } from "@/components/searchable-collection";
@@ -122,6 +123,24 @@ export default async function PosCatalogAdminPage() {
               </form>
             </div>
 
+            <details className="pos-recipe-editor">
+              <summary>Editar precio de venta</summary>
+              <form action={updatePosCatalogPrice} className="stack pos-price-edit">
+                <input type="hidden" name="catalogId" value={item.id}/>
+                <label>
+                  Precio en OPS (MXN)
+                  <input type="number" name="price" defaultValue={item.price.toFixed(2)}
+                    min="0.01" max="100000" step="0.01" required/>
+                </label>
+                <p className="muted">
+                  {item.sourceType==="LOYVERSE"
+                    ?"Precio independiente de Loyverse; sólo aplica al POS de OPS."
+                    :"Precio de producto creado en OPS."}
+                  {" "}Los tickets guardados conservan su precio original.
+                </p>
+                <button type="submit">Guardar precio</button>
+              </form>
+            </details>
             <details className="pos-recipe-editor">
               <summary>Editar receta</summary>
               <form action={savePosRecipe} className="stack">
