@@ -43,6 +43,7 @@ export async function checkoutLiveOrder(input:{
   tenderedAmount:number|null;
   tableLabel:string|null;
   note:string|null;
+  allowStockShortage?:boolean;
 }) {
   if(!isPosLiveEnabled()) throw new Error("Cobros LIVE deshabilitados por seguridad.");
   if(input.cart.length===0 || input.cart.length>30) throw new Error("Carrito inválido.");
@@ -58,9 +59,6 @@ export async function checkoutLiveOrder(input:{
     const pilotProduct = process.env.POS_LIVE_PILOT_ITEM?.trim();
     if(pilotProduct && item.name.toLocaleUpperCase("es-MX") !== pilotProduct.toLocaleUpperCase("es-MX")){
       throw new Error("Piloto LIVE limitado a "+pilotProduct+". No se cobró otro producto.");
-    }
-    if(line.note?.trim() && line.note.trim().toLocaleLowerCase("es-MX")!=="extra caliente"){
-      throw new Error("Modificador libre no permitido en LIVE ("+item.name+"). Usa receta configurada; sólo se admite la nota extra caliente.");
     }
     const lineMode=line.serviceMode??input.serviceMode;
     const recipeComponents=item.serviceRecipes[lineMode].components;
@@ -213,6 +211,7 @@ export async function checkoutLiveOrder(input:{
       inventoryItemId:loyverseInventoryMappings.inventoryItemId,
       factor:loyverseInventoryMappings.factorToCanonical,
       unit:inventoryItems.canonicalUnit,
+      itemName:inventoryItems.name,
     }).from(loyverseInventoryMappings)
       .innerJoin(inventoryItems,eq(inventoryItems.id,loyverseInventoryMappings.inventoryItemId))
       .where(and(
@@ -222,7 +221,7 @@ export async function checkoutLiveOrder(input:{
         eq(inventoryItems.isActive,true),
       ));
     const byExternal=new Map(mappings.map(mapping=>[mapping.externalId,mapping]));
-    const consume=new Map<string,{locationId:string;itemId:string;amount:number;unit:string;names:Set<string>}>();
+    const consume=new Map<string,{locationId:string;itemId:string;itemName:string;amount:number;unit:string;names:Set<string>}>();
     let costOnlyComponents = 0;
     for(const line of lines){
       for(const component of line.components){
@@ -243,7 +242,7 @@ export async function checkoutLiveOrder(input:{
           existing.amount=Math.round((existing.amount+amount)*1000)/1000;
           existing.names.add(line.item.name);
         } else {
-          consume.set(key,{locationId:map.locationId,itemId:map.inventoryItemId,unit:map.unit,
+          consume.set(key,{locationId:map.locationId,itemId:map.inventoryItemId,itemName:map.itemName,unit:map.unit,
             amount,names:new Set([line.item.name])});
         }
       }
@@ -254,13 +253,25 @@ export async function checkoutLiveOrder(input:{
       eq(inventoryBalances.storeId,input.storeId),
     )).for("update");
     const byStock=new Map(stocks.map(stock=>[mapKey(stock.locationId,stock.inventoryItemId),stock]));
+    const stockShortages:Array<{ingredient:string;available:number;required:number;deficit:number;unit:string;products:string[]}>=[];
     for(const [key,requested] of consume){
       const stock=byStock.get(key);
-      if(!stock) throw new Error("Falta confirmar el saldo inicial del insumo usado en "+[...requested.names].join(", "));
-      if(Number(stock.theoreticalQuantity)+0.000001 < requested.amount){
-        throw new Error("Inventario insuficiente en "+[...requested.names].join(", ")+
-          " (necesario: "+requested.amount+" "+requested.unit+").");
+      if(!stock)throw new Error("Falta confirmar el saldo inicial de "+requested.itemName+
+        " utilizado en "+[...requested.names].join(", "));
+      const available=Number(stock.theoreticalQuantity);
+      if(available+0.000001<requested.amount){
+        const deficit=Math.round((requested.amount-available)*1000)/1000;
+        stockShortages.push({
+          ingredient:requested.itemName,available,required:requested.amount,deficit,
+          unit:requested.unit,products:[...requested.names],
+        });
       }
+    }
+    if(stockShortages.length&&!input.allowStockShortage){
+      const x=stockShortages[0];
+      throw new Error("Falta "+x.ingredient+": hay "+x.available+" "+x.unit+
+        ", se requieren "+x.required+" "+x.unit+" (faltan "+x.deficit+" "+x.unit+
+        "). Corrige el conteo físico o solicita autorización del propietario para registrar el faltante.");
     }
 
     const [order]=pending
@@ -351,13 +362,25 @@ export async function checkoutLiveOrder(input:{
         });
       }
     }
+    if(stockShortages.length){
+      await tx.insert(auditEvents).values({
+        organizationId:input.organizationId,storeId:input.storeId,
+        actorUserId:input.actorUserId,actorEmployeeId:input.employeeId,
+        action:"POS_LIVE_INVENTORY_SHORTAGE_AUTHORIZED",
+        entityType:"pos_order",entityId:order.id,
+        afterData:{folio:order.folio,shortages:stockShortages,
+          reason:"Producto físicamente entregado; ajuste de existencia pendiente",
+          requiresPhysicalCount:true},
+      });
+    }
     await tx.insert(auditEvents).values({
       organizationId:input.organizationId,storeId:input.storeId,
       actorUserId:input.actorUserId,actorEmployeeId:input.employeeId,
       action:split?"POS_LIVE_SPLIT_PAID":pending?"POS_LIVE_COMMAND_PAID":"POS_LIVE_SALE_PAID",entityType:"pos_order",entityId:order.id,
       afterData:{folio:order.folio,total,payment:input.paymentMethod,fromOpenCommand:Boolean(pending),
         splitId:split?.id??null,finalPayment:!split||finalSplitPayment,consumptionCount:consume.size,costOnlyComponents,
-        customerId:input.customerId,inventoryEffectApplied:true,loyaltyEffectApplied:Boolean(input.customerId)},
+        customerId:input.customerId,inventoryEffectApplied:true,loyaltyEffectApplied:Boolean(input.customerId),
+        stockShortageOverride:stockShortages.length>0},
     });
     return {id:order.id,alreadyRecorded:false};
   });

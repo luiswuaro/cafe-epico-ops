@@ -67,8 +67,6 @@ export async function addProductsToLiveCommand(data:FormData){
         const lineMode: "DINE_IN"|"TAKEAWAY"=rawMode;
         const state=readyById.get(item.id)?.recipes.find(r=>r.mode===lineMode);
         if(!state?.ready)throw new Error(item.name+" ("+(lineMode==="DINE_IN"?"aquí":"para llevar")+"): "+(state?.errors.join("; ")||"Receta no confirmada"));
-        if(line.note?.trim() && line.note.trim().toLocaleLowerCase("es-MX")!=="extra caliente")
-          throw new Error("Nota modifica ingredientes; configura la receta de "+item.name);
         const recipe=item.serviceRecipes[lineMode];
         return {item,recipe,lineMode,quantity:line.quantity,note:line.note?.trim()||null,
           lineTotal:Math.round(item.price*line.quantity*100)/100};

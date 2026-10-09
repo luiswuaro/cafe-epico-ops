@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { checkoutLiveOrder } from "@/src/application/pos/live";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
-import { assertEmployeePermission } from "@/src/infrastructure/auth/permissions";
+import { assertEmployeePermission, employeeHasPermission } from "@/src/infrastructure/auth/permissions";
 
 const cartSchema = z.array(z.object({
   externalId:z.string().min(1),
@@ -13,11 +13,13 @@ const cartSchema = z.array(z.object({
   serviceMode:z.enum(["DINE_IN","TAKEAWAY"]).optional(),
 })).min(1).max(30);
 
-export async function createLiveSale(formData:FormData) {
+export async function submitLiveSale(_previous:{error:string|null},formData:FormData):Promise<{error:string|null}> {
   const {user,employee}=await getCurrentEmployee();
   if(!employee.homeStoreId) throw new Error("No hay sucursal asignada.");
   await assertEmployeePermission(employee.id,"pos.sell",employee.homeStoreId);
 
+  let savedOrderId:string;
+  try {
   const parsed=z.object({
     clientOrderId:z.string().uuid(),
     cart:cartSchema,
@@ -27,6 +29,7 @@ export async function createLiveSale(formData:FormData) {
     customerId:z.union([z.string().uuid(),z.literal("")]),
     tableLabel:z.string().max(100),
     note:z.string().max(300),
+    allowStockShortage:z.boolean().optional(),
   }).parse({
     clientOrderId:String(formData.get("clientOrderId")??""),
     cart:JSON.parse(String(formData.get("cart")??"[]")),
@@ -36,10 +39,13 @@ export async function createLiveSale(formData:FormData) {
     customerId:String(formData.get("customerId")??""),
     tableLabel:String(formData.get("tableLabel")??""),
     note:String(formData.get("note")??""),
+    allowStockShortage:formData.get("allowStockShortage")==="on",
   });
-  let result;
-  try {
-    result=await checkoutLiveOrder({
+  if(parsed.allowStockShortage){
+    const permitted=await employeeHasPermission(employee.id,"inventory.adjust",employee.homeStoreId);
+    if(!permitted)throw new Error("Solo el propietario puede autorizar una diferencia de inventario.");
+  }
+  const result=await checkoutLiveOrder({
     organizationId:employee.organizationId,storeId:employee.homeStoreId,
     actorUserId:user.id,employeeId:employee.id,
     clientOrderId:parsed.clientOrderId,
@@ -49,10 +55,12 @@ export async function createLiveSale(formData:FormData) {
       ? Number(parsed.tenderedAmount) : null,
     customerId:parsed.customerId||null,tableLabel:parsed.tableLabel||null,
     note:parsed.note||null,
+    allowStockShortage:parsed.allowStockShortage,
     });
-  } catch (error) {
-    const message=error instanceof Error ? error.message : "No se pudo cobrar. Revisa caja, receta e inventario.";
-    redirect("/pos?error="+encodeURIComponent(message.slice(0,260)));
+  savedOrderId=result.id;
+  }catch(error){
+    const message=error instanceof Error?error.message:"No se pudo cobrar. Revisa caja, receta e inventario.";
+    return {error:message.slice(0,350)};
   }
-  redirect("/pos/receipt/"+result.id);
+  redirect("/pos/receipt/"+savedOrderId);
 }

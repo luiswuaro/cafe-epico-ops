@@ -12,7 +12,7 @@ import { getPosReadiness } from "@/src/application/pos/readiness";
 import { getOpenCashSession } from "@/src/application/pos/cash";
 import { syncLoyverseReceipts } from "@/src/application/loyverse/sync";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
-import { assertEmployeePermission } from "@/src/infrastructure/auth/permissions";
+import { assertEmployeePermission, employeeHasPermission } from "@/src/infrastructure/auth/permissions";
 import { getDb } from "@/src/infrastructure/db/client";
 import {
   auditEvents,
@@ -178,9 +178,6 @@ async function createShadowOrder(
     const readiness=await getPosReadiness(employee.organizationId,employee.homeStoreId);
     const byId=new Map(readiness.products.map(p=>[p.id,p]));
     for(const line of input.lines){
-      if(line.note && line.note.toLocaleLowerCase("es-MX")!=="extra caliente"){
-        throw new Error("Modificador no autorizado en LIVE: "+line.item.name+". Ajusta la receta.");
-      }
       const state=byId.get(line.item.id)?.recipes.find(r=>r.mode===line.lineMode);
       if(!state?.ready) throw new Error("Comanda bloqueada: "+line.item.name+" — "+
         (state?.errors.join("; ")||"receta incompleta"));
@@ -337,6 +334,17 @@ export async function createShadowCommand(formData: FormData) {
   redirect("/pos/orders?created=" + orderId);
 }
 
+export async function saveLiveCommand(_previous:{error:string|null},formData:FormData):Promise<{error:string|null}> {
+  let orderId:string;
+  try{
+    orderId=await createShadowOrder(formData,"SENT",undefined,"LIVE");
+  }catch(error){
+    const message=error instanceof Error?error.message:"No se pudo guardar la comanda.";
+    return {error:message.slice(0,330)};
+  }
+  redirect("/pos/orders?created="+orderId);
+}
+
 export async function createLiveCommand(formData:FormData) {
   let orderId:string;
   try{
@@ -371,6 +379,11 @@ export async function payLiveCommand(formData:FormData) {
   if(!lines.length)throw new Error("Comanda sin productos.");
   let result:{id:string;alreadyRecorded:boolean};
   try{
+    const allowStockShortage=formData.get("allowStockShortage")==="on";
+    if(allowStockShortage){
+      const allowed=await employeeHasPermission(employee.id,"inventory.adjust",employee.homeStoreId);
+      if(!allowed)throw new Error("Sólo el propietario puede autorizar cobro con diferencia de inventario.");
+    }
     result=await checkoutLiveOrder({
     organizationId:employee.organizationId,storeId:employee.homeStoreId,
     actorUserId:user.id,employeeId:employee.id,
@@ -384,10 +397,11 @@ export async function payLiveCommand(formData:FormData) {
     serviceMode:order.serviceMode as PosServiceMode,
     paymentMethod,tenderedAmount,
     tableLabel:order.tableLabel,note:order.note,
+    allowStockShortage,
     });
   }catch(error){
     const message=error instanceof Error?error.message:"No se pudo cobrar la comanda.";
-    redirect("/pos/orders?error="+encodeURIComponent(message.slice(0,260)));
+    redirect("/pos/checkout?ticket="+orderId+"&error="+encodeURIComponent(message.slice(0,330)));
   }
   redirect("/pos/receipt/"+result.id);
 }
