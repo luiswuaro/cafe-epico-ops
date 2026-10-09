@@ -59,6 +59,7 @@ export async function saveOrderSplit(formData: FormData) {
     .limit(1);
 
   if (!order) throw new Error("Orden no encontrada");
+  if(order.mode==="LIVE")throw new Error("Dividir una cuenta LIVE requiere cobro de inventario por cuenta. Por ahora cobra la cuenta completa desde Comandas.");
   if (!["SENT", "PREPARING", "READY"].includes(order.status)) {
     throw new Error(
       "Sólo puedes dividir una comanda abierta sin pagos parciales",
@@ -227,6 +228,7 @@ export async function payOrderSplit(formData: FormData) {
     .limit(1);
 
   if (!order) throw new Error("Orden no encontrada");
+  if(order.mode==="LIVE")throw new Error("Dividir una cuenta LIVE requiere cobro de inventario por cuenta. Por ahora cobra la cuenta completa desde Comandas.");
 
   const cashSession =
     paymentMethod === "CASH"

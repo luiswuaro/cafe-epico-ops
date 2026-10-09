@@ -33,6 +33,7 @@ export async function checkoutLiveOrder(input:{
   employeeId:string;
   actorUserId:string;
   clientOrderId:string;
+  existingOrderId?:string;
   cart:LiveCart;
   customerId:string|null;
   serviceMode:PosServiceMode;
@@ -98,11 +99,45 @@ export async function checkoutLiveOrder(input:{
   const result=await db.transaction(async tx=>{
     // Serializar cobros de una sucursal: validación de caja, inventario y cliente es atómica.
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${input.storeId}))`);
-    const [duplicate]=await tx.select({id:posOrders.id}).from(posOrders).where(and(
-      eq(posOrders.organizationId,input.organizationId),
-      eq(posOrders.clientOrderId,input.clientOrderId),
-    )).limit(1);
-    if(duplicate) return {id:duplicate.id,alreadyRecorded:true};
+    // Si la comanda existe, se liquida sobre el MISMO folio.
+    // El bloqueo protege contra cobros dobles desde distintos dispositivos.
+    let pending:typeof posOrders.$inferSelect|undefined;
+    if(input.existingOrderId){
+      [pending]=await tx.select().from(posOrders).where(and(
+        eq(posOrders.id,input.existingOrderId),
+        eq(posOrders.organizationId,input.organizationId),
+        eq(posOrders.storeId,input.storeId),
+      )).for("update").limit(1);
+      if(!pending || pending.mode!=="LIVE" || pending.clientOrderId!==input.clientOrderId)
+        throw new Error("Comanda LIVE no encontrada.");
+      if(pending.status==="PAID") return {id:pending.id,alreadyRecorded:true};
+      if(!["SENT","PREPARING","READY"].includes(pending.status))
+        throw new Error("Esta comanda ya no está abierta para cobro.");
+      if(pending.serviceMode!==input.serviceMode ||
+        (pending.tableLabel||null)!==(input.tableLabel||null) ||
+        (pending.customerId||null)!==(input.customerId||null))
+        throw new Error("Los datos de la comanda cambiaron. Actualiza Comandas.");
+      const savedLines=await tx.select().from(posOrderLines)
+        .where(eq(posOrderLines.orderId,pending.id));
+      const signature=(values:Array<{catalogExternalId:string;quantity:number;note:string|null;price:number}>)=>
+        values.map(v=>[v.catalogExternalId,v.quantity,v.note||"",v.price.toFixed(2)].join("|"))
+          .sort().join("::");
+      const snapshot=signature(savedLines.map(l=>({
+        catalogExternalId:l.catalogExternalId,
+        quantity:Number(l.quantity),note:l.note,price:Number(l.unitPrice),
+      })));
+      const checkout=signature(lines.map(l=>({
+        catalogExternalId:l.item.id,quantity:l.quantity,note:l.note,price:l.price,
+      })));
+      if(snapshot!==checkout || Number(pending.total)!==total)
+        throw new Error("La comanda cambió de precio, producto o cantidad. No se ha cobrado; solicita revisión.");
+    } else {
+      const [duplicate]=await tx.select({id:posOrders.id}).from(posOrders).where(and(
+        eq(posOrders.organizationId,input.organizationId),
+        eq(posOrders.clientOrderId,input.clientOrderId),
+      )).limit(1);
+      if(duplicate) return {id:duplicate.id,alreadyRecorded:true};
+    }
 
     const [session]=await tx.select().from(posCashSessions).where(and(
       eq(posCashSessions.organizationId,input.organizationId),
@@ -176,18 +211,25 @@ export async function checkoutLiveOrder(input:{
       }
     }
 
-    const [order]=await tx.insert(posOrders).values({
-      organizationId:input.organizationId,storeId:input.storeId,
-      employeeId:input.employeeId,clientOrderId:input.clientOrderId,
-      folio:"OP-"+now.toISOString().replace(/[-:TZ.]/g,"").slice(0,14)+"-"+input.clientOrderId.slice(-5).toUpperCase(),
-      mode:"LIVE",status:"PAID",serviceMode:input.serviceMode,
-      tableLabel:input.serviceMode==="DINE_IN"?input.tableLabel:null,
-      customerId:input.customerId,businessDate:businessDate(now),
-      subtotal:total.toFixed(2),total:total.toFixed(2),note:input.note,
-      loyaltyPointsPreview:(input.customerId?total*0.05:0).toFixed(2),
-      loyaltyEffectApplied:Boolean(input.customerId),inventoryEffectApplied:true,paidAt:now,
-    }).returning({id:posOrders.id,folio:posOrders.folio});
-    await tx.insert(posOrderLines).values(lines.map(line=>({
+    const [order]=pending
+      ? await tx.update(posOrders).set({
+          status:"PAID",paidAt:now,updatedAt:now,
+          inventoryEffectApplied:true,loyaltyEffectApplied:Boolean(input.customerId),
+        }).where(and(eq(posOrders.id,pending.id),eq(posOrders.status,pending.status)))
+          .returning({id:posOrders.id,folio:posOrders.folio})
+      : await tx.insert(posOrders).values({
+          organizationId:input.organizationId,storeId:input.storeId,
+          employeeId:input.employeeId,clientOrderId:input.clientOrderId,
+          folio:"OP-"+now.toISOString().replace(/[-:TZ.]/g,"").slice(0,14)+"-"+input.clientOrderId.slice(-5).toUpperCase(),
+          mode:"LIVE",status:"PAID",serviceMode:input.serviceMode,
+          tableLabel:input.serviceMode==="DINE_IN"?input.tableLabel:null,
+          customerId:input.customerId,businessDate:businessDate(now),
+          subtotal:total.toFixed(2),total:total.toFixed(2),note:input.note,
+          loyaltyPointsPreview:(input.customerId?total*0.05:0).toFixed(2),
+          loyaltyEffectApplied:Boolean(input.customerId),inventoryEffectApplied:true,paidAt:now,
+        }).returning({id:posOrders.id,folio:posOrders.folio});
+    if(!order) throw new Error("Comanda modificada durante el cobro.");
+    if(!pending) await tx.insert(posOrderLines).values(lines.map(line=>({
       organizationId:input.organizationId,orderId:order.id,
       catalogExternalId:line.item.id,variantExternalId:line.item.variantExternalId,
       nameSnapshot:line.item.name,categorySnapshot:line.item.category,
@@ -250,8 +292,8 @@ export async function checkoutLiveOrder(input:{
     await tx.insert(auditEvents).values({
       organizationId:input.organizationId,storeId:input.storeId,
       actorUserId:input.actorUserId,actorEmployeeId:input.employeeId,
-      action:"POS_LIVE_SALE_PAID",entityType:"pos_order",entityId:order.id,
-      afterData:{folio:order.folio,total,payment:input.paymentMethod,consumptionCount:consume.size,costOnlyComponents,
+      action:pending?"POS_LIVE_COMMAND_PAID":"POS_LIVE_SALE_PAID",entityType:"pos_order",entityId:order.id,
+      afterData:{folio:order.folio,total,payment:input.paymentMethod,fromOpenCommand:Boolean(pending),consumptionCount:consume.size,costOnlyComponents,
         customerId:input.customerId,inventoryEffectApplied:true,loyaltyEffectApplied:Boolean(input.customerId)},
     });
     return {id:order.id,alreadyRecorded:false};

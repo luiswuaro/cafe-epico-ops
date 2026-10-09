@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import {
   createPosCustomer,
+  createLiveCommand,
   createShadowCommand,
   createShadowSale,
 } from "./actions";
@@ -344,8 +345,8 @@ export function PosClient({
 
           {serviceMode === "DINE_IN" && (
             <label>
-              Mesa / referencia
-              <input name="tableLabel" placeholder="Ej. Mesa 3, balcón 1" />
+              Mesa / referencia (para comandas aquí)
+              <input name="tableLabel" placeholder="Ej. Mesa 3, balcón 1" maxLength={100} />
             </label>
           )}
 
@@ -384,26 +385,27 @@ export function PosClient({
           </label>
 
           <div className="pos-command-actions">
-            {!liveEnabled && <button
+            <button
               type="submit"
-              formAction={createShadowCommand}
+              formAction={liveEnabled ? createLiveCommand : createShadowCommand}
+              formNoValidate
               className="pos-command-button"
               disabled={cartLines.length === 0}
             >
-              Enviar comanda
-            </button>}
+              Enviar comanda · cobrar después
+            </button>
             <button
               type="submit"
               className="pos-pay-button"
               disabled={cartLines.length === 0 || (liveEnabled && paymentMethod==="CASH" && (tendered.trim()==="" || Number(tendered)<total))}
             >
-              {liveEnabled ? "Cobrar" : "Registrar espejo"} · {money.format(total)}
+              {liveEnabled ? "Cobrar ahora" : "Registrar espejo"} · {money.format(total)}
             </button>
           </div>
         </form>
 
         {liveEnabled
-          ? <p className="pos-shadow-warning">MODO LIVE: sólo cobro directo con receta completa y saldo confirmado. Las notas no cambian insumos: usa recetas verificadas y evita modificaciones no estructuradas.</p>
+          ? <p className="pos-shadow-warning">MODO LIVE: enviar comanda no cobra ni descuenta inventario. El cobro definitivo descuenta las recetas y registra caja y puntos. No cambies ingredientes mediante notas libres.</p>
           : <p className="pos-shadow-warning">MODO ESPEJO: comandas, puntos e inventario son simulación. Nada se descuenta ni se acredita todavía.</p>}
       </aside>
     </div>
