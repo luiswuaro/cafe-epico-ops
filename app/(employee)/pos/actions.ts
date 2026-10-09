@@ -389,7 +389,7 @@ export async function payLiveCommand(formData:FormData) {
     actorUserId:user.id,employeeId:employee.id,
     existingOrderId:order.id,clientOrderId:order.clientOrderId,
     cart:lines.map(line=>({
-      externalId:line.catalogExternalId,
+      sourceLineId:line.id,externalId:line.catalogExternalId,
       quantity:Number(line.quantity),note:line.note,
       serviceMode:line.expectedConsumption?.serviceMode==="TAKEAWAY"?"TAKEAWAY":"DINE_IN",
     })),
