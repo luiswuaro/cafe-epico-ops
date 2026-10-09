@@ -1502,3 +1502,38 @@ th, td { vertical-align: top; }
     max-width: 100%;
   }
 }
+
+
+/* OPS 2026 — navegación en drawer: acceso con un toque desde POS y móvil. */
+.ops-nav-shell{display:flex;align-items:center;gap:.65rem}
+.ops-desktop-shortcuts{display:flex;align-items:center;gap:.2rem}
+.ops-shortcut{display:inline-flex;align-items:center;gap:.4rem;padding:.55rem .8rem;border-radius:12px;font-size:.91rem;font-weight:750;min-height:44px}
+.ops-shortcut:hover,.ops-shortcut.is-active{background:#e6dfd4}
+.ops-nav-icon{display:inline-flex;align-items:center;justify-content:center;width:1.3rem;font-size:1.2rem;font-weight:800}
+.ops-menu-trigger{display:flex;gap:.55rem;align-items:center;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:.55rem .8rem;min-height:44px;border-radius:12px}
+.ops-menu-trigger:hover{background:#eee8de}
+.ops-drawer-root{position:fixed;inset:0;z-index:150}
+.ops-drawer-backdrop{position:absolute;inset:0;border:0;border-radius:0;background:rgba(17,16,15,.48);width:100%;height:100%;cursor:pointer}
+.ops-drawer{position:absolute;left:0;top:0;bottom:0;width:min(370px,calc(100vw - 48px));background:var(--surface);box-shadow:14px 0 45px rgba(0,0,0,.18);display:flex;flex-direction:column;min-width:0}
+.ops-drawer-head{display:flex;justify-content:space-between;align-items:center;padding:1.1rem 1rem;border-bottom:1px solid var(--line);font-size:1.13rem}
+.ops-drawer-head button{min-width:44px;min-height:44px;background:#eee9df;color:var(--ink);font-size:1.7rem;padding:0}
+.ops-drawer-list{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:.75rem .75rem calc(1.5rem + env(safe-area-inset-bottom))}
+.ops-drawer-group{padding:.45rem 0 .65rem;border-bottom:1px solid var(--line)}
+.ops-drawer-group p{font-size:.72rem;letter-spacing:.12em;color:var(--muted);font-weight:850;margin:.35rem .65rem .55rem;text-transform:uppercase}
+.ops-drawer-link{display:flex;align-items:center;gap:.75rem;min-height:49px;padding:.7rem .75rem;margin:.08rem 0;border-radius:12px;font-weight:680}
+.ops-drawer-link:hover,.ops-drawer-link.is-active{background:#eae4d9}
+.ops-drawer-link.is-active{box-shadow:inset 3px 0 var(--ink)}
+.ops-drawer-signout{padding:.85rem .2rem}
+.ops-drawer-signout button{width:100%;background:#eee9df;color:var(--ink);min-height:48px}
+.ops-mobile-tabs{display:none}
+@media(max-width:760px){
+  body{padding-bottom:calc(4.6rem + env(safe-area-inset-bottom))}
+  .topbar{position:sticky;top:0;z-index:40;flex-direction:row;align-items:center;justify-content:space-between;padding:.5rem .8rem;min-height:3.5rem}
+  .topbar .brand{font-size:.95rem}
+  .ops-desktop-shortcuts{display:none}
+  .ops-menu-trigger{min-height:44px}
+  .ops-mobile-tabs{display:flex;position:fixed;bottom:0;left:0;right:0;z-index:70;align-items:stretch;justify-content:space-around;padding:.3rem .3rem calc(.3rem + env(safe-area-inset-bottom));background:rgba(255,253,248,.98);border-top:1px solid var(--line);box-shadow:0 -8px 22px rgba(0,0,0,.07)}
+  .ops-mobile-tabs .ops-shortcut,.ops-mobile-tabs button{display:flex;flex:1;flex-direction:column;align-items:center;justify-content:center;gap:.12rem;font-size:.73rem;font-weight:800;min-width:0;min-height:50px;border-radius:10px;padding:.22rem .2rem;color:var(--ink);background:transparent}
+  .ops-mobile-tabs .ops-shortcut.is-active{background:#e9e2d7}
+  .ops-mobile-tabs .ops-nav-icon{font-size:1.35rem;width:auto;line-height:1.1}
+}
