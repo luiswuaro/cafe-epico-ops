@@ -284,6 +284,16 @@ export async function getPosCatalog(
     const override = overrideBySource.get(item.externalId);
     const dineIn = storedRecipe(override?.recipeDineIn);
     const takeaway = storedRecipe(override?.recipeTakeaway);
+    const singlePiece = !asBool(item.payload.sold_by_weight) ? [{
+      variantExternalId: variant.externalId,
+      itemExternalId: item.externalId,
+      name: item.itemName,
+      quantity: 1,
+      unitLabel: "pz",
+      category: "ALIMENTOS",
+    }] : [];
+    const componentsHere = dineIn?.components ?? singlePiece;
+    const componentsTakeaway = takeaway?.components ?? dineIn?.components ?? singlePiece;
 
     return [{
       id: item.externalId,
@@ -301,15 +311,14 @@ export async function getPosCatalog(
         DINE_IN: {
           externalId: item.externalId,
           sourceCategory: "ALIMENTOS",
-          components: dineIn?.components ?? [],
-          configured: (dineIn?.components.length ?? 0) > 0,
+          components: componentsHere,
+          configured: componentsHere.length > 0,
         },
         TAKEAWAY: {
           externalId: item.externalId,
           sourceCategory: "ALIMENTOS",
-          components: takeaway?.components ?? dineIn?.components ?? [],
-          configured:
-            (takeaway?.components.length ?? dineIn?.components.length ?? 0) > 0,
+          components: componentsTakeaway,
+          configured: componentsTakeaway.length > 0,
         },
       },
     }];
