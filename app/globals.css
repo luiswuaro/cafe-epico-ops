@@ -1537,3 +1537,13 @@ th, td { vertical-align: top; }
   .ops-mobile-tabs .ops-shortcut.is-active{background:#e9e2d7}
   .ops-mobile-tabs .ops-nav-icon{font-size:1.35rem;width:auto;line-height:1.1}
 }
+
+
+/* Intervención postventa: empaque únicamente, sin recrear cobro. */
+.receipt-extra-packaging{width:min(600px,calc(100% - 1rem));margin:1rem auto}
+.receipt-extra-packaging h2{margin-bottom:0}
+.receipt-packaging-line{display:grid;grid-template-columns:minmax(0,1fr) minmax(190px,230px);gap:.8rem;align-items:end;border-top:1px solid var(--line);padding:.9rem 0}
+.receipt-packaging-line p{margin:.25rem 0 0}
+.receipt-packaging-line form{display:grid;gap:.5rem}
+.receipt-packaging-line input{margin-top:.3rem}
+@media(max-width:560px){.receipt-packaging-line{grid-template-columns:1fr}.receipt-packaging-line form{grid-template-columns:90px minmax(0,1fr);align-items:end}}
