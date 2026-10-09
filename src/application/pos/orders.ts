@@ -28,6 +28,7 @@ export async function getOpenPosOrders(
       createdAt: posOrders.createdAt,
       employeeName: employees.name,
       customerName: posCustomers.name,
+      customerId: posOrders.customerId,
       loyaltyPointsPreview: posOrders.loyaltyPointsPreview,
     })
     .from(posOrders)
@@ -51,6 +52,7 @@ export async function getOpenPosOrders(
       name: posOrderLines.nameSnapshot,
       quantity: posOrderLines.quantity,
       note: posOrderLines.note,
+      createdAt:posOrderLines.createdAt,
     })
     .from(posOrderLines)
     .where(inArray(posOrderLines.orderId, rows.map((row) => row.id)))
