@@ -49,6 +49,9 @@ export async function checkoutLiveOrder(input:{
     if(!item || !item.active || line.quantity<1 || !Number.isInteger(line.quantity) || line.quantity>20){
       throw new Error("Producto no disponible para la venta.");
     }
+    if(line.note?.trim() && line.note.trim().toLocaleLowerCase("es-MX")!=="extra caliente"){
+      throw new Error("Modificador libre no permitido en LIVE ("+item.name+"). Usa receta configurada; sólo se admite la nota extra caliente.");
+    }
     if(item.serviceRecipes[input.serviceMode].components.length===0) {
       throw new Error("La receta de "+item.name+" no tiene insumos configurados.");
     }
@@ -82,7 +85,7 @@ export async function checkoutLiveOrder(input:{
       eq(posCashSessions.organizationId,input.organizationId),
       eq(posCashSessions.storeId,input.storeId),
       eq(posCashSessions.status,"OPEN"),
-    )).limit(1);
+    )).for("update").limit(1);
     if(!session) throw new Error("Abre una caja operativa antes de cobrar.");
     
     if(input.customerId){
@@ -134,7 +137,7 @@ export async function checkoutLiveOrder(input:{
     const stocks=await tx.select().from(inventoryBalances).where(and(
       eq(inventoryBalances.organizationId,input.organizationId),
       eq(inventoryBalances.storeId,input.storeId),
-    ));
+    )).for("update");
     const byStock=new Map(stocks.map(stock=>[mapKey(stock.locationId,stock.inventoryItemId),stock]));
     for(const [key,requested] of consume){
       const stock=byStock.get(key);
