@@ -99,14 +99,14 @@ export async function confirmPosInventorySetup(formData:FormData){
       await tx.insert(inventoryBalances).values({
         organizationId:employee.organizationId,
         storeId:employee.homeStoreId!,
-        locationId:row.locationId,inventoryItemId:item.id,
+        locationId:row.locationId,inventoryItemId:itemId,
         theoreticalQuantity:row.quantity.toFixed(3),
       });
       if(row.quantity>0)await tx.insert(inventoryMovements).values({
         organizationId:employee.organizationId,
         storeId:employee.homeStoreId!,
         locationId:row.locationId,
-        inventoryItemId:item.id,
+        inventoryItemId:itemId,
         movementType:"OPENING_BALANCE",
         quantityDelta:row.quantity.toFixed(3),
         sourceType:"POS_LIVE_INITIAL_COUNT",
