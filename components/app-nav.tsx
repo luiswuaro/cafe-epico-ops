@@ -62,7 +62,7 @@ export async function AppNav() {
             <Link href="/pos/cash/history">Historial de cajas</Link>
           </div>
         </details>
-      )
+      )}
       {canCash && <Link href="/pos/cash">Caja</Link>}
       <Link href="/checklists">Checklist</Link>
       <Link href="/handoff">Entrega</Link>
