@@ -366,6 +366,7 @@ export async function payLiveCommand(formData:FormData) {
     cart:lines.map(line=>({
       externalId:line.catalogExternalId,
       quantity:Number(line.quantity),note:line.note,
+      serviceMode:line.expectedConsumption?.serviceMode==="TAKEAWAY"?"TAKEAWAY":"DINE_IN",
     })),
     customerId:order.customerId,
     serviceMode:order.serviceMode as PosServiceMode,
