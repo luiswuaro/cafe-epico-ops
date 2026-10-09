@@ -20,10 +20,18 @@ export async function getPosReadiness(organizationId:string,storeId:string) {
         eq(loyverseInventoryMappings.storeId,storeId),
         eq(loyverseInventoryMappings.isActive,true),
         eq(inventoryItems.isActive,true))),
-    db.select().from(inventoryBalances).where(and(
-      eq(inventoryBalances.organizationId,organizationId),
-      eq(inventoryBalances.storeId,storeId),
-    )),
+    db.select({
+      locationId:inventoryBalances.locationId,
+      inventoryItemId:inventoryBalances.inventoryItemId,
+      theoreticalQuantity:inventoryBalances.theoreticalQuantity,
+    }).from(inventoryBalances)
+      .innerJoin(inventoryItems,eq(inventoryItems.id,inventoryBalances.inventoryItemId))
+      .where(and(
+        eq(inventoryBalances.organizationId,organizationId),
+        eq(inventoryBalances.storeId,storeId),
+        eq(inventoryItems.isActive,true),
+        eq(inventoryItems.trackingType,"QUANTITY"),
+      )),
     db.select({id:posCashSessions.id}).from(posCashSessions).where(and(
       eq(posCashSessions.organizationId,organizationId),
       eq(posCashSessions.storeId,storeId),
