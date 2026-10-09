@@ -1,3 +1,5 @@
+import {randomUUID} from "node:crypto";
+import {deliverExtraPackaging} from "./packaging-action";
 import Image from "next/image";
 import Link from "next/link";
 import { and, eq, isNull } from "drizzle-orm";
@@ -11,6 +13,7 @@ import {
 } from "@/src/infrastructure/auth/permissions";
 import { getDb } from "@/src/infrastructure/db/client";
 import {
+  auditEvents,
   employees,
   posCustomers,
   posLoyaltyEntries,
@@ -40,6 +43,9 @@ export default async function ReceiptPage({
   const query = await searchParams;
   const requestedSplitId =
     typeof query.split === "string" ? query.split : null;
+  const cancelError=typeof query.cancelError==="string"?query.cancelError.slice(0,300):null;
+  const packagingError=typeof query.packagingError==="string"?query.packagingError.slice(0,300):null;
+  const packagingDone=query.packaged==="1";
 
   const { employee } = await getCurrentEmployee();
   if (!employee.homeStoreId) throw new Error("Sin sucursal asignada");
@@ -185,6 +191,16 @@ export default async function ReceiptPage({
   const pointsBalance=order.order.status!=="CANCELLED"&&recipients.size===1
     ? Number(applicable[0].balance).toFixed(2):null;
 
+  const extraEvents=order.order.mode==="LIVE"&&order.order.status==="PAID"&&!split
+    ?await db.select({data:auditEvents.afterData}).from(auditEvents).where(and(
+      eq(auditEvents.organizationId,employee.organizationId),
+      eq(auditEvents.action,"POS_EXTRA_TAKEAWAY_PACKAGING"),
+      eq(auditEvents.entityId,id),
+    )):[];
+  const packagedUnits=(lineId:string)=>extraEvents
+    .filter(event=>event.data?.lineId===lineId)
+    .reduce((sum,event)=>sum+Number(event.data?.quantity??0),0);
+
   const service = order.order.tableLabel ||
     (order.order.serviceMode==="TAKEAWAY"?"Para llevar":"Aquí");
 
@@ -257,7 +273,17 @@ export default async function ReceiptPage({
         <PrintTicketButton />
       </div>
 
-      <article className="receipt-paper">
+      {cancelError&&<section className="card no-print" role="alert">
+        <p className="status-bad">Cancelación no confirmada: {cancelError}</p>
+        <p className="muted">El ticket sigue disponible para revisión. Verifica pagos, caja e inventario antes de volver a intentar.</p>
+      </section>}
+      {packagingError&&<section className="card no-print" role="alert">
+        <p className="status-bad">No se entregó el envase: {packagingError}</p>
+      </section>}
+      {packagingDone&&<section className="card no-print" role="status">
+        <p className="status-ok">Envase adicional registrado en inventario y auditoría, sin nuevo cobro.</p>
+      </section>}
+            <article className="receipt-paper">
         <header>
           {printSettings.showLogo &&
             printSettings.logoDataUrl &&
@@ -394,6 +420,32 @@ export default async function ReceiptPage({
         </footer>
       </article>
 
+      {split&&order.order.status==="PAID"&&<div className="no-print receipt-toolbar">
+        <Link className="button" href={"/pos/receipt/"+id}>Ver ticket completo y opciones de empaque</Link>
+      </div>}
+      {!split&&order.order.mode==="LIVE"&&order.order.status==="PAID"&&
+        lines.some(line=>line.expectedConsumption?.serviceMode==="DINE_IN")&&
+        <section className="card no-print stack receipt-extra-packaging">
+          <h2>¿Se lleva lo que quedó de su bebida?</h2>
+          <p className="muted">Registra sólo los desechables adicionales (vaso, tapa y accesorios según receta). La venta original conserva su servicio aquí; no se cobra ni descuenta el café por segunda vez.</p>
+          {lines.filter(line=>line.expectedConsumption?.serviceMode==="DINE_IN").map(line=>{
+            const remaining=Number(line.quantity)-packagedUnits(line.id);
+            return <div key={line.id} className="receipt-packaging-line">
+              <div><strong>{line.nameSnapshot}</strong><p className="muted">
+                {remaining>0?remaining+" unidad(es) disponible(s) para cambiar a desechable":"Empaque ya registrado para todas las unidades"}
+              </p></div>
+              {remaining>0&&<form action={deliverExtraPackaging}>
+                <input type="hidden" name="orderId" value={id}/>
+                <input type="hidden" name="lineId" value={line.id}/>
+                <input type="hidden" name="requestId" value={randomUUID()}/>
+                <label>Cantidad
+                  <input type="number" name="quantity" min="1" max={remaining} defaultValue="1" step="1"/>
+                </label>
+                <button type="submit">Entregar desechable</button>
+              </form>}
+            </div>;
+          })}
+        </section>}
       {canCancel &&
         !split &&
         order.order.status !== "CANCELLED" && (
