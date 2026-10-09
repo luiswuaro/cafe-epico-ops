@@ -1,3 +1,4 @@
+import {planInventoryReversals} from "./reversal-plan";
 import { and, eq, sql } from "drizzle-orm";
 import { getDb } from "@/src/infrastructure/db/client";
 import {
@@ -64,22 +65,9 @@ export async function cancelLiveOrder(input:{
       .returning({id:posOrders.id});
     if(!updated.length) throw new Error("La orden cambió de estado. Actualiza la pantalla.");
 
-    // Una misma bebida/insumo puede haberse cobrado en varias cuentas divididas.
-    // La llave única de inventory_movements incluye proveedor, referencia, insumo y ubicación:
-    // consolidar las cantidades antes de insertar la reversa por folio.
-    const reversals=new Map<string,{locationId:string;inventoryItemId:string;quantityDelta:number}>();
-    for(const movement of inventoryMovementsApplied){
-      const key=movement.locationId+":"+movement.inventoryItemId;
-      const existing=reversals.get(key);
-      if(existing)existing.quantityDelta+=Number(movement.quantityDelta);
-      else reversals.set(key,{
-        locationId:movement.locationId,inventoryItemId:movement.inventoryItemId,
-        quantityDelta:Number(movement.quantityDelta),
-      });
-    }
-    for(const movement of reversals.values()){
-      const returned=-movement.quantityDelta;
-      if(returned<=0) throw new Error("Movimiento original inválido.");
+    // Las dos cuentas pueden tener el mismo insumo: la reversa se agrega por clave única.
+    for(const movement of planInventoryReversals(inventoryMovementsApplied)){
+      const returned=movement.returned;
       await tx.insert(inventoryMovements).values({
         organizationId:input.organizationId,storeId:input.storeId,
         locationId:movement.locationId,inventoryItemId:movement.inventoryItemId,
