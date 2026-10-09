@@ -39,6 +39,7 @@ export default async function PosPage({
 }) {
   const params = await searchParams;
   const liveEnabled = isPosLiveEnabled();
+  const pilotItem = liveEnabled ? process.env.POS_LIVE_PILOT_ITEM?.trim() : undefined;
   const { employee } = await getCurrentEmployee();
 
   if (!employee.homeStoreId) {
@@ -82,6 +83,9 @@ export default async function PosPage({
           <p className="eyebrow">{liveEnabled ? "POS · LIVE" : "POS V0.1 · MODO ESPEJO"}</p>
           <h1>Tomar orden</h1>
           <p><Link href="/inventory/ops">Consultar inventario OPS y registrar reabastos</Link> · <Link href="/pos/launch-check">Validación para activar POS LIVE</Link></p>
+          {pilotItem && <p className="status-warn">
+            PILOTO LIVE · Únicamente {pilotItem}. Cada cobro sí modificará inventario, caja y puntos reales de OPS.
+          </p>}
           <p className="muted">
             {liveEnabled
               ? "Cobro operativo: descuenta cada ingrediente mapeado y abona puntos. No aceptará productos con recetas o saldos incompletos."
@@ -228,7 +232,7 @@ export default async function PosPage({
       </div>
 
       <PosClient
-        catalog={catalog.map((item) => ({
+        catalog={catalog.filter(item=>!pilotItem || item.name.toLocaleUpperCase("es-MX")===pilotItem.toLocaleUpperCase("es-MX")).map((item) => ({
           id: item.id,
           name: item.name,
           category: item.category,
