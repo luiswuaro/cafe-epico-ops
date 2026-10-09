@@ -1563,3 +1563,9 @@ th, td { vertical-align: top; }
 .receipt-packaging-line form{display:grid;gap:.5rem}
 .receipt-packaging-line input{margin-top:.3rem}
 @media(max-width:560px){.receipt-packaging-line{grid-template-columns:1fr}.receipt-packaging-line form{grid-template-columns:90px minmax(0,1fr);align-items:end}}
+
+/* QA tenant indicator: only rendered when branch-specific OPS_QA_MODE is true. */
+.ops-qa-banner{position:relative;z-index:60;display:flex;align-items:center;justify-content:center;gap:.65rem;min-height:36px;padding:.35rem .9rem;color:#fff;background:#60391b;font-size:.76rem;line-height:1.3;text-align:center}
+.ops-qa-banner strong{font-weight:900;letter-spacing:.11em;white-space:nowrap}
+.ops-qa-banner span{font-weight:600;opacity:.92}
+@media(max-width:540px){.ops-qa-banner{gap:.4rem;flex-wrap:wrap;font-size:.69rem;min-height:40px;padding:.4rem .7rem}}
