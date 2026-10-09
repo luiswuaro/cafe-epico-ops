@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { SplitAccountBuilder } from "./split-client";
-import { payOrderSplit } from "./actions";
+import { payOrderSplit, resetUnpaidOrderSplit } from "./actions";
 import { getCashState } from "@/src/application/pos/cash";
 import { getPosCustomers } from "@/src/application/pos/customers";
 import { getOrderSplitState } from "@/src/application/pos/splits";
@@ -140,6 +140,14 @@ export default async function SplitOrderPage({
             </article>
           ))}
         </section>
+      )}
+
+      {state.splits.length>0 && !hasPaidSplit && (
+        <form action={resetUnpaidOrderSplit} className="card stack">
+          <input type="hidden" name="orderId" value={state.order.id}/>
+          <p className="muted">¿Cambió la forma de pago? Puedes quitar la división y cobrar la mesa completa. No se ha cobrado ninguna cuenta.</p>
+          <button type="submit">Quitar división · regresar a cuenta completa</button>
+        </form>
       )}
 
       {!hasPaidSplit && (
