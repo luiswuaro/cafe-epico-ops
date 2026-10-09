@@ -6,6 +6,7 @@ import {
   createShadowCommand,
   createShadowSale,
 } from "./actions";
+import { createLiveSale } from "./live-actions";
 
 type CatalogItem = {
   id: string;
@@ -33,6 +34,7 @@ type Props = {
   customers: Customer[];
   selectedCustomerId?: string | null;
   cashOpen: boolean;
+  liveEnabled: boolean;
 };
 
 const money = new Intl.NumberFormat("es-MX", {
@@ -46,6 +48,7 @@ export function PosClient({
   customers,
   selectedCustomerId = null,
   cashOpen,
+  liveEnabled,
 }: Props) {
   const [category, setCategory] = useState<"TODAS" | CatalogItem["category"]>(
     "CALIENTES",
@@ -55,6 +58,7 @@ export function PosClient({
   const [serviceMode, setServiceMode] =
     useState<"DINE_IN" | "TAKEAWAY">("DINE_IN");
   const [customerId, setCustomerId] = useState(selectedCustomerId ?? "");
+  const [liveClientOrderId] = useState(() => globalThis.crypto.randomUUID());
 
   const catalogById = useMemo(
     () => new Map(catalog.map((item) => [item.id, item])),
@@ -177,7 +181,7 @@ export function PosClient({
       <aside className="card pos-cart">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">ORDEN ESPEJO</p>
+            <p className="eyebrow">{liveEnabled ? "VENTA LIVE" : "ORDEN ESPEJO"}</p>
             <h2>Cuenta</h2>
           </div>
           <span className="pill">{cartLines.length} unidad(es)</span>
@@ -302,7 +306,8 @@ export function PosClient({
           </details>
         </div>
 
-        <form action={createShadowSale} className="stack pos-checkout">
+        <form action={liveEnabled ? createLiveSale : createShadowSale} className="stack pos-checkout">
+          {liveEnabled && <input type="hidden" name="clientOrderId" value={liveClientOrderId} />}
           <input
             type="hidden"
             name="cart"
@@ -348,28 +353,27 @@ export function PosClient({
           </label>
 
           <div className="pos-command-actions">
-            <button
+            {!liveEnabled && <button
               type="submit"
               formAction={createShadowCommand}
               className="pos-command-button"
               disabled={cartLines.length === 0}
             >
               Enviar comanda
-            </button>
+            </button>}
             <button
               type="submit"
               className="pos-pay-button"
               disabled={cartLines.length === 0}
             >
-              Registrar espejo · {money.format(total)}
+              {liveEnabled ? "Cobrar" : "Registrar espejo"} · {money.format(total)}
             </button>
           </div>
         </form>
 
-        <p className="pos-shadow-warning">
-          MODO ESPEJO: comandas, puntos e inventario son simulación. Nada se
-          descuenta ni se acredita todavía.
-        </p>
+        {liveEnabled
+          ? <p className="pos-shadow-warning">MODO LIVE: sólo cobro directo con receta completa y saldo confirmado. Las notas no cambian insumos: usa recetas verificadas y evita modificaciones no estructuradas.</p>
+          : <p className="pos-shadow-warning">MODO ESPEJO: comandas, puntos e inventario son simulación. Nada se descuenta ni se acredita todavía.</p>}
       </aside>
     </div>
   );
