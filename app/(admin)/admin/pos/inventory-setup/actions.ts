@@ -35,8 +35,8 @@ export async function confirmPosInventorySetup(formData:FormData){
       throw new Error("Saldo inválido en "+row.name+"; usa máximo tres decimales.");
     }
     const unit=String(formData.get("unit:"+row.id)??"");
-    if(row.weighted ? !["g","ml"].includes(unit) : unit!=="pz") {
-      throw new Error("Debes confirmar la unidad real (g, ml o pz) de "+row.name);
+    if(unit !== row.officialUnit) {
+      throw new Error("Unidad incorrecta para "+row.name+": OPS requiere "+row.officialUnit+". Actualiza la pantalla.");
     }
     const existingItemId=String(formData.get("existingItem:"+row.id)??"");
     if(existingItemId && !setup.reusableItems.some(item=>item.id===existingItemId && item.unit===unit)) {
