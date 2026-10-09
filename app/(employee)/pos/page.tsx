@@ -314,6 +314,8 @@ export default async function PosPage({
             note:line.note,unitPrice:Number(line.unitPrice),
             serviceMode:line.expectedConsumption?.serviceMode==="TAKEAWAY"?"TAKEAWAY":"DINE_IN",
             isAdditionalRound:line.isAdditionalRound,
+            roundId:typeof line.expectedConsumption?.roundId==="string"
+              ? line.expectedConsumption.roundId:null,
           })),
         }:null}
       />
