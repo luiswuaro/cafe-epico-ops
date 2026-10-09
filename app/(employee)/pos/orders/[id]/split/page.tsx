@@ -106,7 +106,7 @@ export default async function SplitOrderPage({
                   <input type="hidden" name="splitId" value={split.id} />
                   <PosPaymentFields
                     total={Number(split.total)}
-                    cashOpen={Boolean(cash.session)}
+                    cashOpen={Boolean(cash.session && !cash.isStale)}
                   />
                   <button type="submit">
                     Cobrar {money.format(Number(split.total))}
