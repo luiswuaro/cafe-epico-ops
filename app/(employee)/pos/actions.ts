@@ -334,6 +334,17 @@ export async function createShadowCommand(formData: FormData) {
   redirect("/pos/orders?created=" + orderId);
 }
 
+export async function saveLiveCommand(_previous:{error:string|null},formData:FormData):Promise<{error:string|null}> {
+  let orderId:string;
+  try{
+    orderId=await createShadowOrder(formData,"SENT",undefined,"LIVE");
+  }catch(error){
+    const message=error instanceof Error?error.message:"No se pudo guardar la comanda.";
+    return {error:message.slice(0,330)};
+  }
+  redirect("/pos/orders?created="+orderId);
+}
+
 export async function createLiveCommand(formData:FormData) {
   let orderId:string;
   try{
