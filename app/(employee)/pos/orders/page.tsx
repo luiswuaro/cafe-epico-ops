@@ -2,6 +2,7 @@ import Link from "next/link";
 import { CommandBoardAutoRefresh } from "./auto-refresh";
 import {
   cancelPosOrder,
+  payLiveCommand,
   payShadowCommand,
   updateCommandStatus,
 } from "../actions";
@@ -92,7 +93,7 @@ export default async function PosOrdersPage() {
                 <div className="section-heading">
                   <div>
                     <p className="eyebrow">
-                      {statusLabel(order.status)} ·{" "}
+                      {order.mode === "LIVE" ? "LIVE · " : "ESPEJO · "}{statusLabel(order.status)} ·{" "}
                       {elapsedMinutes(order.createdAt)} min
                     </p>
                     <h2>
@@ -170,17 +171,19 @@ export default async function PosOrdersPage() {
                   </div>
                 )}
 
-                <Link
-                  href={"/pos/orders/" + order.id + "/split"}
-                  className="button"
-                >
-                  {partiallyPaid ? "Continuar cuentas divididas" : "Dividir cuenta"}
-                </Link>
+                {order.mode !== "LIVE" && (
+                  <Link
+                    href={"/pos/orders/" + order.id + "/split"}
+                    className="button"
+                  >
+                    {partiallyPaid ? "Continuar cuentas divididas" : "Dividir cuenta"}
+                  </Link>
+                )}
 
                 {!partiallyPaid && (
                   <details>
                     <summary>Cobrar cuenta completa</summary>
-                    <form action={payShadowCommand} className="stack">
+                    <form action={order.mode === "LIVE" ? payLiveCommand : payShadowCommand} className="stack">
                       <input
                         type="hidden"
                         name="orderId"
@@ -200,8 +203,20 @@ export default async function PosOrdersPage() {
                           <option value="TRANSFER">Transferencia</option>
                         </select>
                       </label>
+                      {order.mode === "LIVE" && (
+                        <>
+                          <p className="muted">
+                            Cobro LIVE: descontará inventario y registrará caja y puntos al pagar.
+                          </p>
+                          <label>
+                            Efectivo recibido (si es efectivo)
+                            <input name="tenderedAmount" type="number" min={0}
+                              step="0.01" placeholder={Number(order.total).toFixed(2)} />
+                          </label>
+                        </>
+                      )}
                       <button type="submit">
-                        Marcar pagada ·{" "}
+                        {order.mode === "LIVE" ? "Cobrar LIVE" : "Marcar pagada"} ·{" "}
                         {money.format(Number(order.total))}
                       </button>
                     </form>
