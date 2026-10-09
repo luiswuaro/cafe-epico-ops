@@ -133,7 +133,7 @@ async function buildOrderInput(
   }
 
   return {
-    serviceMode,
+    serviceMode:lines.some(line=>line.lineMode==="DINE_IN")?"DINE_IN" as const:"TAKEAWAY" as const,
     tableLabel,
     note,
     customerId,
@@ -167,8 +167,8 @@ async function createShadowOrder(
   }
   const input = await buildOrderInput(formData, employee.organizationId, orderMode);
   if(orderMode==="LIVE"){
-    if(input.serviceMode==="DINE_IN" && !input.tableLabel){
-      throw new Error("Escribe una mesa o referencia para enviar comanda aquí.");
+    if(!input.tableLabel){
+      throw new Error("Ponle un nombre al ticket guardado (por ejemplo Mesa 1 o Balcón 2).");
     }
     const pilot=process.env.POS_LIVE_PILOT_ITEM?.trim().toLocaleUpperCase("es-MX");
     if(pilot && input.lines.some(line=>line.item.name.toLocaleUpperCase("es-MX")!==pilot)){
