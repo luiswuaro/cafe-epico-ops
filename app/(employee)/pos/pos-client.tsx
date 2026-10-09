@@ -37,6 +37,11 @@ type Props = {
   liveEnabled: boolean;
 };
 
+function normalizeSearch(value:string) {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g,"")
+    .toLocaleLowerCase("es-MX").trim();
+}
+
 const money = new Intl.NumberFormat("es-MX", {
   style: "currency",
   currency: "MXN",
@@ -68,10 +73,10 @@ export function PosClient({
   );
 
   const visible = useMemo(() => {
-    const q = query.trim().toLocaleLowerCase("es-MX");
+    const q = normalizeSearch(query);
     return catalog.filter((item) => {
       const categoryOk = category === "TODAS" || item.category === category;
-      const queryOk = !q || item.name.toLocaleLowerCase("es-MX").includes(q);
+      const queryOk = !q || normalizeSearch(item.name).includes(q);
       return categoryOk && queryOk;
     });
   }, [catalog, category, query]);
@@ -134,10 +139,20 @@ export function PosClient({
           <input
             type="search"
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => {
+              setQuery(event.target.value);
+              if(event.target.value.trim()) setCategory("TODAS");
+            }}
             placeholder="Buscar bebida o alimento..."
             aria-label="Buscar producto"
+            autoComplete="off"
           />
+          {query && <button type="button" className="button" onClick={()=>setQuery("")}>
+            Limpiar búsqueda
+          </button>}
+          <p className="muted" aria-live="polite" style={{margin:0}}>
+            {visible.length} de {catalog.length} productos
+          </p>
           <div className="pos-category-tabs">
             {(["TODAS", "CALIENTES", "FRÍAS", "ALIMENTOS"] as const).map(
               (value) => (
@@ -160,6 +175,9 @@ export function PosClient({
           </div>
         </div>
 
+        {visible.length===0 && <p className="card muted" role="status">
+          No encontramos productos con esa búsqueda. Cambia el término o selecciona «Todas».
+        </p>}
         <div className="pos-product-grid">
           {visible.map((item) => {
             const count = productCount(item.id);
