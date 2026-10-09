@@ -59,9 +59,6 @@ export async function checkoutLiveOrder(input:{
     if(pilotProduct && item.name.toLocaleUpperCase("es-MX") !== pilotProduct.toLocaleUpperCase("es-MX")){
       throw new Error("Piloto LIVE limitado a "+pilotProduct+". No se cobró otro producto.");
     }
-    if(line.note?.trim() && line.note.trim().toLocaleLowerCase("es-MX")!=="extra caliente"){
-      throw new Error("Modificador libre no permitido en LIVE ("+item.name+"). Usa receta configurada; sólo se admite la nota extra caliente.");
-    }
     const lineMode=line.serviceMode??input.serviceMode;
     const recipeComponents=item.serviceRecipes[lineMode].components;
     if(recipeComponents.length===0) {
