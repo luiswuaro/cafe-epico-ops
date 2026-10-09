@@ -101,6 +101,12 @@ export default async function PosCashPage() {
         </section>
       ) : (
         <>
+          {state.isStale && (
+            <p className="alert">
+              Esta caja quedó abierta de un día anterior. Ciérrala antes de
+              registrar cobros en efectivo del día de hoy.
+            </p>
+          )}
           <section className="grid cash-kpis">
             <article className="card">
               <p className="eyebrow">FONDO</p>
