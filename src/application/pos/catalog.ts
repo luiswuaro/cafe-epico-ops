@@ -175,6 +175,8 @@ function mapEffectiveComponents(
     quantity: number;
     unitLabel: string;
     category: string;
+    inventoryTracked: boolean;
+    inventoryResolved: boolean;
   }>,
 ): PosRecipeComponent[] {
   return components.map((component) => ({
