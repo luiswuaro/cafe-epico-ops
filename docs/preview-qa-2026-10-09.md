@@ -91,3 +91,16 @@ La ejecución de GitHub Actions prueba estructura, tipos, lint y compilación, *
 - Integridad: `packaging_events=1`, `packaging_movements=3`, 3 insumos distintos bajo un mismo requestId. En la ventana de esta operación, QA registró 1 orden, 1 pago y 4 movimientos (café+3 empaques); producción 0 órdenes, 0 pagos y 0 movimientos.
 - **Pendiente de prueba:** idempotencia ante doble toque simultáneo, producto frío con popote ya consumido, falta de stock de vaso/tapa, y cancelación posterior a entregar empaque (criterio de merma vs reversa).
 - Auditoría basada en lecturas SQL; no hay cambios de datos ni despliegue de producción por este registro.
+
+
+## QA-04 — FRÍA YA CON POPOTE, CAMBIO A VASO PARA LLEVAR: aprobado (2026-10-09)
+
+- Folio `OP-20261009235607-6A9A1`, orden `4c6819ec-a1db-4dd1-9673-9d27996751aa`, 1 Latte español QA frío, $70, `LIVE/PAID`, servicio de venta congelado `DINE_IN`.
+- Venta: consumo de café `-18.900 g`, leche `-230 ml`, leche condensada `-45 g`, hielo `-150 g` y **popote `-1 pz`**.
+- Tres segundos después, un único evento `POS_EXTRA_TAKEAWAY_PACKAGING` (requestId `6406249c-c179-415a-b414-dad70504f83c`) generó **exactamente tres** movimientos `OPS_POS_PACK`: vaso frío 16 oz `-1 pz`, tapa fría `-1 pz` y servilleta `-1 pz`.
+- **No se descontó un segundo popote** ni café/leche/condensada/hielo durante la entrega de envase adicional. Existe 1 evento de empaque con 3 insumos distintos; no hay movimientos repetidos de ese evento.
+- Existencias QA verificadas: café `5924.400 g`, leche `14770 ml`, condensada `4955 g`, hielo `11850 g`, popote `199 pz`, vaso frío `199 pz`, tapa fría `199 pz`, servilleta `298 pz`.
+- **Finanzas:** una única operación `CASH $70`, `payment_count=1`, `payment_total=$70`, puntos `0` (no había cliente). Caja QA continúa `OPEN` con **$630 esperado** (`$500 + $130 neto`).
+- **Aislamiento:** desde 23:55 UTC, en `cafe-epico-qa` se registraron 1 orden, 1 pago, 8 movimientos (5 de receta + 3 de empaques); `cafe-epico` 0 órdenes, 0 pagos y 0 movimientos.
+- Comprobación visual aportada por operador: panel «Entregar vaso para llevar» se muestra legible y marca `Registrado`; la validación del procesamiento corresponde a las consultas SQL previas.
+- **Pruebas pendientes:** doble clic simultáneo con distintos requestIds, falta de stock, edición de precio con ticket abierto, cancelación después de empaque, impresión térmica real. Se mantienen fuera de producción.
