@@ -159,11 +159,11 @@ export default async function ReceiptPage({
   const total = split ? Number(split.total) : Number(order.order.total);
   const paymentMethod = payments.map((payment) => payment.method).join(" + ");
   const pointsEarned =
-    !split && order.customerName
+    !split && order.order.status !== "CANCELLED" && order.customerName
       ? Number(order.order.loyaltyPointsPreview).toFixed(2)
       : null;
   const pointsBalance =
-    !split && order.customerName
+    !split && order.order.status !== "CANCELLED" && order.customerName
       ? Number(order.customerPoints ?? 0).toFixed(2)
       : null;
 
@@ -189,6 +189,8 @@ export default async function ReceiptPage({
         <DirectPrintTicketButton
           ticket={{
             folio: order.order.folio,
+            status: order.order.status,
+            cancelReason: order.order.cancelReason,
             date: ticketDate,
             employee: order.employeeName ?? "Empleado",
             service,
@@ -326,7 +328,7 @@ export default async function ReceiptPage({
         </div>
 
         <div className="receipt-total">
-          <span>TOTAL</span>
+          <span>{order.order.status === "CANCELLED" ? "TOTAL ORIGINAL" : "TOTAL"}</span>
           <strong>{money.format(total)}</strong>
         </div>
 
@@ -365,8 +367,8 @@ export default async function ReceiptPage({
           {printSettings.footerMessage && (
             <p><strong>{printSettings.footerMessage}</strong></p>
           )}
-          {!split && (
-            <p>Puntos en simulación mientras POS esté en modo espejo.</p>
+          {!split && order.order.mode === "SHADOW" && (
+            <p>Orden en modo espejo. Puntos no acreditados en OPS.</p>
           )}
           {printSettings.showNoCfdi && <p>Este ticket no es CFDI.</p>}
         </footer>
