@@ -269,6 +269,11 @@ export default async function ReceiptPage({
         />
 
         <PrintTicketButton />
+        {!split&&order.order.mode==="LIVE"&&order.order.status==="PAID"&&
+          lines.some(line=>line.expectedConsumption?.serviceMode==="DINE_IN")&&
+          <a className="button receipt-extra-shortcut" href="#empaque-para-llevar">
+            <span aria-hidden="true">↗</span> Vaso para llevar
+          </a>}
       </div>
 
       {!split&&order.order.status==="PARTIALLY_PAID"&&<section className="card no-print" role="status">
@@ -286,7 +291,7 @@ export default async function ReceiptPage({
       {packagingDone&&<section className="card no-print" role="status">
         <p className="status-ok">Envase adicional registrado en inventario y auditoría, sin nuevo cobro.</p>
       </section>}
-            <article className="receipt-paper">
+      <article className="receipt-paper">
         <header>
           {printSettings.showLogo &&
             printSettings.logoDataUrl &&
@@ -382,7 +387,7 @@ export default async function ReceiptPage({
         </div>
 
         <div className="receipt-meta">
-          <span>Pago</span>
+          <span>{order.order.status === "CANCELLED" ? "Pago original" : "Pago"}</span>
           <span>{paymentMethod || "—"}</span>
 
           {printSettings.showCustomer && receiptCustomer && (
@@ -406,9 +411,10 @@ export default async function ReceiptPage({
 
         {order.order.status === "CANCELLED" && (
           <div className="receipt-cancelled">
-            CANCELADO
+            CANCELADO · SIN VENTA ACTIVA
             <br />
             {order.order.cancelReason ?? ""}
+            <p>Consultar reversas en Caja y Auditoría de inventario</p>
           </div>
         )}
 
@@ -428,26 +434,49 @@ export default async function ReceiptPage({
       </div>}
       {!split&&order.order.mode==="LIVE"&&order.order.status==="PAID"&&
         lines.some(line=>line.expectedConsumption?.serviceMode==="DINE_IN")&&
-        <section className="card no-print stack receipt-extra-packaging">
-          <h2>¿Se lleva lo que quedó de su bebida?</h2>
-          <p className="muted">Registra sólo los desechables adicionales (vaso, tapa y accesorios según receta). La venta original conserva su servicio aquí; no se cobra ni descuenta el café por segunda vez.</p>
-          {lines.filter(line=>line.expectedConsumption?.serviceMode==="DINE_IN").map(line=>{
-            const remaining=Number(line.quantity)-packagedUnits(line.id);
-            return <div key={line.id} className="receipt-packaging-line">
-              <div><strong>{line.nameSnapshot}</strong><p className="muted">
-                {remaining>0?remaining+" unidad(es) disponible(s) para cambiar a desechable":"Empaque ya registrado para todas las unidades"}
-              </p></div>
-              {remaining>0&&<form action={deliverExtraPackaging}>
-                <input type="hidden" name="orderId" value={id}/>
-                <input type="hidden" name="lineId" value={line.id}/>
-                <input type="hidden" name="requestId" value={randomUUID()}/>
-                <label>Cantidad
-                  <input type="number" name="quantity" min="1" max={remaining} defaultValue="1" step="1"/>
-                </label>
-                <button type="submit">Entregar desechable</button>
-              </form>}
-            </div>;
-          })}
+        <section id="empaque-para-llevar" className="card no-print receipt-extra-packaging" aria-labelledby="receipt-packaging-title">
+          <div className="receipt-extra-header">
+            <div>
+              <p className="eyebrow">AJUSTE DE SERVICIO · POSTVENTA</p>
+              <h2 id="receipt-packaging-title">Entregar vaso para llevar</h2>
+            </div>
+            <span className="pill">Sin cobrar otra bebida</span>
+          </div>
+          <p className="muted receipt-extra-description">
+            Si el cliente no terminó su bebida, selecciona cuál desea llevar.
+            OPS registra únicamente el vaso, la tapa y los accesorios adicionales de la receta para llevar.
+            La venta y el consumo de café originales se conservan.
+          </p>
+          <div className="receipt-extra-list">
+            {lines.filter(line=>line.expectedConsumption?.serviceMode==="DINE_IN").map((line,index)=>{
+              const remaining=Number(line.quantity)-packagedUnits(line.id);
+              return <div key={line.id} className="receipt-packaging-line">
+                <div className="receipt-packaging-product">
+                  <span className="receipt-packaging-index">{index+1}</span>
+                  <div>
+                    <strong>{line.nameSnapshot}</strong>
+                    <p className="muted">
+                      {remaining>0
+                        ?remaining+" bebida(s) con empaque disponible"
+                        :"Empaque adicional ya registrado"}
+                    </p>
+                  </div>
+                </div>
+                {remaining>0
+                  ?<form action={deliverExtraPackaging} className="receipt-packaging-form">
+                    <input type="hidden" name="orderId" value={id}/>
+                    <input type="hidden" name="lineId" value={line.id}/>
+                    <input type="hidden" name="requestId" value={randomUUID()}/>
+                    <label>Cantidad
+                      <input type="number" name="quantity" min="1" max={remaining} defaultValue="1" step="1" required/>
+                    </label>
+                    <button type="submit">Registrar empaque</button>
+                  </form>
+                  :<span className="receipt-packaging-complete">Registrado ✓</span>}
+              </div>;
+            })}
+          </div>
+          <p className="receipt-packaging-footnote">No modifica el precio, los puntos ni las cantidades de ingredientes vendidos.</p>
         </section>}
       {canCancel &&
         !split &&
