@@ -23,6 +23,7 @@ export default async function RecoveryPage({
   ));
   const errors: Record<string,string> = {
     expired:"El enlace no es válido o caducó. Solicita uno nuevo.",
+    legacy:"El enlace anterior usa un formato que ya no admite este flujo. Solicita uno nuevo desde aquí.",
     email:"Escribe un correo electrónico válido.",
     send:"No fue posible enviar el correo. Inténtalo de nuevo en unos minutos.",
     provider:"Supabase no aceptó el cambio. Prueba otra contraseña o solicita otro enlace.",
