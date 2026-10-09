@@ -52,8 +52,24 @@ export async function checkoutLiveOrder(input:{
     if(line.note?.trim() && line.note.trim().toLocaleLowerCase("es-MX")!=="extra caliente"){
       throw new Error("Modificador libre no permitido en LIVE ("+item.name+"). Usa receta configurada; sólo se admite la nota extra caliente.");
     }
-    if(item.serviceRecipes[input.serviceMode].components.length===0) {
+    const recipeComponents=item.serviceRecipes[input.serviceMode].components;
+    if(recipeComponents.length===0) {
       throw new Error("La receta de "+item.name+" no tiene insumos configurados.");
+    }
+    if(item.category==="CALIENTES" || item.category==="FRÍAS"){
+      const names=recipeComponents.map(c=>c.name.toLocaleUpperCase("es-MX"));
+      const hasCup=names.some(name=>/VASO/.test(name));
+      const hasLid=names.some(name=>/TAPA/.test(name));
+      const hasStraw=names.some(name=>/POPOTE|PAJILLA/.test(name));
+      if(input.serviceMode==="TAKEAWAY" && (!hasCup || !hasLid)){
+        throw new Error("Receta de "+item.name+" para llevar incompleta: falta vaso o tapa.");
+      }
+      if(input.serviceMode==="DINE_IN" && names.some(name=>/VASO|TAPA|MANGA|FAJILLA|SERVILLETA/.test(name))){
+        throw new Error("Receta de "+item.name+" para consumir aquí incluye desechables: revisa la receta.");
+      }
+      if(input.serviceMode==="DINE_IN" && item.category==="FRÍAS" && !hasStraw){
+        throw new Error("Receta fría de "+item.name+" para consumir aquí no incluye popote.");
+      }
     }
     return {
       ...line,item,price:item.price,
