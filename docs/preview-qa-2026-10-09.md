@@ -78,3 +78,16 @@ La ejecución de GitHub Actions prueba estructura, tipos, lint y compilación, *
 - La vista del ticket aplicaba `max-width:58mm` a `.receipt-shell` en pantalla, por eso el panel de desechables tenía una columna de 58 mm y el nombre del americano se partía por letra.
 - Corrección en Preview: ancho de lectura para pantalla; solo `.receipt-paper` conserva 48 mm, con `@media print` intacta. Nuevo acceso «Vaso para llevar», filas legibles y etiqueta de pago original cuando se cancela.
 - **Pendiente:** prueba visual sobre Preview corregido y prueba funcional de `POS_EXTRA_TAKEAWAY_PACKAGING` en una venta QA nueva, incluyendo evitar doble descuento del café.
+
+
+## QA-03 — ENVASE POSTVENTA «AQUÍ» → PARA LLEVAR: aprobado (2026-10-09)
+
+- Orden QA: `OP-20261009235256-003CB`, `d53783ad-66af-4f50-a4d3-f14fc5d519ca`, `LIVE / PAID`, $30, Americano QA caliente `DINE_IN` (snapshot original preservado).
+- 1 solo pago de $30, `customer_id=null`, 0 movimientos de puntos.
+- Venta: 1 movimiento `POS_LIVE_ORDER` de **−18.900 g café** a las 23:52:56 UTC.
+- Entrega de empaque ~8 s después: 1 evento `POS_EXTRA_TAKEAWAY_PACKAGING` (`request_id=437a1606-30fc-4fb0-b86e-41badeb5334f`) y 3 movimientos con proveedor `OPS_POS_PACK`: vaso caliente −1, tapa caliente −1, servilleta −1.
+- Saldos verificados: café QA 5962.2→5943.3 g; vasos 200→199; tapas 200→199; servilletas 300→299; popote 200 sin cambios. El empaquetado no descuenta café por segunda vez.
+- Caja QA `OPEN`: $530 antes + $30 de esta venta = **$560 esperado**. No se detectó un segundo pago.
+- Integridad: `packaging_events=1`, `packaging_movements=3`, 3 insumos distintos bajo un mismo requestId. En la ventana de esta operación, QA registró 1 orden, 1 pago y 4 movimientos (café+3 empaques); producción 0 órdenes, 0 pagos y 0 movimientos.
+- **Pendiente de prueba:** idempotencia ante doble toque simultáneo, producto frío con popote ya consumido, falta de stock de vaso/tapa, y cancelación posterior a entregar empaque (criterio de merma vs reversa).
+- Auditoría basada en lecturas SQL; no hay cambios de datos ni despliegue de producción por este registro.
