@@ -1,5 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { getPosCatalog } from "@/src/application/pos/catalog";
+import { isCostOnlyComponent } from "@/src/application/pos/component-policy";
 import { getDb } from "@/src/infrastructure/db/client";
 import {
   inventoryItems, inventoryBalances, inventoryLocations, loyverseInventoryLevels, loyverseInventoryMappings,
@@ -30,8 +31,10 @@ export async function getPosInventorySetup(organizationId:string,storeId:string)
   const sourceStore=stores.length===1 ? stores[0]?.externalId : null;
   const requested=new Map<string,{id:string;name:string;uses:number;units:Set<string>}>();
   let unsupported=0;
+  let costOnlyOccurrences=0;
   for(const product of catalog) for(const mode of ["DINE_IN","TAKEAWAY"] as const){
     for(const component of product.serviceRecipes[mode].components){
+      if(isCostOnlyComponent(component)){costOnlyOccurrences++;continue;}
       if(!component.variantExternalId){unsupported++;continue;}
       const prev=requested.get(component.variantExternalId);
       if(prev){prev.uses++;prev.units.add(component.unitLabel);}
@@ -69,5 +72,5 @@ export async function getPosInventorySetup(organizationId:string,storeId:string)
   const alreadyLinked=new Set(mappings.map(m=>m.inventoryItemId));
   const reusableItems=internalItems.filter(item=>!inUse.has(item.id)&&!alreadyLinked.has(item.id))
     .map(item=>({id:item.id,name:item.name,unit:item.canonicalUnit}));
-  return {candidates,locations,sourceStore,unsupported,products:catalog.length,alreadyMapped:mappings.length,reusableItems};
+  return {candidates,locations,sourceStore,unsupported,costOnlyOccurrences,products:catalog.length,alreadyMapped:mappings.length,reusableItems};
 }
