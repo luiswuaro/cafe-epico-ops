@@ -6,6 +6,19 @@ import {
   posCashSessions,
 } from "@/src/infrastructure/db/schema";
 
+function businessDate(date: Date) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Mexico_City",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
+export function isCashSessionCurrentBusinessDate(openedAt: Date) {
+  return businessDate(openedAt) === businessDate(new Date());
+}
+
 export async function getOpenCashSession(
   organizationId: string,
   storeId: string,
@@ -54,6 +67,7 @@ export async function getCashState(
       cashIn: 0,
       cashOut: 0,
       lastClosed: lastClosed ?? null,
+      isStale: false,
     };
   }
 
@@ -93,5 +107,6 @@ export async function getCashState(
     cashIn: amount("CASH_IN"),
     cashOut: Math.abs(amount("CASH_OUT")),
     lastClosed: null,
+    isStale: !isCashSessionCurrentBusinessDate(session.openedAt),
   };
 }
