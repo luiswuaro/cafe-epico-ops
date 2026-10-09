@@ -50,12 +50,9 @@ export default async function AnalyticsPage({
         <p className="eyebrow">ADMIN · DASHBOARD GERENCIAL</p>
         <h1>Ventas, margen y operación</h1>
         <p className="muted">
-          Ventana gratuita de Loyverse: hasta 30 días contando el día corriente. Las
-            ventas mostradas son netas y excluyen recibos cancelados.
-          COGS POS conserva el costo grabado en cada ticket al momento de la
-          venta. En productos con cobertura suficiente de costos configurados,
-          la tabla también calcula un margen efectivo reconstruido desde receta
-          e insumos actuales.
+          Durante la transición se muestran por separado la venta operativa de
+          OPS y el histórico sincronizado de Loyverse. No se suman entre sí para
+          evitar doble conteo. Las cifras de Loyverse excluyen recibos cancelados.
         </p>
       </section>
 
@@ -79,9 +76,23 @@ export default async function AnalyticsPage({
       </section>
 
       <section className="grid">
+        <article className="card">
+          <p className="eyebrow">HOY · OPS LIVE</p>
+          <div className="metric">{money0.format(data.livePosToday.sales)}</div>
+          <p>
+            {data.livePosToday.tickets} tickets ·{" "}
+            {data.livePosToday.units.toFixed(0)} unidades
+          </p>
+          <div className="status-ok">
+            Fuente: ventas pagadas directamente en Café Épico Ops.
+          </div>
+        </article>
+
         {data.periods.map((period) => (
           <article className="card" key={period.key}>
-            <p className="eyebrow">{period.label.toUpperCase()}</p>
+            <p className="eyebrow">
+              {period.label.toUpperCase()} · LOYVERSE
+            </p>
             <div className="metric">{money0.format(period.sales)}</div>
             <p>
               {period.tickets} tickets · ticket{" "}
