@@ -40,6 +40,13 @@ function candidateScore(candidate: OperationalCandidate) {
   };
 }
 
+function disposableName(name: string) {
+  return /VASO|TAPA|MANGA|FAJILLA|SERVILLETA|POPOTE|BOLSA|CUBIERTO|CHAROLA/i.test(name);
+}
+function strawName(name: string) {
+  return /POPOTE|PAJILLA/i.test(name);
+}
+
 export async function getOperationalRecipeSource(
   organizationId: string,
 ) {
@@ -86,6 +93,21 @@ export async function getOperationalRecipeSource(
           );
         }) ?? selected;
 
+      // Incluso cuando Loyverse sólo tiene receta para llevar,
+      // el servicio aquí usa vajilla reutilizable. En bebidas frías sí va popote.
+      const dineInComponents = dineIn.recipe.effectiveComponents.filter(
+        (component) =>
+          !disposableName(component.sourceName) ||
+          (selected.category === "FRÍAS" && strawName(component.sourceName)),
+      );
+      if (selected.category === "FRÍAS" &&
+          !dineInComponents.some((component) => strawName(component.sourceName))) {
+        const straw = takeaway.recipe.effectiveComponents.find(
+          (component) => strawName(component.sourceName),
+        );
+        if (straw) dineInComponents.push(straw);
+      }
+
       return {
         ...selected.recipe,
         sourceCategory: selected.recipe.category,
@@ -95,7 +117,7 @@ export async function getOperationalRecipeSource(
             externalId: dineIn.recipe.externalId,
             variantExternalId: dineIn.recipe.variantExternalId,
             sourceCategory: dineIn.recipe.category,
-            effectiveComponents: dineIn.recipe.effectiveComponents,
+            effectiveComponents: dineInComponents,
           },
           TAKEAWAY: {
             externalId: takeaway.recipe.externalId,
