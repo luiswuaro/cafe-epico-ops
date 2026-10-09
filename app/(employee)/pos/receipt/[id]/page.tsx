@@ -339,6 +339,9 @@ export default async function ReceiptPage({
                 </span>
                 <span>{money.format(Number(line.lineTotal))}</span>
               </div>
+              <div className="receipt-line-note">
+                {line.expectedConsumption?.serviceMode==="TAKEAWAY"?"Para llevar":"Para consumir aquí"}
+              </div>
               {printSettings.showItemNotes && line.note && (
                 <div className="receipt-line-note">↳ {line.note}</div>
               )}
