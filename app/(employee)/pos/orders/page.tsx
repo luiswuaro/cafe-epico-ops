@@ -202,6 +202,12 @@ export default async function PosOrdersPage({
                 )}
 
                 {order.mode==="LIVE" && !partiallyPaid && (
+                  <Link href={"/pos?ticket="+order.id} className="button">
+                    <span>Reabrir ticket en POS · agregar productos</span>
+                  </Link>
+                )}
+
+                {order.mode==="LIVE" && !partiallyPaid && (
                   <>
                     <AddLiveProducts orderId={order.id}
                       products={catalog.filter(item=>item.active).map(item=>({
