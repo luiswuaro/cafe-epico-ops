@@ -71,6 +71,7 @@ export default async function PosInventoryAuditPage() {
       <p>Insumos registrados: <strong>{items.length}</strong> · Saldos activos: <strong>{balances.length}</strong> · Equivalencias Loyverse → OPS: <strong>{mappings.length}</strong></p>
       <p>Componentes con inventario y equivalencia: <strong>{coveredComponents} de {totalComponents}</strong> (recetas aquí y para llevar).</p>
       <p>Componentes de costo sin inventario: <strong>{costOnlyComponents}</strong> (agua: queda en receta y escandallo, sin conteo ni descuento).</p>
+      <p>Agua: garrafón 19 L por $26.00 MXN. Costo por gramo aproximado con densidad 1 g/ml.</p>
       <p>Movimientos de inventario visibles: <strong>{movements.length}</strong> (últimos 100).</p>
       <p className="muted">La cobertura de equivalencias es sólo una comprobación preliminar. También debemos verificar unidades, densidades, mermas, saldos físicos y modificación por pedido antes de pasar a LIVE.</p>
       <div className="pos-result-actions">
@@ -90,7 +91,7 @@ export default async function PosInventoryAuditPage() {
             {recipe.components.length===0 && <p className="status-warn">Sin componentes; no existe receta descontable.</p>}
             {recipe.components.map((c,i)=><p key={i} className="muted">
               {c.quantity} {c.unitLabel} · {c.name} · {isCostOnlyComponent(c)
-                ? "SOLO COSTO · "+costOnlyRecipeMeasure(c,c.quantity)?.quantity+" g en receta · sin descontar"
+                ? "SOLO COSTO · "+costOnlyRecipeMeasure(c,c.quantity)?.quantity+" g · "+new Intl.NumberFormat("es-MX",{style:"currency",currency:"MXN"}).format(costOnlyRecipeMeasure(c,c.quantity)?.estimatedCostMxn ?? 0)+" · sin descontar"
                 : c.variantExternalId && mapped.has(c.variantExternalId)?"Mapeado":"SIN MAPEAR"}
             </p>)}
           </div>)}
