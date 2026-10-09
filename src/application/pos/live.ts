@@ -50,6 +50,12 @@ export async function checkoutLiveOrder(input:{
     if(!item || !item.active || line.quantity<1 || !Number.isInteger(line.quantity) || line.quantity>20){
       throw new Error("Producto no disponible para la venta.");
     }
+    // En pruebas LIVE, limitar el menú a un producto explícitamente aprobado.
+    // El control se valida en servidor: no depende de filtros en el navegador.
+    const pilotProduct = process.env.POS_LIVE_PILOT_ITEM?.trim();
+    if(pilotProduct && item.name.toLocaleUpperCase("es-MX") !== pilotProduct.toLocaleUpperCase("es-MX")){
+      throw new Error("Piloto LIVE limitado a "+pilotProduct+". No se cobró otro producto.");
+    }
     if(line.note?.trim() && line.note.trim().toLocaleLowerCase("es-MX")!=="extra caliente"){
       throw new Error("Modificador libre no permitido en LIVE ("+item.name+"). Usa receta configurada; sólo se admite la nota extra caliente.");
     }
