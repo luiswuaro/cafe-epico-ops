@@ -285,6 +285,7 @@ export default async function PosPage({
       )}
 
       <PosClient
+        key={selectedTicket?.id??"NEW_TICKET"}
         catalog={catalog.filter(item=>!pilotItem || item.name.toLocaleUpperCase("es-MX")===pilotItem.toLocaleUpperCase("es-MX")).map((item) => ({
           id: item.id,
           name: item.name,
