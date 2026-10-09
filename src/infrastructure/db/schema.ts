@@ -1202,6 +1202,8 @@ export const posPayments = pgTable("pos_payments", {
   method: varchar("method", { length: 30 }).notNull(),
   amount: numeric("amount", { precision: 14, scale: 2 }).notNull(),
   reference: text("reference"),
+  tenderedAmount: numeric("tendered_amount", { precision: 14, scale: 2 }),
+  changeAmount: numeric("change_amount", { precision: 14, scale: 2 }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   index("pos_payments_order_idx").on(t.orderId),
