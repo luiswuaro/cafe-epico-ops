@@ -255,7 +255,7 @@ export async function payOrderSplit(formData: FormData) {
       if(!line)throw new Error("Producto no encontrado en la comanda.");
       return {externalId:line.catalogExternalId,quantity:Number(share.quantity),note:line.note};
     });
-    const customerId=String(formData.get("customerId")??"").trim()||order.customerId;
+    const customerId=formData.has("customerId") ? (String(formData.get("customerId")??"").trim()||null) : order.customerId;
     const tenderedRaw=String(formData.get("tenderedAmount")??"").trim();
     const result=await checkoutLiveOrder({
       organizationId:employee.organizationId,storeId:employee.homeStoreId,
