@@ -36,6 +36,7 @@ export async function checkoutLiveOrder(input:{
   customerId:string|null;
   serviceMode:PosServiceMode;
   paymentMethod:"CASH"|"CARD"|"TRANSFER";
+  tenderedAmount:number|null;
   tableLabel:string|null;
   note:string|null;
 }) {
@@ -61,6 +62,11 @@ export async function checkoutLiveOrder(input:{
   });
   const total=Number(lines.reduce((sum,line)=>sum+line.total,0).toFixed(2));
   if(total<=0) throw new Error("El total de la venta es inválido.");
+  if(input.paymentMethod==="CASH" &&
+    (input.tenderedAmount===null || !Number.isFinite(input.tenderedAmount) ||
+      input.tenderedAmount < total || input.tenderedAmount > 1000000)) {
+    throw new Error("El efectivo entregado debe ser mayor o igual al total.");
+  }
   const db=getDb();
   const now=new Date();
   const result=await db.transaction(async tx=>{
@@ -163,6 +169,8 @@ export async function checkoutLiveOrder(input:{
     await tx.insert(posPayments).values({
       organizationId:input.organizationId,orderId:order.id,method:input.paymentMethod,
       amount:total.toFixed(2),
+      tenderedAmount:input.paymentMethod==="CASH" ? input.tenderedAmount!.toFixed(2) : null,
+      changeAmount:input.paymentMethod==="CASH" ? (input.tenderedAmount!-total).toFixed(2) : null,
     });
     if(input.paymentMethod==="CASH"){
       await tx.insert(posCashMovements).values({
