@@ -217,6 +217,18 @@ async function createShadowOrder(
   }
 
   const order = await db.transaction(async (tx) => {
+    if(orderMode==="LIVE"&&status==="SENT"){
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${employee.homeStoreId!}))`);
+      const [duplicateTable]=await tx.select({id:posOrders.id})
+        .from(posOrders).where(and(
+          eq(posOrders.organizationId,employee.organizationId),
+          eq(posOrders.storeId,employee.homeStoreId!),
+          eq(posOrders.mode,"LIVE"),
+          sql`${posOrders.status} in ('SENT','PREPARING','READY','PARTIALLY_PAID')`,
+          sql`lower(trim(${posOrders.tableLabel})) = lower(trim(${input.tableLabel}))`
+        )).limit(1);
+      if(duplicateTable)throw new Error("Ya existe un ticket guardado con ese nombre. Reabre esa mesa desde Tickets guardados.");
+    }
     const [created] = await tx
       .insert(posOrders)
       .values({
