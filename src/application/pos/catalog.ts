@@ -21,6 +21,8 @@ export type PosRecipeComponent = {
   quantity: number;
   unitLabel: string;
   category: string | null;
+  inventoryTracked: boolean;
+  inventoryResolved: boolean;
 };
 
 type StoredRecipe = {
@@ -99,6 +101,14 @@ function storedRecipe(value: unknown): StoredRecipe | null {
       unitLabel,
       category:
         typeof component.category === "string" ? component.category : null,
+      inventoryTracked:
+        typeof component.inventoryTracked === "boolean"
+          ? component.inventoryTracked
+          : false,
+      inventoryResolved:
+        typeof component.inventoryResolved === "boolean"
+          ? component.inventoryResolved
+          : false,
     }];
   });
 
@@ -174,6 +184,8 @@ function mapEffectiveComponents(
     quantity: component.quantity,
     unitLabel: component.unitLabel,
     category: component.category,
+    inventoryTracked: component.inventoryTracked,
+    inventoryResolved: component.inventoryResolved,
   }));
 }
 
@@ -257,6 +269,39 @@ export async function getPosCatalog(
   const categoryById = new Map(
     categories.map((category) => [category.externalId, category.name]),
   );
+  const itemById = new Map(
+    items.map((item) => [item.externalId, item]),
+  );
+  const inventoryTrackingByVariant = new Map(
+    variants.map((variant) => {
+      const item = variant.itemExternalId
+        ? itemById.get(variant.itemExternalId)
+        : null;
+      return [
+        variant.externalId,
+        {
+          resolved: Boolean(item),
+          tracked: item ? asBool(item.payload.track_stock) : false,
+        },
+      ] as const;
+    }),
+  );
+  const resolveStoredRecipe = (value: unknown) => {
+    const recipe = storedRecipe(value);
+    if (!recipe) return null;
+    return {
+      components: recipe.components.map((component) => {
+        const tracking = component.variantExternalId
+          ? inventoryTrackingByVariant.get(component.variantExternalId)
+          : null;
+        return {
+          ...component,
+          inventoryTracked: tracking?.tracked ?? false,
+          inventoryResolved: tracking?.resolved ?? false,
+        };
+      }),
+    };
+  };
   const variantByItem = new Map(
     variants
       .filter((variant) => variant.itemExternalId)
@@ -282,8 +327,8 @@ export async function getPosCatalog(
       const baseTakeaway = mapEffectiveComponents(
         recipe.serviceRecipes.TAKEAWAY.effectiveComponents,
       );
-      const overrideDineIn = storedRecipe(override?.recipeDineIn);
-      const overrideTakeaway = storedRecipe(override?.recipeTakeaway);
+      const overrideDineIn = resolveStoredRecipe(override?.recipeDineIn);
+      const overrideTakeaway = resolveStoredRecipe(override?.recipeTakeaway);
 
       return {
         id: recipe.externalId,
@@ -357,8 +402,8 @@ export async function getPosCatalog(
     if (price == null || price <= 0) return [];
 
     const override = overrideBySource.get(item.externalId);
-    const dineIn = storedRecipe(override?.recipeDineIn);
-    const takeaway = storedRecipe(override?.recipeTakeaway);
+    const dineIn = resolveStoredRecipe(override?.recipeDineIn);
+    const takeaway = resolveStoredRecipe(override?.recipeTakeaway);
 
     return [{
       id: item.externalId,
@@ -391,8 +436,8 @@ export async function getPosCatalog(
   });
 
   const manualCatalog = manual.map((item) => {
-    const dineIn = storedRecipe(item.recipeDineIn) ?? { components: [] };
-    const takeaway = storedRecipe(item.recipeTakeaway) ?? dineIn;
+    const dineIn = resolveStoredRecipe(item.recipeDineIn) ?? { components: [] };
+    const takeaway = resolveStoredRecipe(item.recipeTakeaway) ?? dineIn;
 
     return {
       id: "manual:" + item.id,
