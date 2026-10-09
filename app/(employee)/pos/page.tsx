@@ -4,6 +4,7 @@ import { getPosCatalog } from "@/src/application/pos/catalog";
 import { isPosLiveEnabled } from "@/src/application/pos/live";
 import { getCashState } from "@/src/application/pos/cash";
 import { getPosCustomers } from "@/src/application/pos/customers";
+import { getOpenPosOrders } from "@/src/application/pos/orders";
 import {
   getRecentShadowOrders,
   getShadowOrderMirror,
@@ -54,10 +55,11 @@ export default async function PosPage({
 
   const payError = typeof params.error === "string" ? params.error.slice(0,260) : null;
   const savedId = typeof params.saved === "string" ? params.saved : null;
+  const selectedTicketId = typeof params.ticket === "string" ? params.ticket : null;
   const selectedCustomerId =
     typeof params.customer === "string" ? params.customer : null;
 
-  const [catalog, customers, recent, saved, canCancel, cash] = await Promise.all([
+  const [catalog, customers, recent, saved, canCancel, cash, openOrders] = await Promise.all([
     getPosCatalog(employee.organizationId),
     getPosCustomers(employee.organizationId),
     getRecentShadowOrders(
@@ -74,7 +76,11 @@ export default async function PosPage({
       employee.homeStoreId,
     ),
     getCashState(employee.organizationId, employee.homeStoreId),
+    getOpenPosOrders(employee.organizationId,employee.homeStoreId),
   ]);
+  const liveTickets=openOrders.filter(order=>order.mode==="LIVE");
+  const selectedTicket=liveEnabled&&selectedTicketId
+    ? liveTickets.find(order=>order.id===selectedTicketId)??null : null;
 
   return (
     <main className="shell pos-shell">
@@ -248,6 +254,36 @@ export default async function PosPage({
         </Link>
       </div>
 
+      {liveEnabled && (
+        <section className="card stack">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">TICKETS GUARDADOS</p>
+              <h2>Mesas abiertas</h2>
+            </div>
+            <span className="pill">{liveTickets.length} pendientes</span>
+          </div>
+          <p className="muted">Reabre una mesa para agregar bebidas desde este mismo POS. El ticket conserva su folio y separa lo anterior de la nueva ronda.</p>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+            <Link className="button" href="/pos">+ Ticket nuevo</Link>
+            {liveTickets.map(ticket=>(
+              <Link className="button" key={ticket.id}
+                href={ticket.status==="PARTIALLY_PAID"
+                  ? "/pos/orders/"+ticket.id+"/split"
+                  : "/pos?ticket="+ticket.id}>
+                {ticket.tableLabel??(ticket.serviceMode==="TAKEAWAY"?"Para llevar":ticket.folio)}
+                {" · "}{money.format(Number(ticket.total))}
+                {ticket.status==="PARTIALLY_PAID"?" · cobro parcial":""}
+              </Link>
+            ))}
+          </div>
+          {selectedTicketId&&!selectedTicket&&<p className="status-warn">
+            Ese ticket no está abierto en esta sucursal. Selecciona otro o consulta el historial.
+          </p>}
+          {typeof params.updated==="string"&&<p className="status-ok">Ticket actualizado; nueva ronda guardada sin cobrar.</p>}
+        </section>
+      )}
+
       <PosClient
         catalog={catalog.filter(item=>!pilotItem || item.name.toLocaleUpperCase("es-MX")===pilotItem.toLocaleUpperCase("es-MX")).map((item) => ({
           id: item.id,
@@ -265,6 +301,21 @@ export default async function PosPage({
         selectedCustomerId={selectedCustomerId}
         cashOpen={Boolean(cash.session)}
         liveEnabled={liveEnabled}
+        savedTicket={selectedTicket?{
+          id:selectedTicket.id,
+          folio:selectedTicket.folio,
+          name:selectedTicket.tableLabel??"Ticket guardado",
+          total:Number(selectedTicket.total),
+          customerId:selectedTicket.customerId,
+          status:selectedTicket.status,
+          serviceMode:selectedTicket.serviceMode==="TAKEAWAY"?"TAKEAWAY":"DINE_IN",
+          lines:selectedTicket.lines.map(line=>({
+            id:line.id,name:line.name,quantity:Number(line.quantity),
+            note:line.note,unitPrice:Number(line.unitPrice),
+            serviceMode:line.expectedConsumption?.serviceMode==="TAKEAWAY"?"TAKEAWAY":"DINE_IN",
+            isAdditionalRound:line.isAdditionalRound,
+          })),
+        }:null}
       />
 
       <section className="card pos-recent">
