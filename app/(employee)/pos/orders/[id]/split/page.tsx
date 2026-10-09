@@ -15,11 +15,14 @@ const money = new Intl.NumberFormat("es-MX", {
 });
 
 export default async function SplitOrderPage({
-  params,
+  params,searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams:Promise<Record<string,string|string[]|undefined>>;
 }) {
   const { id } = await params;
+  const query=await searchParams;
+  const paymentError=typeof query.error==="string"?query.error.slice(0,300):null;
   const { employee } = await getCurrentEmployee();
   if (!employee.homeStoreId) throw new Error("Sin sucursal asignada");
 
@@ -60,6 +63,11 @@ export default async function SplitOrderPage({
           Volver a comandas
         </Link>
       </section>
+
+      {paymentError && <section className="card" role="alert">
+        <p className="status-bad">Cobro no confirmado: {paymentError}</p>
+        <p className="muted">Comprueba cuáles cuentas siguen pendientes antes de repetir un pago. No se borró la división de la mesa.</p>
+      </section>}
 
       {state.splits.length > 0 && (
         <section className="split-existing-grid">
@@ -105,6 +113,7 @@ export default async function SplitOrderPage({
               ) : (
                 <form action={payOrderSplit} className="stack">
                   <input type="hidden" name="splitId" value={split.id} />
+                  <input type="hidden" name="orderId" value={state.order.id} />
                   <label>
                     Método de pago
                     <select
