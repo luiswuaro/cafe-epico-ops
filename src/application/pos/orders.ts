@@ -19,6 +19,7 @@ export async function getOpenPosOrders(
     .select({
       id: posOrders.id,
       folio: posOrders.folio,
+      mode: posOrders.mode,
       status: posOrders.status,
       serviceMode: posOrders.serviceMode,
       tableLabel: posOrders.tableLabel,
