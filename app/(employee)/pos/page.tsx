@@ -107,21 +107,38 @@ export default async function PosPage({
         >
           <div className="section-heading">
             <div>
-              <p className="eyebrow">VENTA REGISTRADA · {saved.order.folio}</p>
+              <p className="eyebrow">{saved.order.mode === "LIVE" ? "VENTA OPS LIVE" : "VENTA ESPEJO"} · {saved.order.folio}</p>
               <h2>
                 {saved.order.status === "CANCELLED"
                   ? "Venta cancelada"
-                  : saved.mirror?.exact
-                    ? "Espejo exacto encontrado"
-                    : saved.mirror
-                      ? "Encontré una venta para revisar"
-                      : "OPS guardó la venta; falta encontrar su espejo"}
+                  : saved.order.mode === "LIVE"
+                    ? "Cobro LIVE registrado en OPS"
+                    : saved.mirror?.exact
+                      ? "Espejo exacto encontrado"
+                      : saved.mirror
+                        ? "Encontré una venta para revisar"
+                        : "OPS guardó la venta; falta encontrar su espejo"}
               </h2>
             </div>
             <strong className="metric">{money.format(Number(saved.order.total))}</strong>
           </div>
 
-          {saved.mirror ? (
+          {saved.order.mode === "LIVE" ? (
+            <div className="stack compact-stack">
+              <p className={saved.order.status === "CANCELLED" ? "status-warn" : "status-ok"}>
+                {saved.order.status === "CANCELLED"
+                  ? "Venta LIVE cancelada. Se conservaron folio, pago y movimientos de reversa para auditoría."
+                  : "Venta cobrada directamente en OPS. No requiere sincronizar ni buscar un recibo de Loyverse."}
+              </p>
+              <p className="muted">
+                Método de pago: {saved.payment?.method === "CASH" ? "Efectivo" :
+                  saved.payment?.method === "CARD" ? "Tarjeta" :
+                  saved.payment?.method === "TRANSFER" ? "Transferencia" : "No registrado"}
+                {" · "}Servicio: {saved.order.serviceMode === "DINE_IN" ? "Aquí" : "Para llevar"}
+                {" · "}Inventario: {saved.order.inventoryEffectApplied ? "Descontado" : "Sin descuento activo"}
+              </p>
+            </div>
+          ) : saved.mirror ? (
             <div className="pos-mirror-grid">
               <div>
                 <span className="muted">Recibo Loyverse</span>
@@ -183,7 +200,7 @@ export default async function PosPage({
               Imprimir ticket
             </Link>
             <Link href="/pos" className="button">
-              Nueva orden espejo
+              {saved.order.mode === "LIVE" ? "Nueva orden" : "Nueva orden espejo"}
             </Link>
           </div>
 
@@ -254,7 +271,7 @@ export default async function PosPage({
         <div className="section-heading">
           <div>
             <p className="eyebrow">PRUEBAS RECIENTES</p>
-            <h2>Ventas espejo</h2>
+            <h2>Historial de órdenes espejo</h2>
           </div>
           <span className="pill">{recent.length}</span>
         </div>
