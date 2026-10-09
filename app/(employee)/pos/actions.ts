@@ -368,6 +368,11 @@ export async function payLiveCommand(formData:FormData) {
   if(!lines.length)throw new Error("Comanda sin productos.");
   let result:{id:string;alreadyRecorded:boolean};
   try{
+    const allowStockShortage=formData.get("allowStockShortage")==="on";
+    if(allowStockShortage){
+      const allowed=await employeeHasPermission(employee.id,"inventory.adjust",employee.homeStoreId);
+      if(!allowed)throw new Error("Sólo el propietario puede autorizar cobro con diferencia de inventario.");
+    }
     result=await checkoutLiveOrder({
     organizationId:employee.organizationId,storeId:employee.homeStoreId,
     actorUserId:user.id,employeeId:employee.id,
@@ -381,10 +386,11 @@ export async function payLiveCommand(formData:FormData) {
     serviceMode:order.serviceMode as PosServiceMode,
     paymentMethod,tenderedAmount,
     tableLabel:order.tableLabel,note:order.note,
+    allowStockShortage,
     });
   }catch(error){
     const message=error instanceof Error?error.message:"No se pudo cobrar la comanda.";
-    redirect("/pos/orders?error="+encodeURIComponent(message.slice(0,260)));
+    redirect("/pos/checkout?ticket="+orderId+"&error="+encodeURIComponent(message.slice(0,330)));
   }
   redirect("/pos/receipt/"+result.id);
 }
