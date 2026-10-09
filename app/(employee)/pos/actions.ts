@@ -63,7 +63,7 @@ function folio(date: Date, clientOrderId: string) {
   })
     .format(date)
     .replace(/\D/g, "");
-  return "SH-" + stamp + "-" + clientOrderId.slice(-4).toUpperCase();
+  return "CE-" + stamp + "-" + clientOrderId.slice(-4).toUpperCase();
 }
 
 async function buildOrderInput(
@@ -253,7 +253,7 @@ async function createShadowOrder(
         total: input.total.toFixed(2),
         note: input.note,
         loyaltyPointsPreview: input.loyaltyPointsPreview.toFixed(2),
-        loyaltyEffectApplied: status === "PAID" && Boolean(input.customerId),
+        loyaltyEffectApplied: false,
         inventoryEffectApplied: false,
         paidAt: status === "PAID" ? now : null,
       })
@@ -344,7 +344,7 @@ async function createShadowOrder(
         cashTendered: tender.tendered,
         cashChange: tender.change,
         inventoryEffectApplied: status === "PAID",
-        loyaltyEffectApplied: Boolean(order.customerId),
+        loyaltyEffectApplied: status === "PAID" && Boolean(input.customerId),
       },
     });
 
@@ -553,7 +553,7 @@ export async function payShadowCommand(formData: FormData) {
       storeId: employee.homeStoreId,
       actorUserId: user.id,
       actorEmployeeId: employee.id,
-      action: "POS_SHADOW_COMMAND_PAID",
+      action: "POS_LIVE_COMMAND_PAID",
       entityType: "pos_order",
       entityId: order.id,
       beforeData: { status: order.status },
@@ -564,7 +564,7 @@ export async function payShadowCommand(formData: FormData) {
         cashChange: tender.change,
         loyaltyPointsPreview: order.loyaltyPointsPreview,
         inventoryEffectApplied: true,
-        loyaltyEffectApplied: false,
+        loyaltyEffectApplied: Boolean(order.customerId),
       },
     });
   });
