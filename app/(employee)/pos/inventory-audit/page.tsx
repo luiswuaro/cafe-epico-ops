@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { and, desc, eq } from "drizzle-orm";
 import { getPosCatalog } from "@/src/application/pos/catalog";
+import { isCostOnlyComponent, costOnlyRecipeMeasure } from "@/src/application/pos/component-policy";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
 import { assertEmployeePermission } from "@/src/infrastructure/auth/permissions";
 import { getDb } from "@/src/infrastructure/db/client";
@@ -45,12 +46,14 @@ export default async function PosInventoryAuditPage() {
   const checks = catalog.map((product)=>{
     const recipes = (["DINE_IN","TAKEAWAY"] as const).map((mode)=>{
       const components = product.serviceRecipes[mode].components;
-      const covered = components.filter((x)=>Boolean(x.variantExternalId && mapped.has(x.variantExternalId)));
-      return { mode, components, covered:covered.length };
+      const stockComponents = components.filter((x)=>!isCostOnlyComponent(x));
+      const covered = stockComponents.filter((x)=>Boolean(x.variantExternalId && mapped.has(x.variantExternalId)));
+      return { mode, components, stockComponents, covered:covered.length };
     });
     return { id:product.id, name:product.name, recipes };
   });
-  const totalComponents = checks.reduce((sum,p)=>sum+p.recipes.reduce((n,r)=>n+r.components.length,0),0);
+  const totalComponents = checks.reduce((sum,p)=>sum+p.recipes.reduce((n,r)=>n+r.stockComponents.length,0),0);
+  const costOnlyComponents = checks.reduce((sum,p)=>sum+p.recipes.reduce((n,r)=>n+r.components.length-r.stockComponents.length,0),0);
   const coveredComponents = checks.reduce((sum,p)=>sum+p.recipes.reduce((n,r)=>n+r.covered,0),0);
   const ready = totalComponents>0 && totalComponents===coveredComponents && balances.length>0;
 
@@ -66,7 +69,8 @@ export default async function PosInventoryAuditPage() {
     <section className="card stack">
       <h2>{ready ? "Mapeo revisable; falta validar el motor LIVE" : "No habilitado para descuentos LIVE"}</h2>
       <p>Insumos registrados: <strong>{items.length}</strong> · Saldos activos: <strong>{balances.length}</strong> · Equivalencias Loyverse → OPS: <strong>{mappings.length}</strong></p>
-      <p>Componentes de recetas con equivalencia: <strong>{coveredComponents} de {totalComponents}</strong> (incluye recetas aquí y para llevar).</p>
+      <p>Componentes con inventario y equivalencia: <strong>{coveredComponents} de {totalComponents}</strong> (recetas aquí y para llevar).</p>
+      <p>Componentes de costo sin inventario: <strong>{costOnlyComponents}</strong> (agua: queda en receta y escandallo, sin conteo ni descuento).</p>
       <p>Movimientos de inventario visibles: <strong>{movements.length}</strong> (últimos 100).</p>
       <p className="muted">La cobertura de equivalencias es sólo una comprobación preliminar. También debemos verificar unidades, densidades, mermas, saldos físicos y modificación por pedido antes de pasar a LIVE.</p>
       <div className="pos-result-actions">
@@ -79,13 +83,15 @@ export default async function PosInventoryAuditPage() {
     <section className="card stack">
       <h2>Auditoría por bebida</h2>
       {checks.map((p)=> <details key={p.id} className="task">
-        <summary><strong>{p.name}</strong> · {p.recipes.map((r)=>r.covered+"/"+r.components.length).join(" / ")} componentes mapeados (aquí / llevar)</summary>
+        <summary><strong>{p.name}</strong> · {p.recipes.map((r)=>r.covered+"/"+r.stockComponents.length).join(" / ")} componentes mapeados (aquí / llevar)</summary>
         <div className="stack" style={{paddingTop:12}}>
           {p.recipes.map((recipe)=><div key={recipe.mode}>
             <h3>{recipe.mode==="DINE_IN"?"Aquí":"Para llevar"}</h3>
             {recipe.components.length===0 && <p className="status-warn">Sin componentes; no existe receta descontable.</p>}
             {recipe.components.map((c,i)=><p key={i} className="muted">
-              {c.quantity} {c.unitLabel} · {c.name} · {c.variantExternalId && mapped.has(c.variantExternalId)?"Mapeado":"SIN MAPEAR"}
+              {c.quantity} {c.unitLabel} · {c.name} · {isCostOnlyComponent(c)
+                ? "SOLO COSTO · "+costOnlyRecipeMeasure(c,c.quantity)?.quantity+" g en receta · sin descontar"
+                : c.variantExternalId && mapped.has(c.variantExternalId)?"Mapeado":"SIN MAPEAR"}
             </p>)}
           </div>)}
         </div>
