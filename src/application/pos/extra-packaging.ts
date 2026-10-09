@@ -13,7 +13,7 @@ const componentId=(component:{variantExternalId:string|null;name:string})=>
 export async function recordExtraPackaging(input:ExtraPackInput){
   if(!Number.isInteger(input.quantity)||input.quantity<1||input.quantity>20)
     throw new Error("Cantidad de empaques inválida.");
-  const catalog=await getPosCatalog(input.organizationId);
+  const catalog=await getPosCatalog(input.organizationId,{includeDisabled:true});
   const db=getDb();
   await db.transaction(async tx=>{
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${input.storeId}))`);
@@ -42,8 +42,24 @@ export async function recordExtraPackaging(input:ExtraPackInput){
     const item=catalog.find(p=>p.id===line.catalogExternalId);
     if(!item)throw new Error("Producto no disponible en el catálogo.");
     const here=new Map<string,number>();
-    for(const c of item.serviceRecipes.DINE_IN.components)
-      if(isPack(c.name))here.set(componentId(c),(here.get(componentId(c))??0)+c.quantity);
+    // Usar el consumo de empaques que quedó registrado al vender,
+    // no la receta Aquí que pudo haberse modificado desde entonces.
+    const original=line.expectedConsumption?.components;
+    const orig=Array.isArray(original)?original:[];
+    for(const raw of orig){
+      if(!raw||typeof raw!=="object")continue;
+      const c=raw as Record<string,unknown>;
+      if(typeof c.name!=="string"||!isPack(c.name))continue;
+      const component={
+        name:c.name,
+        variantExternalId:typeof c.variantExternalId==="string"?c.variantExternalId:null,
+      };
+      const amount=Number(c.quantity)/Number(line.quantity);
+      if(Number.isFinite(amount)&&amount>0){
+        const id=componentId(component);
+        here.set(id,(here.get(id)??0)+amount);
+      }
+    }
     const extras=item.serviceRecipes.TAKEAWAY.components.filter(c=>isPack(c.name))
       .map(c=>({...c,quantity:Math.max(0,c.quantity-(here.get(componentId(c))??0))*input.quantity}))
       .filter(c=>c.quantity>0);
