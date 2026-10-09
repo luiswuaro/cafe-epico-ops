@@ -7,6 +7,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getPosCatalog, type PosServiceMode } from "@/src/application/pos/catalog";
 import { cancelLiveOrder } from "@/src/application/pos/live-cancellation";
+import { checkoutLiveOrder, isPosLiveEnabled } from "@/src/application/pos/live";
+import { getPosReadiness } from "@/src/application/pos/readiness";
 import { getOpenCashSession } from "@/src/application/pos/cash";
 import { syncLoyverseReceipts } from "@/src/application/loyverse/sync";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
@@ -66,6 +68,7 @@ function folio(date: Date, clientOrderId: string) {
 async function buildOrderInput(
   formData: FormData,
   organizationId: string,
+  mode:"SHADOW"|"LIVE"="SHADOW",
 ) {
   const rawCart = String(formData.get("cart") ?? "[]");
   const serviceMode = serviceModeSchema.parse(
@@ -93,7 +96,7 @@ async function buildOrderInput(
       note: line.note?.trim() || null,
       lineTotal,
       expectedConsumption: {
-        mode: "SHADOW",
+        mode,
         serviceMode,
         sourceRecipeExternalId: serviceRecipe.externalId,
         sourceCategory: serviceRecipe.sourceCategory,
@@ -144,6 +147,7 @@ async function createShadowOrder(
   formData: FormData,
   status: "PAID" | "SENT",
   paymentMethod?: "CASH" | "CARD" | "TRANSFER",
+  orderMode:"SHADOW"|"LIVE"="SHADOW",
 ) {
   const { user, employee } = await getCurrentEmployee();
   if (!employee.homeStoreId) {
@@ -156,7 +160,30 @@ async function createShadowOrder(
     employee.homeStoreId,
   );
 
-  const input = await buildOrderInput(formData, employee.organizationId);
+  if(orderMode==="LIVE" && !isPosLiveEnabled()) {
+    throw new Error("Comandas LIVE deshabilitadas.");
+  }
+  const input = await buildOrderInput(formData, employee.organizationId, orderMode);
+  if(orderMode==="LIVE"){
+    if(input.serviceMode==="DINE_IN" && !input.tableLabel){
+      throw new Error("Escribe una mesa o referencia para enviar comanda aquí.");
+    }
+    const pilot=process.env.POS_LIVE_PILOT_ITEM?.trim().toLocaleUpperCase("es-MX");
+    if(pilot && input.lines.some(line=>line.item.name.toLocaleUpperCase("es-MX")!==pilot)){
+      throw new Error("Piloto limitado a "+pilot);
+    }
+    // No enviar comandas que sabemos que no podrán cobrarse.
+    const readiness=await getPosReadiness(employee.organizationId,employee.homeStoreId);
+    const byId=new Map(readiness.products.map(p=>[p.id,p]));
+    for(const line of input.lines){
+      if(line.note && line.note.toLocaleLowerCase("es-MX")!=="extra caliente"){
+        throw new Error("Modificador no autorizado en LIVE: "+line.item.name+". Ajusta la receta.");
+      }
+      const state=byId.get(line.item.id)?.recipes.find(r=>r.mode===input.serviceMode);
+      if(!state?.ready) throw new Error("Comanda bloqueada: "+line.item.name+" — "+
+        (state?.errors.join("; ")||"receta incompleta"));
+    }
+  }
   const rawClientOrderId = String(formData.get("clientOrderId") ?? "").trim();
   const clientOrderId = rawClientOrderId || randomUUID();
   const now = new Date();
@@ -195,7 +222,7 @@ async function createShadowOrder(
         storeId: employee.homeStoreId!,
         clientOrderId,
         folio: folio(now, clientOrderId),
-        mode: "SHADOW",
+        mode: orderMode,
         status,
         serviceMode: input.serviceMode,
         tableLabel:
@@ -259,7 +286,7 @@ async function createShadowOrder(
       action:
         status === "PAID"
           ? "POS_SHADOW_SALE_RECORDED"
-          : "POS_SHADOW_COMMAND_SENT",
+          : orderMode==="LIVE" ? "POS_LIVE_COMMAND_SENT" : "POS_SHADOW_COMMAND_SENT",
       entityType: "pos_order",
       entityId: created.id,
       afterData: {
@@ -295,6 +322,48 @@ export async function createShadowSale(formData: FormData) {
 export async function createShadowCommand(formData: FormData) {
   const orderId = await createShadowOrder(formData, "SENT");
   redirect("/pos/orders?created=" + orderId);
+}
+
+export async function createLiveCommand(formData:FormData) {
+  const orderId=await createShadowOrder(formData,"SENT",undefined,"LIVE");
+  redirect("/pos/orders?created="+orderId);
+}
+
+export async function payLiveCommand(formData:FormData) {
+  const {user,employee}=await getCurrentEmployee();
+  if(!employee.homeStoreId)throw new Error("Sin sucursal asignada.");
+  await assertEmployeePermission(employee.id,"pos.sell",employee.homeStoreId);
+  if(!isPosLiveEnabled())throw new Error("POS LIVE deshabilitado.");
+  const orderId=z.string().uuid().parse(String(formData.get("orderId")??""));
+  const paymentMethod=paymentSchema.parse(String(formData.get("paymentMethod")??""));
+  const tenderedRaw=String(formData.get("tenderedAmount")??"").trim();
+  const tenderedAmount=paymentMethod==="CASH" && tenderedRaw!==""?Number(tenderedRaw):null;
+  const db=getDb();
+  const [order,lines]=await Promise.all([
+    db.select().from(posOrders).where(and(
+      eq(posOrders.id,orderId),eq(posOrders.organizationId,employee.organizationId),
+      eq(posOrders.storeId,employee.homeStoreId))).limit(1).then(rows=>rows[0]),
+    db.select().from(posOrderLines).where(eq(posOrderLines.orderId,orderId)),
+  ]);
+  if(!order || order.mode!=="LIVE")throw new Error("Comanda LIVE no encontrada.");
+  if(order.status==="PAID")redirect("/pos/receipt/"+order.id);
+  if(!["SENT","PREPARING","READY"].includes(order.status))
+    throw new Error("Comanda ya no disponible para cobro.");
+  if(!lines.length)throw new Error("Comanda sin productos.");
+  const result=await checkoutLiveOrder({
+    organizationId:employee.organizationId,storeId:employee.homeStoreId,
+    actorUserId:user.id,employeeId:employee.id,
+    existingOrderId:order.id,clientOrderId:order.clientOrderId,
+    cart:lines.map(line=>({
+      externalId:line.catalogExternalId,
+      quantity:Number(line.quantity),note:line.note,
+    })),
+    customerId:order.customerId,
+    serviceMode:order.serviceMode as PosServiceMode,
+    paymentMethod,tenderedAmount,
+    tableLabel:order.tableLabel,note:order.note,
+  });
+  redirect("/pos/receipt/"+result.id);
 }
 
 export async function updateCommandStatus(formData: FormData) {
@@ -381,6 +450,7 @@ export async function payShadowCommand(formData: FormData) {
     .limit(1);
 
   if (!order) throw new Error("Comanda no encontrada");
+  if(order.mode!=="SHADOW")throw new Error("Usa Cobrar LIVE para esta comanda.");
   if (!["SENT", "PREPARING", "READY"].includes(order.status)) {
     redirect("/pos?saved=" + order.id);
   }
@@ -534,12 +604,33 @@ export async function cancelPosOrder(formData: FormData) {
 
   if (!order) throw new Error("Orden no encontrada");
   if (order.mode === "LIVE" && order.status !== "CANCELLED") {
-    await cancelLiveOrder({
-      organizationId:employee.organizationId,
-      storeId:employee.homeStoreId,orderId:order.id,
-      employeeId:employee.id,actorUserId:user.id,reason,
+    if(order.status==="PAID"){
+      await cancelLiveOrder({
+        organizationId:employee.organizationId,
+        storeId:employee.homeStoreId,orderId:order.id,
+        employeeId:employee.id,actorUserId:user.id,reason,
+      });
+      redirect("/pos/receipt/" + order.id);
+    }
+    if(!["SENT","PREPARING","READY"].includes(order.status))
+      throw new Error("No se puede cancelar esta comanda en su estado actual.");
+    await db.transaction(async tx=>{
+      const [updated]=await tx.update(posOrders).set({
+        status:"CANCELLED",cancelledAt:new Date(),
+        cancelledByEmployeeId:employee.id,cancelReason:reason,updatedAt:new Date(),
+      }).where(and(eq(posOrders.id,order.id),eq(posOrders.status,order.status)))
+        .returning({id:posOrders.id});
+      if(!updated)throw new Error("La comanda cambió de estado. Recarga y revisa.");
+      await tx.insert(auditEvents).values({
+        organizationId:employee.organizationId,storeId:employee.homeStoreId,
+        actorUserId:user.id,actorEmployeeId:employee.id,
+        action:"POS_LIVE_OPEN_COMMAND_CANCELLED",
+        entityType:"pos_order",entityId:order.id,
+        beforeData:{status:order.status},
+        afterData:{status:"CANCELLED",reason,hadPayment:false,inventoryApplied:false},
+      });
     });
-    redirect("/pos/receipt/" + order.id);
+    redirect("/pos/receipt/"+order.id);
   }
   if (order.status === "CANCELLED") {
     redirect("/pos?saved=" + order.id);
