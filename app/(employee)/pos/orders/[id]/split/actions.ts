@@ -28,7 +28,7 @@ const allocationSchema = z.array(
 
 const paymentSchema = z.enum(["CASH", "CARD", "TRANSFER"]);
 
-export async function saveOrderSplit(formData: FormData) {
+async function saveOrderSplitUnsafe(formData: FormData) {
   const { user, employee } = await getCurrentEmployee();
   if (!employee.homeStoreId) throw new Error("Sin sucursal asignada");
 
@@ -196,7 +196,23 @@ export async function saveOrderSplit(formData: FormData) {
     });
   });
 
-  redirect("/pos/orders/" + order.id + "/split?saved=1");
+  return "/pos/orders/" + order.id + "/split?saved=1";
+}
+
+export async function saveOrderSplit(formData:FormData){
+  const id=String(formData.get("orderId")??"");
+  const fallback=/^[0-9a-f-]{36}$/i.test(id)
+    ?"/pos/orders/"+id+"/split":"/pos/orders";
+  let destination:string;
+  try{destination=await saveOrderSplitUnsafe(formData);}
+  catch(error){
+    console.error("POS_SPLIT_SAVE_FAILED",{orderId:id,error});
+    const message=error instanceof Error&&/^(Sólo |La cuenta |La división |La orden |Hay un producto |Asignación |Orden |Producto )/.test(error.message)
+      ?error.message.slice(0,260)
+      :"No fue posible dividir la cuenta. Revisa la asignación de productos y el estado del ticket.";
+    redirect(fallback+"?error="+encodeURIComponent(message));
+  }
+  redirect(destination);
 }
 
 async function payOrderSplitUnsafe(formData: FormData) {
@@ -393,7 +409,7 @@ export async function payOrderSplit(formData:FormData){
   redirect(destination);
 }
 
-export async function resetUnpaidOrderSplit(formData:FormData){
+async function resetUnpaidOrderSplitUnsafe(formData:FormData){
   const {user,employee}=await getCurrentEmployee();
   if(!employee.homeStoreId)throw new Error("Sin sucursal.");
   await assertEmployeePermission(employee.id,"pos.sell",employee.homeStoreId);
@@ -421,5 +437,20 @@ export async function resetUnpaidOrderSplit(formData:FormData){
       });
     }
   });
-  redirect("/pos/orders");
+  return "/pos/orders";
+}
+
+export async function resetUnpaidOrderSplit(data:FormData){
+  const id=String(data.get("orderId")??"");
+  let destination:string;
+  try{destination=await resetUnpaidOrderSplitUnsafe(data);}
+  catch(error){
+    console.error("POS_SPLIT_RESET_FAILED",{orderId:id,error});
+    const message=error instanceof Error&&/^(La mesa |No se puede )/.test(error.message)
+      ?error.message.slice(0,260)
+      :"No se pudo quitar la división. Revisa si alguna cuenta ya fue pagada.";
+    redirect((/^[0-9a-f-]{36}$/i.test(id)?"/pos/orders/"+id+"/split":"/pos/orders")+
+      "?error="+encodeURIComponent(message));
+  }
+  redirect(destination);
 }
