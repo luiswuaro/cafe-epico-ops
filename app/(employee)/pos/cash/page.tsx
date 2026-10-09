@@ -57,9 +57,10 @@ export default async function PosCashPage() {
             esperado. En modo espejo sirve para comparar contra tu caja física.
           </p>
         </div>
-        <Link href="/pos" className="button">
-          Volver al POS
-        </Link>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <Link href="/pos/cash/history" className="button">Historial de cortes</Link>
+          <Link href="/pos" className="button">Volver al POS</Link>
+        </div>
       </section>
 
       {!state.session ? (
