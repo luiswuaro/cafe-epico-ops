@@ -16,7 +16,11 @@ const money = new Intl.NumberFormat("es-MX", {
   currency: "MXN",
 });
 
-export default async function PosCatalogAdminPage() {
+export default async function PosCatalogAdminPage({searchParams}:{
+  searchParams:Promise<Record<string,string|string[]|undefined>>;
+}) {
+  const params=await searchParams;
+  const priceSaved=typeof params.priceSaved==="string"?params.priceSaved:null;
   const { organizationId } = await requirePermission("pos.catalog.manage");
   const catalog = await getPosCatalog(organizationId, {
     includeDisabled: true,
@@ -41,6 +45,10 @@ export default async function PosCatalogAdminPage() {
           personalizas “Para llevar” cuando realmente cambia el consumo.
         </p>
       </section>
+
+      {priceSaved && <section className="card" role="status">
+        <p className="status-ok">Precio actualizado en OPS. Los tickets existentes mantienen su valor guardado.</p>
+      </section>}
 
       <details className="card pos-admin-create">
         <summary>+ Agregar producto nuevo</summary>
