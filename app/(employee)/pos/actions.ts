@@ -6,7 +6,10 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getPosCatalog, type PosServiceMode } from "@/src/application/pos/catalog";
-import { getOpenCashSession } from "@/src/application/pos/cash";
+import {
+  getOpenCashSession,
+  isCashSessionCurrentBusinessDate,
+} from "@/src/application/pos/cash";
 import { resolveCashTender } from "@/src/application/pos/payment";
 import { syncLoyverseReceipts } from "@/src/application/loyverse/sync";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
@@ -115,7 +118,7 @@ async function buildOrderInput(
       note: line.note?.trim() || null,
       lineTotal,
       expectedConsumption: {
-        mode: "SHADOW",
+        mode: "LIVE",
         serviceMode,
         sourceRecipeExternalId: serviceRecipe.externalId,
         sourceCategory: serviceRecipe.sourceCategory,
@@ -209,6 +212,17 @@ async function createShadowOrder(
     throw new Error("Abre la caja antes de cobrar en efectivo");
   }
 
+  if (
+    status === "PAID" &&
+    paymentMethod === "CASH" &&
+    cashSession &&
+    !isCashSessionCurrentBusinessDate(cashSession.openedAt)
+  ) {
+    throw new Error(
+      "La caja abierta corresponde a otro día. Ciérrala antes de cobrar en efectivo.",
+    );
+  }
+
   const tender =
     status === "PAID" && paymentMethod
       ? resolveCashTender(formData, input.total, paymentMethod)
@@ -227,7 +241,7 @@ async function createShadowOrder(
         storeId: employee.homeStoreId!,
         clientOrderId,
         folio: folio(now, clientOrderId),
-        mode: "SHADOW",
+        mode: "LIVE",
         status,
         serviceMode: input.serviceMode,
         tableLabel:
@@ -239,7 +253,7 @@ async function createShadowOrder(
         total: input.total.toFixed(2),
         note: input.note,
         loyaltyPointsPreview: input.loyaltyPointsPreview.toFixed(2),
-        loyaltyEffectApplied: false,
+        loyaltyEffectApplied: status === "PAID" && Boolean(input.customerId),
         inventoryEffectApplied: false,
         paidAt: status === "PAID" ? now : null,
       })
@@ -299,6 +313,14 @@ async function createShadowOrder(
           ${employee.id}::uuid
         )`,
       );
+
+      if (input.customerId) {
+        await tx.execute(
+          sql`select public.apply_pos_order_loyalty(
+            ${created.id}::uuid
+          )`,
+        );
+      }
     }
 
     await tx.insert(auditEvents).values({
@@ -308,8 +330,8 @@ async function createShadowOrder(
       actorEmployeeId: employee.id,
       action:
         status === "PAID"
-          ? "POS_SHADOW_SALE_RECORDED"
-          : "POS_SHADOW_COMMAND_SENT",
+          ? "POS_LIVE_SALE_RECORDED"
+          : "POS_LIVE_COMMAND_SENT",
       entityType: "pos_order",
       entityId: created.id,
       afterData: {
@@ -322,7 +344,7 @@ async function createShadowOrder(
         cashTendered: tender.tendered,
         cashChange: tender.change,
         inventoryEffectApplied: status === "PAID",
-        loyaltyEffectApplied: false,
+        loyaltyEffectApplied: Boolean(order.customerId),
       },
     });
 
@@ -459,6 +481,16 @@ export async function payShadowCommand(formData: FormData) {
     throw new Error("Abre la caja antes de cobrar en efectivo");
   }
 
+  if (
+    paymentMethod === "CASH" &&
+    cashSession &&
+    !isCashSessionCurrentBusinessDate(cashSession.openedAt)
+  ) {
+    throw new Error(
+      "La caja abierta corresponde a otro día. Ciérrala antes de cobrar en efectivo.",
+    );
+  }
+
   const tender = resolveCashTender(formData, order.total, paymentMethod);
   const now = new Date();
 
@@ -507,6 +539,14 @@ export async function payShadowCommand(formData: FormData) {
         ${employee.id}::uuid
       )`,
     );
+
+    if (order.customerId) {
+      await tx.execute(
+        sql`select public.apply_pos_order_loyalty(
+          ${order.id}::uuid
+        )`,
+      );
+    }
 
     await tx.insert(auditEvents).values({
       organizationId: employee.organizationId,
@@ -608,12 +648,6 @@ export async function cancelPosOrder(formData: FormData) {
   if (order.status === "CANCELLED") {
     redirect("/pos?saved=" + order.id);
   }
-  if (order.loyaltyEffectApplied) {
-    throw new Error(
-      "Esta venta ya aplicó lealtad y requiere una reversa administrativa.",
-    );
-  }
-
   const [paidSplit] = await db
     .select({ id: posOrderSplits.id })
     .from(posOrderSplits)
@@ -692,6 +726,14 @@ export async function cancelPosOrder(formData: FormData) {
       );
     }
 
+    if (order.loyaltyEffectApplied) {
+      await tx.execute(
+        sql`select public.reverse_pos_order_loyalty(
+          ${order.id}::uuid
+        )`,
+      );
+    }
+
     await tx.insert(auditEvents).values({
       organizationId: employee.organizationId,
       storeId: employee.homeStoreId,
@@ -705,7 +747,7 @@ export async function cancelPosOrder(formData: FormData) {
         status: "CANCELLED",
         reason,
         inventoryEffectApplied: false,
-        loyaltyEffectApplied: order.loyaltyEffectApplied,
+        loyaltyEffectApplied: false,
       },
     });
   });
