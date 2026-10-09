@@ -102,13 +102,27 @@ async function buildOrderInput(
     if (
       (item.category === "CALIENTES" || item.category === "FRÍAS") &&
       serviceRecipe.components.some(
-        (component) => !component.variantExternalId,
+        (component) => !component.inventoryResolved,
       )
     ) {
       throw new Error(
         "La bebida " +
           item.name +
-          " tiene un insumo sin vínculo de inventario. Corrige la receta antes de cobrarla.",
+          " tiene un componente de receta sin resolver. Corrige la receta antes de cobrarla.",
+      );
+    }
+
+    if (
+      (item.category === "CALIENTES" || item.category === "FRÍAS") &&
+      serviceRecipe.components.some(
+        (component) =>
+          component.inventoryTracked && !component.variantExternalId,
+      )
+    ) {
+      throw new Error(
+        "La bebida " +
+          item.name +
+          " tiene un insumo controlado sin vínculo de inventario.",
       );
     }
 
@@ -129,6 +143,8 @@ async function buildOrderInput(
           quantity: component.quantity * line.quantity,
           unitLabel: component.unitLabel,
           category: component.category,
+          inventoryTracked: component.inventoryTracked,
+          inventoryResolved: component.inventoryResolved,
         })),
       },
     };
