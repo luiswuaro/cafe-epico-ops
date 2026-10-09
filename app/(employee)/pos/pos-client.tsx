@@ -5,7 +5,7 @@ import Link from "next/link";
 import { addProductsToLiveCommand } from "./orders/live-actions";
 import {
   createPosCustomer,
-  createLiveCommand,
+  saveLiveCommand,
   createShadowCommand,
   createShadowSale,
 } from "./actions";
@@ -83,6 +83,7 @@ export function PosClient({
   const [tableLabel,setTableLabel]=useState("");
   const [orderNote,setOrderNote]=useState("");
   const [checkoutState,checkoutAction,checkoutPending]=useActionState(submitLiveSale,{error:null});
+  const [saveState,saveAction,savePending]=useActionState(saveLiveCommand,{error:null});
 
   const catalogById = useMemo(
     () => new Map(catalog.map((item) => [item.id, item])),
@@ -350,6 +351,9 @@ export function PosClient({
             </div>
           </section>
         )}
+        {saveState.error&&<p className="status-bad" role="alert">
+          Comanda no guardada: {saveState.error}. Los productos y notas siguen en el carrito.
+        </p>}
         <div className="pos-cart-lines">
           {cartLines.length === 0 ? (
             <p className="muted">{savedTicket?"Selecciona las bebidas de la nueva ronda.":"Toca un producto para agregarlo."}</p>
@@ -461,7 +465,7 @@ export function PosClient({
           </details>
         </div>}
 
-        <form action={savedTicket?addProductsToLiveCommand:liveEnabled?createLiveCommand:createShadowSale} className="stack pos-checkout">
+        <form action={savedTicket?addProductsToLiveCommand:liveEnabled?saveAction:createShadowSale} className="stack pos-checkout">
           {savedTicket&&<>
             <input type="hidden" name="orderId" value={savedTicket.id}/>
             <input type="hidden" name="requestId" value={additionRequestId}/>
@@ -541,10 +545,10 @@ export function PosClient({
             </>:<>
             <button
               type="submit"
-              formAction={liveEnabled ? createLiveCommand : createShadowCommand}
+              formAction={liveEnabled ? saveAction : createShadowCommand}
               formNoValidate
               className="pos-command-button"
-              disabled={cartLines.length === 0}
+              disabled={cartLines.length === 0 || savePending}
             >
               Enviar comanda · cobrar después
             </button>
