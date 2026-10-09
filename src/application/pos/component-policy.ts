@@ -19,13 +19,32 @@ export function isCostOnlyComponent(component: Pick<
   );
 }
 
-/** Valor técnico, no financiero: precio por gramo pendiente de configurar. */
+/**
+ * Tarifa confirmada por el propietario: garrafón de 19 L a $26 MXN.
+ * Aproximación técnica: densidad de agua = 1 g/ml. No controla existencias.
+ * Mantener el costo y su base histórica en el snapshot de cada ticket.
+ */
+export const WATER_COST_BASIS = {
+  packagePriceMxn: 26,
+  packageLiters: 19,
+  assumedDensityGPerMl: 1,
+  source: "OWNER_CONFIRMED_2026-10-08",
+} as const;
+const waterGramsPerContainer = WATER_COST_BASIS.packageLiters * 1000 *
+  WATER_COST_BASIS.assumedDensityGPerMl;
+export const WATER_COST_PER_G_MXN = WATER_COST_BASIS.packagePriceMxn / waterGramsPerContainer;
+
+/** Captura cantidad y costo histórico de agua, sin crear movimientos de inventario. */
 export function costOnlyRecipeMeasure(component: PosRecipeComponent, quantity: number) {
   if (!isCostOnlyComponent(component)) return null;
-  // Agua en recetas Loyverse se expresa como kg. OPS pesa en gramos.
+  // Las recetas Loyverse expresan agua en kg. OPS calcula gramos.
+  const grams = Math.round(quantity * 1_000_000) / 1_000;
   return {
-    quantity: Math.round(quantity * 1000 * 1000) / 1000,
+    quantity: grams,
     unit: "g" as const,
-    pricingStatus: "PENDING_UNIT_COST" as const,
+    estimatedUnitCostMxn: WATER_COST_PER_G_MXN,
+    estimatedCostMxn: Math.round(grams * WATER_COST_PER_G_MXN * 10_000) / 10_000,
+    costBasis: WATER_COST_BASIS,
+    pricingStatus: "COSTED_APPROX_DENSITY" as const,
   };
 }
