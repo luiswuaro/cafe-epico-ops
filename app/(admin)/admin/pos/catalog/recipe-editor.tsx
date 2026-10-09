@@ -158,6 +158,12 @@ export function RecipeServiceEditor({
         value={JSON.stringify({ components: takeawayPayload })}
       />
 
+      <p className="status-warn">
+        Importante: para ingredientes fraccionarios de Loyverse
+        la cantidad editable está en kg (o L para leche deslactosada),
+        NO en gramos ni mililitros. 18 g = 0.018 kg; 200 ml = 0.200 L.
+        Cambiar sólo el texto de la unidad no realiza conversiones.
+      </p>
       <div className="recipe-service-tabs" role="tablist">
         <button
           type="button"
@@ -233,12 +239,29 @@ export function RecipeServiceEditor({
                     list={ingredientListId}
                     value={row.name}
                     onChange={(event) =>
-                      updateRow(row.key, { name: event.target.value })
+                      updateRow(row.key, {
+                        name: event.target.value,
+                        // Al cambiar de ingrediente, nunca conservar la
+                        // identidad Loyverse del ingrediente anterior.
+                        variantExternalId: null,
+                        itemExternalId: null,
+                      })
                     }
                     placeholder="Ej. Leche deslactosada"
                     required
                   />
                 </label>
+
+                {row.unitLabel.trim().toLowerCase() === "peso/volumen" && (
+                  <p className="muted" style={{margin:0,gridColumn:"1 / -1"}}>
+                    Equivalente aproximado en barra:{" "}
+                    <strong>{(row.quantity * 1000).toLocaleString("es-MX", {
+                      maximumFractionDigits: 3,
+                    })} {row.name.trim().toUpperCase()==="LECHE DESLACTOSADA"?"ml":"g"}</strong>.
+                    La cantidad editable sigue expresada en kg o L de Loyverse;
+                    por ejemplo, 20 g = 0.020 kg y 240 ml = 0.240 L.
+                  </p>
+                )}
 
                 <button
                   type="button"
