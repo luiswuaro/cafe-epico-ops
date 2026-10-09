@@ -357,6 +357,8 @@ export async function getLoyverseRecipeSource(organizationId: string) {
           category: string;
           sku: string | null;
           unitCost: number | null;
+          inventoryTracked: boolean;
+          inventoryResolved: boolean;
         }
       >();
 
