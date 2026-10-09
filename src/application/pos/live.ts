@@ -13,6 +13,8 @@ export type LiveCart = Array<{
   quantity: number;
   note: string | null;
   serviceMode?:PosServiceMode;
+  // ID interno de la línea congelada de una comanda guardada; jamás se toma de una petición del navegador.
+  sourceLineId?:string;
 }>;
 
 export function isPosLiveEnabled() {
@@ -47,13 +49,30 @@ export async function checkoutLiveOrder(input:{
 }) {
   if(!isPosLiveEnabled()) throw new Error("Cobros LIVE deshabilitados por seguridad.");
   if(input.cart.length===0 || input.cart.length>30) throw new Error("Carrito inválido.");
-  const catalog=await getPosCatalog(input.organizationId);
+  const db=getDb();
+  // La cotización y la receta se congelan cuando el ticket se guarda.
+  // Preleer sólo para preparar el carrito; dentro de la transacción se valida
+  // otra vez, bajo el bloqueo de la comanda, antes de aplicar dinero e inventario.
+  const stored=input.existingOrderId
+    ?await db.select().from(posOrderLines).where(and(
+      eq(posOrderLines.orderId,input.existingOrderId),
+      eq(posOrderLines.organizationId,input.organizationId),
+    ))
+    :[];
+  const byStoredId=new Map(stored.map(line=>[line.id,line]));
+  const catalog=await getPosCatalog(input.organizationId,{includeDisabled:Boolean(input.existingOrderId)});
   const products=new Map(catalog.map(item=>[item.id,item]));
   const lines=input.cart.map(line=>{
     const item=products.get(line.externalId);
-    if(!item || !item.active || line.quantity<1 || !Number.isInteger(line.quantity) || line.quantity>20){
+    const snapshot=input.existingOrderId && line.sourceLineId
+      ?byStoredId.get(line.sourceLineId):undefined;
+    if(!item || (!item.active&&!snapshot) || line.quantity<1 ||
+       !Number.isInteger(line.quantity) || line.quantity>20){
       throw new Error("Producto no disponible para la venta.");
     }
+    if(input.existingOrderId && (!snapshot || snapshot.catalogExternalId!==line.externalId ||
+      (snapshot.note??null)!==(line.note??null) || line.quantity>Number(snapshot.quantity)))
+      throw new Error("La línea del ticket guardado cambió. Vuelve a abrir la comanda.");
     // En pruebas LIVE, limitar el menú a un producto explícitamente aprobado.
     // El control se valida en servidor: no depende de filtros en el navegador.
     const pilotProduct = process.env.POS_LIVE_PILOT_ITEM?.trim();
@@ -61,9 +80,26 @@ export async function checkoutLiveOrder(input:{
       throw new Error("Piloto LIVE limitado a "+pilotProduct+". No se cobró otro producto.");
     }
     const lineMode=line.serviceMode??input.serviceMode;
-    const recipeComponents=item.serviceRecipes[lineMode].components;
-    if(recipeComponents.length===0) {
-      throw new Error("La receta de "+item.name+" no tiene insumos configurados.");
+    if(snapshot && snapshot.expectedConsumption?.serviceMode!==lineMode)
+      throw new Error("El servicio de la línea guardada no coincide.");
+    const frozen= snapshot?.expectedConsumption?.components;
+    const snapshotQuantity=snapshot?Number(snapshot.quantity):0;
+    const recipeComponents=snapshot
+      ?(Array.isArray(frozen)?frozen.map((value:unknown)=>{
+          const comp=value as Record<string,unknown>;
+          return {
+            variantExternalId:typeof comp.variantExternalId==="string"?comp.variantExternalId:null,
+            itemExternalId:typeof comp.itemExternalId==="string"?comp.itemExternalId:null,
+            name:typeof comp.name==="string"?comp.name:"",
+            unitLabel:typeof comp.unitLabel==="string"?comp.unitLabel:"pz",
+            category:typeof comp.category==="string"?comp.category:null,
+            quantity:Number(comp.quantity)/snapshotQuantity,
+          };
+        }):[])
+      :item.serviceRecipes[lineMode].components;
+    if(recipeComponents.length===0 || recipeComponents.some(c=>!c.name||
+      !Number.isFinite(c.quantity)||c.quantity<=0)){
+      throw new Error("La receta original de "+item.name+" no está disponible para cobro.");
     }
     if(item.category==="CALIENTES" || item.category==="FRÍAS"){
       const names=recipeComponents.map(c=>c.name.toLocaleUpperCase("es-MX"));
@@ -80,11 +116,14 @@ export async function checkoutLiveOrder(input:{
         throw new Error("Receta fría de "+item.name+" para consumir aquí no incluye popote.");
       }
     }
+    const price=snapshot?Number(snapshot.unitPrice):item.price;
+    if(!Number.isFinite(price)||price<=0)
+      throw new Error("Precio guardado no válido.");
     return {
-      ...line,item,lineMode,price:item.price,
-      total:Number((item.price*line.quantity).toFixed(2)),
-      components:item.serviceRecipes[lineMode].components.map(c=>({
-        ...c,quantity:c.quantity*line.quantity,
+      ...line,item,lineMode,price,
+      total:Number((price*line.quantity).toFixed(2)),
+      components:recipeComponents.map(c=>({
+        ...c,quantity:Number((c.quantity*line.quantity).toFixed(6)),
       })),
     };
   });
@@ -95,7 +134,6 @@ export async function checkoutLiveOrder(input:{
       input.tenderedAmount < total || input.tenderedAmount > 1000000)) {
     throw new Error("El efectivo entregado debe ser mayor o igual al total.");
   }
-  const db=getDb();
   const now=new Date();
   const result=await db.transaction(async tx=>{
     // Serializar cobros de una sucursal: validación de caja, inventario y cliente es atómica.
@@ -146,6 +184,7 @@ export async function checkoutLiveOrder(input:{
         const assignment=await tx.select().from(posOrderLines)
           .where(eq(posOrderLines.orderId,pending.id));
         const expected=assignment.filter(x=>assignedMap.has(x.id)).map(x=>({
+          sourceLineId:x.id,
           catalogExternalId:x.catalogExternalId,
           quantity:assignedMap.get(x.id)!,note:x.note,price:Number(x.unitPrice),
           serviceMode: typeof x.expectedConsumption?.serviceMode==="string"
@@ -154,11 +193,11 @@ export async function checkoutLiveOrder(input:{
         const expectedTotal=expected.reduce((sum,line)=>sum+line.quantity*line.price,0);
         if(Math.abs(expectedTotal-Number(split.total))>0.005||Math.abs(expectedTotal-total)>0.005)
           throw new Error("El total de esta cuenta no coincide con los productos asignados.");
-        const signature=(values:Array<{catalogExternalId:string;quantity:number;note:string|null;price:number;serviceMode:string}>)=>
-          values.map(v=>[v.catalogExternalId,v.quantity,v.note||"",v.price.toFixed(2),v.serviceMode].join("|"))
+        const signature=(values:Array<{sourceLineId?:string;catalogExternalId:string;quantity:number;note:string|null;price:number;serviceMode:string}>)=>
+          values.map(v=>[v.sourceLineId??"",v.catalogExternalId,v.quantity,v.note||"",v.price.toFixed(2),v.serviceMode].join("|"))
             .sort().join("::");
         const checkout=signature(lines.map(l=>({
-          catalogExternalId:l.item.id,quantity:l.quantity,note:l.note,price:l.price,serviceMode:l.lineMode
+          sourceLineId:l.sourceLineId,catalogExternalId:l.item.id,quantity:l.quantity,note:l.note,price:l.price,serviceMode:l.lineMode
         })));
         if(checkout!==signature(expected))throw new Error("La cuenta cambió desde que se abrió.");
       } else if(allSplits.length){
@@ -166,17 +205,17 @@ export async function checkoutLiveOrder(input:{
       }
       const savedLines=await tx.select().from(posOrderLines)
         .where(eq(posOrderLines.orderId,pending.id));
-      const signature=(values:Array<{catalogExternalId:string;quantity:number;note:string|null;price:number;serviceMode:string}>)=>
+      const signature=(values:Array<{sourceLineId?:string;catalogExternalId:string;quantity:number;note:string|null;price:number;serviceMode:string}>)=>
         values.map(v=>[v.catalogExternalId,v.quantity,v.note||"",v.price.toFixed(2),v.serviceMode].join("|"))
           .sort().join("::");
       const snapshot=signature(savedLines.map(l=>({
-        catalogExternalId:l.catalogExternalId,
+        sourceLineId:l.id,catalogExternalId:l.catalogExternalId,
         quantity:Number(l.quantity),note:l.note,price:Number(l.unitPrice),
         serviceMode: typeof l.expectedConsumption?.serviceMode==="string"
           ? l.expectedConsumption.serviceMode : pending!.serviceMode,
       })));
       const checkout=signature(lines.map(l=>({
-        catalogExternalId:l.item.id,quantity:l.quantity,note:l.note,price:l.price,
+        sourceLineId:l.sourceLineId,catalogExternalId:l.item.id,quantity:l.quantity,note:l.note,price:l.price,
         serviceMode:l.lineMode,
       })));
       if(!split&&(snapshot!==checkout || Number(pending.total)!==total))
