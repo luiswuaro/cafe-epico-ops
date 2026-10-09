@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { and, desc, eq } from "drizzle-orm";
 import { getPosCustomers } from "@/src/application/pos/customers";
+import { getCustomerPurchaseProfile } from "@/src/application/pos/customer-purchases";
 import { createPosCustomer } from "../actions";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
 import { assertEmployeePermission } from "@/src/infrastructure/auth/permissions";
@@ -21,12 +22,16 @@ export default async function CustomerLedgerPage({
   const input = await searchParams;
   const q = typeof input.q === "string" ? input.q.slice(0,80).trim() : "";
   const selectedId = typeof input.customer === "string" ? input.customer : "";
+  const purchasePage = typeof input.page === "string" ? Number(input.page) || 1 : 1;
 
   const {employee} = await getCurrentEmployee();
   if (!employee.homeStoreId) throw new Error("Sin sucursal asignada");
   await assertEmployeePermission(employee.id,"pos.sell",employee.homeStoreId);
   const all = await getPosCustomers(employee.organizationId);
   const selected = all.find((c)=>c.id===selectedId);
+  const profile = selected ? await getCustomerPurchaseProfile({
+    organizationId:employee.organizationId,storeId:employee.homeStoreId!,customerId:selected.id,page:purchasePage,
+  }) : null;
   const filtered = all.filter((c) => {
     const s = (c.name+" "+(c.phone??"")+" "+(c.email??"")).toLocaleLowerCase("es-MX");
     return s.includes(q.toLocaleLowerCase("es-MX"));
