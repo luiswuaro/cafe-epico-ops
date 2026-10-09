@@ -2,13 +2,13 @@ import { and, eq } from "drizzle-orm";
 import { getPosCatalog } from "@/src/application/pos/catalog";
 import { getDb } from "@/src/infrastructure/db/client";
 import {
-  inventoryLocations, loyverseInventoryLevels, loyverseInventoryMappings,
+  inventoryItems, inventoryBalances, inventoryLocations, loyverseInventoryLevels, loyverseInventoryMappings,
   loyverseItems, loyverseStores, loyverseVariants,
 } from "@/src/infrastructure/db/schema";
 
 export async function getPosInventorySetup(organizationId:string,storeId:string) {
   const db=getDb();
-  const [catalog,items,variants,levels,mappings,locations,stores]=await Promise.all([
+  const [catalog,items,variants,levels,mappings,locations,stores,internalItems,internalBalances]=await Promise.all([
     getPosCatalog(organizationId),
     db.select().from(loyverseItems).where(eq(loyverseItems.organizationId,organizationId)),
     db.select().from(loyverseVariants).where(eq(loyverseVariants.organizationId,organizationId)),
@@ -24,6 +24,8 @@ export async function getPosInventorySetup(organizationId:string,storeId:string)
       eq(inventoryLocations.isActive,true),
     )),
     db.select().from(loyverseStores).where(eq(loyverseStores.organizationId,organizationId)),
+    db.select().from(inventoryItems).where(and(eq(inventoryItems.organizationId,organizationId),eq(inventoryItems.isActive,true))),
+    db.select().from(inventoryBalances).where(and(eq(inventoryBalances.organizationId,organizationId),eq(inventoryBalances.storeId,storeId))),
   ]);
   const sourceStore=stores.length===1 ? stores[0]?.externalId : null;
   const requested=new Map<string,{id:string;name:string;uses:number;units:Set<string>}>();
@@ -49,13 +51,18 @@ export async function getPosInventorySetup(organizationId:string,storeId:string)
     return {
       id:component.id,
       name:sourceItem?.itemName||component.name,
-      category:component.uses,
+      recipeAppearances:component.uses,
       weighted,
       mapped:mapped.has(component.id),
       sourceAvailable:Boolean(sourceItem&&variant),
+      sourceQuantity:sourceQty==null?null:Number(sourceQty),
       suggested:sourceQty==null?null:Math.round(Number(sourceQty)*(weighted?1000:1)*1000)/1000,
       unit:weighted?"g" as const:"pz" as const,
     };
-  }).sort((a,b)=>Number(a.mapped)-Number(b.mapped)||b.category-a.category||a.name.localeCompare(b.name,"es"));
-  return {candidates,locations,sourceStore,unsupported,products:catalog.length,alreadyMapped:mappings.length};
+  }).sort((a,b)=>Number(a.mapped)-Number(b.mapped)||b.recipeAppearances-a.recipeAppearances||a.name.localeCompare(b.name,"es"));
+  const inUse=new Set(internalBalances.map(b=>b.inventoryItemId));
+  const alreadyLinked=new Set(mappings.map(m=>m.inventoryItemId));
+  const reusableItems=internalItems.filter(item=>!inUse.has(item.id)&&!alreadyLinked.has(item.id))
+    .map(item=>({id:item.id,name:item.name,unit:item.canonicalUnit}));
+  return {candidates,locations,sourceStore,unsupported,products:catalog.length,alreadyMapped:mappings.length,reusableItems};
 }
