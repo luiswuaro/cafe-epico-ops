@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getPosCatalog, type PosServiceMode } from "@/src/application/pos/catalog";
+import { cancelLiveOrder } from "@/src/application/pos/live-cancellation";
 import { getOpenCashSession } from "@/src/application/pos/cash";
 import { syncLoyverseReceipts } from "@/src/application/loyverse/sync";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
@@ -532,6 +533,14 @@ export async function cancelPosOrder(formData: FormData) {
     .limit(1);
 
   if (!order) throw new Error("Orden no encontrada");
+  if (order.mode === "LIVE" && order.status !== "CANCELLED") {
+    await cancelLiveOrder({
+      organizationId:employee.organizationId,
+      storeId:employee.homeStoreId,orderId:order.id,
+      employeeId:employee.id,actorUserId:user.id,reason,
+    });
+    redirect("/pos/receipt/" + order.id);
+  }
   if (order.status === "CANCELLED") {
     redirect("/pos?saved=" + order.id);
   }
