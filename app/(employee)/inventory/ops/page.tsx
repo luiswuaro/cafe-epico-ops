@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SearchableCollection } from "@/components/searchable-collection";
 import { randomUUID } from "node:crypto";
 import { and, desc, eq } from "drizzle-orm";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
@@ -97,10 +98,26 @@ export default async function OpsInventoryPage({
       <h2>Existencias OPS · {available.length} renglones</h2>
       <p className="muted">El agua potable y el hielo propio se contabilizan únicamente en el escandallo y no aparecen como existencias descontables. Para sumar compras utiliza «Entrada». Para corregir después de contar utiliza «Ajuste por conteo», que reemplaza la cantidad actual (no la suma).</p>
       {available.length===0&&<p>No hay saldos internos. Utiliza «Importar insumos de Loyverse» para confirmar el primer conteo.</p>}
-      {available.map(item=>{
-        const current=Number(item.theoretical);
-        const low=item.minimum!=null && current<Number(item.minimum);
-        return <details key={item.id+"-"+item.locationId} className="task" style={{padding:16}}>
+      <SearchableCollection
+        label="insumos de inventario"
+        placeholder="Ej. leche, maracuyá, vaso, SKU..."
+        categoryLabel="Unidad de control"
+        statusLabel="Existencias"
+        entries={available.map(item=>{
+          const current=Number(item.theoretical);
+          const low=item.minimum!=null && current<Number(item.minimum);
+          const state=current<=0 ? "AGOTADO" : low ? "BAJO MÍNIMO" : "DISPONIBLE";
+          return {
+            id:item.id+"-"+item.locationId,
+            name:item.name,
+            category:item.unit,
+            status:state,
+            searchText:[
+              item.sku??"",item.category,
+              locationNames.get(item.locationId)??"",
+              mapped.has(item.id)?"Mapeado":"Sin mapear",
+            ].join(" "),
+            content: <details className="task" style={{padding:16}}>
           <summary>
             <strong>{item.name}</strong> · <strong>{qty.format(current)} {item.unit}</strong>
             {low&&<span className="status-warn"> · BAJO</span>}
@@ -132,8 +149,10 @@ export default async function OpsInventoryPage({
               </form>
               : <p className="status-warn">Tu rol no tiene permiso para modificar existencias.</p>}
           </div>
-        </details>;
-      })}
+            </details>,
+          };
+        })}
+      />
     </section>
     {canAdjust&&canCreate&&<section className="card stack">
       <h2>Crear insumo interno nuevo</h2>
