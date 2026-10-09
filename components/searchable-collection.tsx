@@ -39,7 +39,7 @@ export function SearchableCollection({
 }: Props) {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("");
-  const [status, setStatus] = useState(defaultStatus);
+  const [status, setStatus] = useState(() => defaultStatus && entries.some(item=>item.status===defaultStatus) ? defaultStatus : "");
   const categories = useMemo(
     () => [...new Set(entries.map(item => item.category).filter((x):x is string=>Boolean(x)))].sort((a,b)=>a.localeCompare(b,"es-MX")),
     [entries],
