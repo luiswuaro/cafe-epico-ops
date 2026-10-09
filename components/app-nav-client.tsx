@@ -7,7 +7,6 @@ const e=(label:string,href:string,symbol:string):NavEntry=>({label,href,symbol})
 export function AppNavClient({canAdmin,canPos,canCash}:{canAdmin:boolean;canPos:boolean;canCash:boolean}){
   const [open,setOpen]=useState(false);
   const path=usePathname();
-  useEffect(()=>setOpen(false),[path]);
   useEffect(()=>{
     const close=(event:KeyboardEvent)=>{if(event.key==="Escape")setOpen(false);};
     window.addEventListener("keydown",close);
