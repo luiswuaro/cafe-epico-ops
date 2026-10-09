@@ -253,7 +253,7 @@ async function payOrderSplitUnsafe(formData: FormData) {
     const cart=shares.map(share=>{
       const line=byLine.get(share.orderLineId);
       if(!line)throw new Error("Producto no encontrado en la comanda.");
-      return {externalId:line.catalogExternalId,quantity:Number(share.quantity),note:line.note,
+      return {sourceLineId:line.id,externalId:line.catalogExternalId,quantity:Number(share.quantity),note:line.note,
         serviceMode:line.expectedConsumption?.serviceMode==="TAKEAWAY"?"TAKEAWAY" as const:"DINE_IN" as const};
     });
     const customerId=formData.has("customerId") ? (String(formData.get("customerId")??"").trim()||null) : order.customerId;
