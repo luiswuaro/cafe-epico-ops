@@ -59,7 +59,7 @@ export default async function PosPage({
   const selectedCustomerId =
     typeof params.customer === "string" ? params.customer : null;
 
-  const [catalog, customers, recent, saved, canCancel, cash, openOrders] = await Promise.all([
+  const [catalog, customers, recent, saved, canCancel, cash, openOrders, canOverrideStock] = await Promise.all([
     getPosCatalog(employee.organizationId),
     getPosCustomers(employee.organizationId),
     getRecentShadowOrders(
@@ -77,6 +77,7 @@ export default async function PosPage({
     ),
     getCashState(employee.organizationId, employee.homeStoreId),
     getOpenPosOrders(employee.organizationId,employee.homeStoreId),
+    employeeHasPermission(employee.id,"inventory.adjust",employee.homeStoreId),
   ]);
   const liveTickets=openOrders.filter(order=>order.mode==="LIVE");
   const selectedTicket=liveEnabled&&selectedTicketId
@@ -277,6 +278,14 @@ export default async function PosPage({
               </Link>
             ))}
           </div>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+            {liveTickets.map(ticket=><Link key={ticket.id} className="button"
+              href={ticket.status==="PARTIALLY_PAID"
+                ? "/pos/orders/"+ticket.id+"/split"
+                : "/pos/checkout?ticket="+ticket.id}>
+              Cobrar {ticket.tableLabel??ticket.folio} · {money.format(Number(ticket.total))}
+            </Link>)}
+          </div>
           {selectedTicketId&&!selectedTicket&&<p className="status-warn">
             Ese ticket no está abierto en esta sucursal. Selecciona otro o consulta el historial.
           </p>}
@@ -302,6 +311,7 @@ export default async function PosPage({
         selectedCustomerId={selectedCustomerId}
         cashOpen={Boolean(cash.session)}
         liveEnabled={liveEnabled}
+        canOverrideStock={canOverrideStock}
         savedTicket={selectedTicket?{
           id:selectedTicket.id,
           folio:selectedTicket.folio,
