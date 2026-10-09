@@ -28,6 +28,15 @@ export async function updatePosCatalogPrice(formData: FormData) {
   const db = getDb();
   const now = new Date();
   const newPrice = price.toFixed(2);
+  // Consultar catálogo antes de iniciar la transacción; no abrir otra conexión
+  // dentro de una transacción que mantiene un bloqueo de escritura.
+  const baseProduct = !catalogId.startsWith("manual:")
+    ? (await (await import("@/src/application/pos/catalog")).getPosCatalog(
+        employee.organizationId,{includeDisabled:true},
+      )).find(item=>item.id===catalogId && item.sourceType==="LOYVERSE")
+    : null;
+  if (!catalogId.startsWith("manual:") && !baseProduct)
+    throw new Error("Producto de Loyverse no encontrado.");
 
   await db.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${employee.organizationId}))`);
@@ -45,12 +54,11 @@ export async function updatePosCatalogPrice(formData: FormData) {
       }).where(eq(posManualProducts.id, product.id));
     } else {
       if (!catalogId) throw new Error("Falta seleccionar un producto.");
-      // El catálogo se valida sobre la lectura operativa, no contra datos del formulario.
-      const { getPosCatalog } = await import("@/src/application/pos/catalog");
-      const catalog = await getPosCatalog(employee.organizationId, {includeDisabled:true});
-      const product = catalog.find(item=>item.id===catalogId && item.sourceType==="LOYVERSE");
-      if (!product) throw new Error("Producto de Loyverse no encontrado.");
-      oldPrice = product.price;
+      const [existing] = await tx.select().from(posCatalogOverrides).where(and(
+        eq(posCatalogOverrides.organizationId,employee.organizationId),
+        eq(posCatalogOverrides.sourceExternalId,catalogId),
+      )).for("update").limit(1);
+      oldPrice=existing?.displayPrice!=null?Number(existing.displayPrice):baseProduct!.price;
       await tx.insert(posCatalogOverrides).values({
         organizationId: employee.organizationId,
         sourceExternalId: catalogId,
