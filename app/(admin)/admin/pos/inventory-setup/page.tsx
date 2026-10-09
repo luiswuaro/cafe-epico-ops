@@ -33,7 +33,8 @@ export default async function InventorySetupPage({
       <p><strong>Las cifras de Loyverse son referencias, no un conteo físico validado.</strong></p>
       <p className="muted">Unidades de barra confirmadas: leche deslactosada L → ml; demás ingredientes fraccionarios kg → g; empaques y desechables → pz. Las cantidades físicas siguen pendientes de conteo.</p>
       <p className="muted">La cifra «apariciones» cuenta las recetas/configuraciones que usan el ingrediente (aquí y para llevar), no ventas realizadas.</p>
-      <p className="muted">Agua y hielo sin saldo en Loyverse requieren tu decisión y un conteo/estimación autorizada antes de incorporarlos al inventario. El sistema no asignará cero o cantidades inventadas.</p>
+      <p className="muted"><strong>Agua: SOLO COSTO.</strong> Se conserva la cantidad en las recetas para calcular el escandallo cuando se configure su precio por gramo; no se captura existencia ni se descuenta durante ventas. El hielo, si aparece en las recetas, continúa sujeto a conteo y control de inventario.</p>
+      <p className="muted">Apariciones de agua sin inventario en recetas: {setup.costOnlyOccurrences}. No se incluyen entre los insumos pendientes.</p>
       {!setup.sourceStore && <p className="alert">No hay una tienda Loyverse única identificada. No se puede importar.</p>}
     </section>
     {setup.sourceStore && missing.length>0 && <form action={confirmPosInventorySetup} className="stack">
