@@ -1569,3 +1569,82 @@ th, td { vertical-align: top; }
 .ops-qa-banner strong{font-weight:900;letter-spacing:.11em;white-space:nowrap}
 .ops-qa-banner span{font-weight:600;opacity:.92}
 @media(max-width:540px){.ops-qa-banner{gap:.4rem;flex-wrap:wrap;font-size:.69rem;min-height:40px;padding:.4rem .7rem}}
+
+
+/* Ticket: el ancho de 58 mm pertenece SOLAMENTE al comprobante térmico.
+   Los controles del POS necesitan una superficie táctil de tamaño normal. */
+@media screen {
+  .receipt-shell{
+    width:min(100%,880px);
+    max-width:880px;
+    padding:clamp(.75rem,2vw,1.5rem);
+  }
+  .receipt-shell > .receipt-toolbar{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:.6rem;
+    flex-wrap:wrap;
+    max-width:100%;
+    margin:0 auto 1.1rem;
+  }
+  .receipt-shell > .receipt-toolbar > *{
+    flex:0 1 auto;
+    min-height:44px;
+  }
+  .receipt-shell > .receipt-paper{
+    width:min(100%,48mm);
+    max-width:48mm;
+    margin:0 auto 1.25rem;
+  }
+  .receipt-shell .receipt-extra-packaging{
+    width:100%;
+    max-width:760px;
+    min-width:0;
+    margin:1.35rem auto 0;
+    padding:clamp(1rem,2.5vw,1.4rem);
+    scroll-margin-top:6rem;
+    box-sizing:border-box;
+  }
+  .receipt-extra-header{display:flex;justify-content:space-between;align-items:center;gap:.7rem;flex-wrap:wrap}
+  .receipt-extra-header .eyebrow{font-size:.69rem;margin-bottom:.25rem}
+  .receipt-extra-header h2{margin:0;font-size:clamp(1.2rem,2.2vw,1.52rem);letter-spacing:-.02em}
+  .receipt-extra-header .pill{white-space:nowrap}
+  .receipt-extra-description{max-width:70ch;line-height:1.5;margin:.8rem 0 1.1rem}
+  .receipt-extra-list{border-top:1px solid var(--line)}
+  .receipt-extra-list .receipt-packaging-line{
+    display:grid;
+    grid-template-columns:minmax(0,1fr) minmax(220px,280px);
+    gap:1rem;
+    align-items:center;
+    width:100%;
+    min-width:0;
+    padding:1rem 0;
+    border-top:0;
+    border-bottom:1px solid var(--line);
+  }
+  .receipt-packaging-product{display:flex;align-items:flex-start;gap:.7rem;min-width:0}
+  .receipt-packaging-product > div{min-width:0}
+  .receipt-packaging-product strong{display:block;overflow-wrap:normal;word-break:normal;line-height:1.4;font-size:.98rem}
+  .receipt-packaging-product .muted{margin:.3rem 0 0;font-size:.81rem;line-height:1.35}
+  .receipt-packaging-index{display:grid;place-items:center;flex:0 0 32px;height:32px;border-radius:50%;background:#ece6dc;color:#352b22;font-weight:850}
+  .receipt-extra-list .receipt-packaging-form{display:grid;grid-template-columns:80px minmax(0,1fr);gap:.6rem;align-items:end;min-width:0}
+  .receipt-packaging-form label{font-size:.8rem;min-width:0;font-weight:750}
+  .receipt-packaging-form input{display:block;width:100%;min-width:0;max-width:100%;margin-top:.35rem;min-height:44px}
+  .receipt-packaging-form button{width:100%;min-height:44px;padding:.55rem .75rem;font-size:.87rem;white-space:normal}
+  .receipt-packaging-complete{font-size:.84rem;font-weight:850;color:#315e3d}
+  .receipt-packaging-footnote{font-size:.76rem;line-height:1.4;color:var(--muted);margin:.9rem 0 0}
+  .receipt-shell .receipt-admin{width:100%;max-width:760px;margin:1.1rem auto}
+  .receipt-shell > .receipt-admin summary{min-height:44px}
+  .receipt-shell .status-bad,.receipt-shell .status-ok{overflow-wrap:break-word}
+  @media(max-width:650px){
+    .receipt-extra-list .receipt-packaging-line{grid-template-columns:minmax(0,1fr);gap:.6rem}
+    .receipt-extra-list .receipt-packaging-form{grid-template-columns:90px minmax(0,1fr)}
+    .receipt-shell > .receipt-toolbar > *{flex:1 1 135px}
+    .receipt-shell .receipt-extra-packaging{scroll-margin-top:7rem}
+  }
+  @media(max-width:370px){
+    .receipt-extra-list .receipt-packaging-form{grid-template-columns:80px minmax(0,1fr)}
+    .receipt-packaging-form button{font-size:.78rem}
+  }
+}
