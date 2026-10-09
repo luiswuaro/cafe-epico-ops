@@ -62,7 +62,9 @@ export async function addProductsToLiveCommand(data:FormData){
         if(!item||!item.active)throw new Error("Producto no disponible.");
         if(pilot && item.name.toLocaleUpperCase("es-MX")!==pilot)
           throw new Error("Piloto LIVE limitado a "+pilot);
-        const lineMode=line.serviceMode??order.serviceMode;
+        const rawMode=line.serviceMode??order.serviceMode;
+        if(rawMode!=="DINE_IN"&&rawMode!=="TAKEAWAY")throw new Error("Servicio inválido.");
+        const lineMode: "DINE_IN"|"TAKEAWAY"=rawMode;
         const state=readyById.get(item.id)?.recipes.find(r=>r.mode===lineMode);
         if(!state?.ready)throw new Error(item.name+" ("+(lineMode==="DINE_IN"?"aquí":"para llevar")+"): "+(state?.errors.join("; ")||"Receta no confirmada"));
         if(line.note?.trim() && line.note.trim().toLocaleLowerCase("es-MX")!=="extra caliente")
