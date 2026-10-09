@@ -213,6 +213,9 @@ export default async function PosPage({
             ? "Caja abierta · " + money.format(cash.expectedCash)
             : "Abrir caja"}
         </Link>
+        <Link href="/pos/tickets" className="button">Historial de tickets</Link>
+        <Link href="/pos/customers" className="button">Clientes y puntos</Link>
+        <Link href="/pos/inventory-audit" className="button">Auditoría inventario</Link>
         <Link href="/pos/printer" className="button">
           Impresora
         </Link>
