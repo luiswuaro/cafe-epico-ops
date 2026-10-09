@@ -2,7 +2,7 @@ import {randomUUID} from "node:crypto";
 import {deliverExtraPackaging} from "./packaging-action";
 import Image from "next/image";
 import Link from "next/link";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { DirectPrintTicketButton } from "./direct-print-button";
 import { PrintTicketButton } from "./print-button";
 import { getPosPrintSettings } from "@/src/application/pos/print-settings";
@@ -143,10 +143,7 @@ export default async function ReceiptPage({
               eq(posPayments.orderId, id),
               eq(posPayments.splitId, split.id),
             )
-          : and(
-              eq(posPayments.orderId, id),
-              isNull(posPayments.splitId),
-            ),
+          : eq(posPayments.orderId, id),
       ),
     employeeHasPermission(
       employee.id,
@@ -166,7 +163,8 @@ export default async function ReceiptPage({
   });
 
   const total = split ? Number(split.total) : Number(order.order.total);
-  const paymentMethod = payments.map((payment) => payment.method).join(" + ");
+  const paymentMethod = [...new Set(payments.map((payment) => payment.method))].join(" + ");
+  const paidAmount=payments.reduce((sum,payment)=>sum+Number(payment.amount),0);
   const loyalty=await db.select({
     customerId:posLoyaltyEntries.customerId,
     name:posCustomers.name,
@@ -273,6 +271,11 @@ export default async function ReceiptPage({
         <PrintTicketButton />
       </div>
 
+      {!split&&order.order.status==="PARTIALLY_PAID"&&<section className="card no-print" role="status">
+        <p className="status-warn">Mesa parcialmente pagada · {money.format(paidAmount)} de {money.format(Number(order.order.total))} registrados.</p>
+        <p className="muted">No imprimas el total como venta liquidada. Continúa desde las cuentas pendientes.</p>
+        <Link className="button" href={"/pos/orders/"+id+"/split"}>Terminar cuentas pendientes</Link>
+      </section>}
       {cancelError&&<section className="card no-print" role="alert">
         <p className="status-bad">Cancelación no confirmada: {cancelError}</p>
         <p className="muted">El ticket sigue disponible para revisión. Verifica pagos, caja e inventario antes de volver a intentar.</p>
