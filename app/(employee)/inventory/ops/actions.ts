@@ -21,12 +21,14 @@ export async function registerOpsInventoryMovement(formData: FormData) {
   const { user, employee } = await getCurrentEmployee();
   if (!employee.homeStoreId) throw new Error("No hay sucursal operativa.");
   await assertEmployeePermission(employee.id, "inventory.adjust", employee.homeStoreId);
+  const rawQuantity=String(formData.get("quantity")??"").trim();
+  if(!rawQuantity) throw new Error("Escribe la cantidad; una casilla vacía nunca se interpreta como cero.");
   const result = schema.safeParse({
     operationId: formData.get("operationId"),
     itemId: formData.get("itemId"),
     locationId: formData.get("locationId"),
     operation: formData.get("operation"),
-    quantity: formData.get("quantity"),
+    quantity: rawQuantity,
     reason: formData.get("reason"),
   });
   if (!result.success) throw new Error("Movimiento inválido. Revisa artículo, cantidad y motivo.");
@@ -144,6 +146,8 @@ export async function createOpsInventoryItem(formData: FormData) {
   if (!employee.homeStoreId) throw new Error("Sin sucursal asignada.");
   await assertEmployeePermission(employee.id, "inventory.item.manage", employee.homeStoreId);
   await assertEmployeePermission(employee.id, "inventory.adjust", employee.homeStoreId);
+  const rawInitial=String(formData.get("initialQuantity")??"").trim();
+  if(!rawInitial) throw new Error("Confirma el saldo inicial, incluso cuando sea cero.");
   const parsed = newItemSchema.safeParse({
     operationId: formData.get("operationId"),
     locationId: formData.get("locationId"),
@@ -151,7 +155,7 @@ export async function createOpsInventoryItem(formData: FormData) {
     sku: String(formData.get("sku") ?? "").trim() || undefined,
     category: formData.get("category"),
     unit: formData.get("unit"),
-    initialQuantity: formData.get("initialQuantity"),
+    initialQuantity: rawInitial,
     note: formData.get("note"),
   });
   if (!parsed.success) throw new Error("Alta inválida: revisa nombre, ubicación, unidad y saldo.");
