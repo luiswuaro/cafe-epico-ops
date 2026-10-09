@@ -95,7 +95,7 @@ export default async function OpsInventoryPage({
     </section>}
     <section className="card stack">
       <h2>Existencias OPS · {available.length} renglones</h2>
-      <p className="muted">El agua potable se contabiliza únicamente en el escandallo y no aparece como existencia. Para sumar compras utiliza «Entrada». Para corregir después de contar utiliza «Ajuste por conteo», que reemplaza la cantidad actual (no la suma).</p>
+      <p className="muted">El agua potable y el hielo propio se contabilizan únicamente en el escandallo y no aparecen como existencias descontables. Para sumar compras utiliza «Entrada». Para corregir después de contar utiliza «Ajuste por conteo», que reemplaza la cantidad actual (no la suma).</p>
       {available.length===0&&<p>No hay saldos internos. Utiliza «Importar insumos de Loyverse» para confirmar el primer conteo.</p>}
       {available.map(item=>{
         const current=Number(item.theoretical);
