@@ -365,3 +365,34 @@ export async function payOrderSplit(formData: FormData) {
 
   redirect("/pos/receipt/" + order.id + "?split=" + split.id);
 }
+
+export async function resetUnpaidOrderSplit(formData:FormData){
+  const {user,employee}=await getCurrentEmployee();
+  if(!employee.homeStoreId)throw new Error("Sin sucursal.");
+  await assertEmployeePermission(employee.id,"pos.sell",employee.homeStoreId);
+  const orderId=z.string().uuid().parse(formData.get("orderId"));
+  const db=getDb();
+  await db.transaction(async tx=>{
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${employee.homeStoreId!}))`);
+    const [order]=await tx.select().from(posOrders).where(and(
+      eq(posOrders.id,orderId),eq(posOrders.organizationId,employee.organizationId),
+      eq(posOrders.storeId,employee.homeStoreId!),
+    )).for("update").limit(1);
+    if(!order||!["SENT","PREPARING","READY"].includes(order.status))
+      throw new Error("La mesa ya tiene pagos o está cerrada.");
+    const splitRows=await tx.select().from(posOrderSplits)
+      .where(eq(posOrderSplits.orderId,order.id));
+    if(splitRows.some(x=>x.status==="PAID"))
+      throw new Error("No se puede eliminar una cuenta ya cobrada.");
+    if(splitRows.length){
+      await tx.delete(posOrderSplits).where(eq(posOrderSplits.orderId,order.id));
+      await tx.insert(auditEvents).values({
+        organizationId:employee.organizationId,storeId:employee.homeStoreId,
+        actorUserId:user.id,actorEmployeeId:employee.id,
+        action:"POS_LIVE_SPLIT_RESET",entityType:"pos_order",entityId:order.id,
+        afterData:{clearedAccounts:splitRows.length,reason:"Volver a cuenta completa sin pagos"},
+      });
+    }
+  });
+  redirect("/pos/orders");
+}
