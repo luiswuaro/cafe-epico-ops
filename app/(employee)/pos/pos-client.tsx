@@ -33,7 +33,7 @@ type CartLine = {
 type SavedTicket={
   id:string;folio:string;name:string;total:number;customerId:string|null;
   status:string;serviceMode:ServiceMode;
-  lines:Array<{id:string;name:string;quantity:number;note:string|null;unitPrice:number;serviceMode:ServiceMode;isAdditionalRound:boolean}>;
+  lines:Array<{id:string;name:string;quantity:number;note:string|null;unitPrice:number;serviceMode:ServiceMode;isAdditionalRound:boolean;roundId:string|null}>;
 };
 
 type Props = {
@@ -96,6 +96,7 @@ export function PosClient({
     return item ? [{ ...line, item }] : [];
   });
 
+  const historicalRoundIds=[...new Set((savedTicket?.lines??[]).map(line=>line.roundId??"INITIAL"))];
   const newSubtotal=cartLines.reduce((sum,line)=>sum+line.item.price,0);
   const total=(savedTicket?.total??0)+newSubtotal;
 
@@ -250,15 +251,23 @@ export function PosClient({
               <span className="muted">Solo lectura</span>
             </div>
             {savedTicket.lines.map((line,index)=>(
-              <div key={line.id} className="pos-cart-line pos-cart-unit">
-                <div className="pos-cart-unit-main">
-                  <div className="pos-cart-unit-title">
-                    <strong>{index+1}. {line.quantity}× {line.name}</strong>
-                    <strong>{money.format(line.unitPrice*line.quantity)}</strong>
+              <div key={line.id}>
+                {(index===0 || (savedTicket.lines[index-1].roundId??"INITIAL")!==(line.roundId??"INITIAL")) && (
+                  <div style={{marginTop:10,marginBottom:8,paddingBottom:5,borderBottom:"1px solid currentColor"}}>
+                    <strong>{historicalRoundIds.indexOf(line.roundId??"INITIAL")===0
+                      ?"Primer pedido guardado"
+                      :"Ronda "+(historicalRoundIds.indexOf(line.roundId??"INITIAL")+1)}</strong>
                   </div>
-                  <span className="muted">{line.serviceMode==="DINE_IN"?"Aquí · sin empaque":"Para llevar · con empaque"}
-                    {line.isAdditionalRound?" · Ronda anterior":""}</span>
-                  {line.note&&<p className="muted">{line.note}</p>}
+                )}
+                <div className="pos-cart-line pos-cart-unit">
+                  <div className="pos-cart-unit-main">
+                    <div className="pos-cart-unit-title">
+                      <strong>{index+1}. {line.quantity}× {line.name}</strong>
+                      <strong>{money.format(line.unitPrice*line.quantity)}</strong>
+                    </div>
+                    <span className="muted">{line.serviceMode==="DINE_IN"?"Aquí · sin empaque":"Para llevar · con empaque"}</span>
+                    {line.note&&<p className="muted">{line.note}</p>}
+                  </div>
                 </div>
               </div>
             ))}
