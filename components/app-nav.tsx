@@ -58,6 +58,7 @@ export async function AppNav() {
           <div className="nav-popover">
             <Link href="/pos/tickets">Todos los tickets</Link>
             <Link href="/pos/customers">Clientes y puntos</Link>
+            <Link href="/pos/customers/insights">Visitas y preferencias</Link>
             <Link href="/pos/inventory-audit">Inventario por venta</Link>
             <Link href="/pos/cash/history">Historial de cajas</Link>
           </div>
