@@ -74,7 +74,7 @@ export async function addProductsToLiveCommand(data:FormData){
         unitPrice:line.item.price.toFixed(2),quantity:String(line.quantity),
         lineTotal:line.lineTotal.toFixed(2),note:null,
         expectedConsumption:{
-          mode:"LIVE",serviceMode:order.serviceMode,
+          mode:"LIVE",additionalRound:true,serviceMode:order.serviceMode,
           sourceRecipeExternalId:line.recipe.externalId,
           components:line.recipe.components.map(c=>({
             variantExternalId:c.variantExternalId,itemExternalId:c.itemExternalId,
