@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useRef, useState } from "react";
+import { useActionState, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { addProductsToLiveCommand } from "./orders/live-actions";
 import {
@@ -10,6 +10,7 @@ import {
   submitShadowCommand,
 } from "./actions";
 import { submitLiveSale } from "./live-actions";
+import {CheckoutLoyalty,redeemAmount,type CheckoutCustomer} from "./checkout/checkout-loyalty";
 import type {ExtraOption} from "@/src/application/pos/extra-catalog";
 import {OWN_CONTAINER_DISCOUNT_MXN,canUseOwnContainer,ownContainerUnitPrice} from "@/src/domain/pos/own-container";
 import {
@@ -82,6 +83,13 @@ export function PosClient({
   const [serviceMode, setServiceMode] =
     useState<ServiceMode>(savedTicket?.serviceMode??"DINE_IN");
   const [customerId, setCustomerId] = useState(savedTicket?.customerId??selectedCustomerId??"");
+  const [createdCustomer,setCreatedCustomer]=useState<CheckoutCustomer|null>(null);
+  const [redeemPoints,setRedeemPoints]=useState("0");
+  const checkoutCustomerChange=useCallback((id:string,created?:CheckoutCustomer)=>{
+    setCustomerId(id);
+    setRedeemPoints("0");
+    if(created)setCreatedCustomer(created);
+  },[]);
   const [additionRequestId]=useState(()=>globalThis.crypto.randomUUID());
   const [liveClientOrderId] = useState(() => globalThis.crypto.randomUUID());
   const [paymentMethod, setPaymentMethod] = useState<"CASH"|"CARD"|"TRANSFER">(cashOpen ? "CASH" : "CARD");
@@ -175,10 +183,16 @@ export function PosClient({
   },[mobileCartOpen,checkoutOpen]);
 
   const selectedCustomer =
-    customers.find((customer) => customer.id === customerId) ?? null;
-  const pointsPreview = selectedCustomer
-    ? Math.round(total * 0.05 * 100) / 100
-    : 0;
+    customers.find((customer) => customer.id === customerId) ??
+    (createdCustomer?.id===customerId?createdCustomer:null);
+  const redemption=redeemAmount(redeemPoints,selectedCustomer?.pointsBalance??0,total);
+  const monetaryDue=redemption.remaining;
+  const pointCheckout=!redemption.valid || (redemption.points>0&&!selectedCustomer);
+  const loyaltyControl=<CheckoutLoyalty customers={createdCustomer
+    ?[...customers.filter(c=>c.id!==createdCustomer.id),createdCustomer]:customers}
+    selectedId={customerId} onSelect={checkoutCustomerChange}
+    redeemPoints={redeemPoints} onRedeemChange={setRedeemPoints}
+    total={total} liveEnabled={liveEnabled}/>;
 
   const productCount = (id: string) =>
     cart.reduce(
@@ -252,9 +266,9 @@ export function PosClient({
 
   if(checkoutOpen&&!liveEnabled&&!savedTicket){
     const cashPaid=tendered.trim()!==""?Number(tendered):NaN;
-    const cashSufficient=Number.isFinite(cashPaid)&&cashPaid>=total;
+    const cashSufficient=Number.isFinite(cashPaid)&&cashPaid>=monetaryDue;
     const cashChange=cashSufficient
-      ?Math.round((cashPaid-total+Number.EPSILON)*100)/100:0;
+      ?Math.round((cashPaid-monetaryDue+Number.EPSILON)*100)/100:0;
     return <div className="pos-layout" style={{gridTemplateColumns:"minmax(0,1fr)"}}>
       <section className="card stack" style={{maxWidth:780,margin:"0 auto",width:"100%"}}>
         <p className="eyebrow">POS · PREVIEW · SIMULACIÓN SEGURA</p>
@@ -283,17 +297,18 @@ export function PosClient({
             <strong>{money.format(unitPrice(line))}</strong>
           </div>)}
         </div>
-        <div className="pos-total"><strong>TOTAL SIMULADO</strong>
+        <div className="pos-total"><strong>Consumo</strong>
           <strong>{money.format(total)}</strong></div>
-        <label>Método de pago (simulado)
+        {loyaltyControl}
+        {monetaryDue>0?<label>Método de pago (simulado)
           <select value={paymentMethod}
             onChange={e=>setPaymentMethod(e.target.value as "CASH"|"CARD"|"TRANSFER")}>
             <option value="CASH">Efectivo</option>
             <option value="CARD">Tarjeta</option>
             <option value="TRANSFER">Transferencia</option>
           </select>
-        </label>
-        {paymentMethod==="CASH"&&<div className="stack">
+        </label>:<p className="status-ok">Cuenta cubierta con puntos. Sin pago en efectivo, tarjeta o transferencia.</p>}
+        {monetaryDue>0&&paymentMethod==="CASH"&&<div className="stack">
           <label>Importe recibido (simulado)
             <input type="number" min="0" step=".01" inputMode="decimal"
               value={tendered} onChange={e=>setTendered(e.target.value)}
@@ -339,7 +354,8 @@ export function PosClient({
             </div>
           </div>)}
         </div>
-        <div className="pos-total"><strong>TOTAL</strong><strong>{money.format(total)}</strong></div>
+        <div className="pos-total"><strong>Consumo</strong><strong>{money.format(total)}</strong></div>
+        {loyaltyControl}
         <form action={checkoutAction} className="stack">
           <input type="hidden" name="clientOrderId" value={liveClientOrderId}/>
           <input type="hidden" name="cart" value={JSON.stringify(cartLines.map(line=>({
@@ -349,23 +365,26 @@ export function PosClient({
           })))}/>
           <input type="hidden" name="serviceMode" value={ticketServiceMode}/>
           <input type="hidden" name="customerId" value={customerId}/>
+          <input type="hidden" name="redeemPoints" value={redemption.points.toFixed(2)}/>
           <input type="hidden" name="tableLabel" value={tableLabel}/>
           <input type="hidden" name="note" value={orderNote}/>
-          <label>Forma de pago
+          {monetaryDue>0?<label>Forma de pago
             <select name="paymentMethod" value={paymentMethod}
               onChange={e=>setPaymentMethod(e.target.value as "CASH"|"CARD"|"TRANSFER")}>
               <option value="CASH" disabled={!cashOpen}>Efectivo{cashOpen?"":" · abre caja"}</option>
               <option value="CARD">Tarjeta · cobrar primero en la terminal</option>
               <option value="TRANSFER">Transferencia · confirmar depósito</option>
             </select>
-          </label>
-          {paymentMethod==="CASH"?<div className="stack">
+          </label>:<div className="status-ok">Cubierta al 100% con puntos. No se realiza cargo monetario.</div>}
+          <input type="hidden" name="checkoutPaymentMethod"
+            value={monetaryDue===0?"POINTS":paymentMethod}/>
+          {monetaryDue>0&&paymentMethod==="CASH"?<div className="stack">
             <label>Efectivo recibido
-              <input name="tenderedAmount" inputMode="decimal" type="number" min={total}
+              <input name="tenderedAmount" inputMode="decimal" type="number" min={monetaryDue}
                 step="0.01" value={tendered} onChange={e=>setTendered(e.target.value)} required/>
             </label>
-            <p className="muted">Cambio: <strong>{tendered.trim()!==""&&Number(tendered)>=total
-              ?money.format(Number(tendered)-total):"Ingresa el importe recibido"}</strong></p>
+            <p className="muted">Cambio: <strong>{tendered.trim()!==""&&Number(tendered)>=monetaryDue
+              ?money.format(Number(tendered)-monetaryDue):"Ingresa el importe recibido"}</strong></p>
           </div>:<>
             <input type="hidden" name="tenderedAmount" value=""/>
             <p className="muted">OPS registra el pago; confirma el dinero en tu banco o terminal externa.</p>
@@ -378,8 +397,9 @@ export function PosClient({
             <small className="muted">Registra inventario negativo y auditoría; exige reconteo posterior. No crea existencias ficticias.</small>
           </label>}
           <button className="pos-pay-button" type="submit" disabled={checkoutPending ||
-            missingTable || (paymentMethod==="CASH"&&(!tendered.trim()||Number(tendered)<total))}>
-            {checkoutPending?"Procesando...":"Confirmar cobro · "+money.format(total)}
+            missingTable || pointCheckout ||
+            (monetaryDue>0&&paymentMethod==="CASH"&&(!tendered.trim()||Number(tendered)<monetaryDue))}>
+            {checkoutPending?"Procesando...":"Confirmar cobro · "+money.format(monetaryDue)}
           </button>
         </form>
         <button type="button" className="button" onClick={()=>setCheckoutOpen(false)}>
@@ -642,56 +662,6 @@ export function PosClient({
           <span>{savedTicket?"Total del ticket (incluye lo nuevo)":"Total"}</span>
           <strong>{money.format(total)}</strong>
         </div>
-
-        {!savedTicket&&<section className="pos-customer-box" aria-labelledby="pos-customer-heading">
-          <div className="pos-customer-heading">
-            <span className="pos-customer-icon" aria-hidden="true">◎</span>
-            <div>
-              <h3 id="pos-customer-heading">Cliente y puntos</h3>
-              <p>Programa de lealtad · 5% de cada compra</p>
-            </div>
-          </div>
-          <label className="pos-customer-selector">
-            Identificar cliente
-            <select
-              value={customerId}
-              onChange={(event) => setCustomerId(event.target.value)}
-            >
-              <option value="">Sin cliente · venta normal</option>
-              {customers.map((customer) => (
-                <option key={customer.id} value={customer.id}>
-                  {customer.name} · {customer.pointsBalance.toFixed(2)} pts
-                </option>
-              ))}
-            </select>
-          </label>
-          {selectedCustomer ? (
-            <div className="pos-customer-points" aria-live="polite">
-              <div><span>Saldo disponible</span><strong>{selectedCustomer.pointsBalance.toFixed(2)} pts</strong></div>
-              <div><span>Ganará con esta compra</span><strong>+{pointsPreview.toFixed(2)} pts</strong></div>
-            </div>
-          ) : (
-            <p className="pos-customer-help">Opcional. Puedes continuar sin cliente o registrarlo aquí.</p>
-          )}
-          <details className="pos-customer-registration">
-            <summary><span aria-hidden="true">＋</span> Registrar cliente nuevo</summary>
-            <form action={createPosCustomer} className="stack">
-              <label>
-                Nombre
-                <input name="name" required minLength={2} />
-              </label>
-              <label>
-                Teléfono
-                <input name="phone" inputMode="tel" />
-              </label>
-              <label>
-                Correo
-                <input name="email" type="email" />
-              </label>
-              <button type="submit">Guardar cliente</button>
-            </form>
-          </details>
-        </section>}
 
         <form id="pos-order-command-form" action={savedTicket?addProductsToLiveCommand:liveEnabled?saveAction:shadowAction} className="stack pos-checkout">
           {savedTicket&&<>
