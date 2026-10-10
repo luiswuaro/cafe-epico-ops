@@ -265,15 +265,18 @@ export async function getRoastingDashboard(organizationId: string) {
     const internalGreenStockG = lot.greenInventoryItemId
       ? balanceByItem.get(lot.greenInventoryItemId) ?? 0
       : null;
+    // El inventario operativo OPS prevalece si el lote está mapeado.
+    // HiBean es una referencia histórica que se concilia, no una existencia
+    // que deba sobreescribir compras, conteos o consumos contabilizados en OPS.
     const greenStockG =
-      hibeanGreenStockG != null
-        ? hibeanGreenStockG
-        : internalGreenStockG;
+      internalGreenStockG != null
+        ? internalGreenStockG
+        : hibeanGreenStockG;
     const greenStockSource =
-      hibeanGreenStockG != null
-        ? ("HIBEAN_CONFIRMED" as const)
-        : internalGreenStockG != null
-          ? ("INTERNAL" as const)
+      internalGreenStockG != null
+        ? ("INTERNAL" as const)
+        : hibeanGreenStockG != null
+          ? ("HIBEAN_CONFIRMED" as const)
           : ("UNMAPPED" as const);
     const internalRoastedStockG = lot.roastedInventoryItemId
       ? balanceByItem.get(lot.roastedInventoryItemId) ?? 0
