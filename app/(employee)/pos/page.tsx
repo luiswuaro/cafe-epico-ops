@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { PosClient } from "./pos-client";
 import { AutoKitchenPrint } from "./orders/auto-kitchen-print";
+import { kitchenOrderIdentity } from "@/src/application/pos/kitchen-slip";
 import { getShadowOrderMirror } from "@/src/application/pos/mirror";
 import { getPosCatalog } from "@/src/application/pos/catalog";
 import { isPosLiveEnabled } from "@/src/application/pos/live";
@@ -79,7 +80,7 @@ export default async function PosPage({
          roundId={params.savedRound}
          slip={{
            folio:selectedTicket.folio,
-           table:selectedTicket.tableLabel||(selectedTicket.serviceMode==="TAKEAWAY"?"Para llevar":"Aquí"),
+           ...kitchenOrderIdentity({ticketLabel:selectedTicket.tableLabel,customerName:selectedTicket.customerName,folio:selectedTicket.folio}),
            orderNote:selectedTicket.note,
            lines:selectedTicket.lines.map(line=>({
              id:line.id,name:line.name,category:line.category,
