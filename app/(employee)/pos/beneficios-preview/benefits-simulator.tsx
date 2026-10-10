@@ -2,7 +2,7 @@
 
 import {useMemo,useState} from "react";
 import {
-  calculateBenefitPreview,type BenefitKind,type BenefitLine,type Scope,
+  calculateBenefitPreview,POINT_REDEMPTION_MXN_PER_POINT,type BenefitKind,type BenefitLine,type Scope,
 } from "@/src/domain/pos/benefits-preview";
 
 type Item={id:string;name:string;category:"CALIENTES"|"FRÍAS"|"ALIMENTOS";price:number};
@@ -18,16 +18,15 @@ export function BenefitsPreview({catalog,customers}:{catalog:Item[];customers:Cu
   const [value,setValue]=useState("0");
   const [reason,setReason]=useState("");
   const [customerId,setCustomerId]=useState("");
-  const [rate,setRate]=useState("");
   const [staffFreeUsed,setStaffFreeUsed]=useState(false);
   const selectedCustomer=customers.find(x=>x.id===customerId);
   const candidate=catalog.find(x=>x.id===itemId);
   const result=useMemo(()=>calculateBenefitPreview(lines,{
     kind,scope,lineId,value:Number(value),reason,
     availablePoints:selectedCustomer?.pointsBalance??0,
-    mxnPerPoint:rate.trim()?Number(rate):0,
+    customerSelected:Boolean(selectedCustomer),
     staffFreeAlreadyUsed:staffFreeUsed,
-  }),[lines,kind,scope,lineId,value,reason,selectedCustomer?.pointsBalance,rate,staffFreeUsed]);
+  }),[lines,kind,scope,lineId,value,reason,selectedCustomer?.pointsBalance,staffFreeUsed]);
 
   function add(){
     if(!candidate)return;
@@ -104,10 +103,7 @@ export function BenefitsPreview({catalog,customers}:{catalog:Item[];customers:Cu
             </select>
           </label>
           <p className="muted">Saldo en OPS: {selectedCustomer?selectedCustomer.pointsBalance.toFixed(2)+" pts":"sin cliente"}</p>
-          <label>Conversión pendiente de confirmar (MXN por punto)
-            <input type="number" min=".01" step=".01" placeholder="Pendiente de aprobación"
-              value={rate} onChange={e=>setRate(e.target.value)}/>
-          </label>
+          <p className="status-ok" role="status">Equivalencia de canje: <strong>1 punto = {mxn(POINT_REDEMPTION_MXN_PER_POINT)}</strong></p>
         </>}
         {(kind==="POINTS"||kind==="MANUAL_FIXED"||kind==="MANUAL_PERCENT")&&
           <label>{kind==="POINTS"?"Puntos a usar":kind==="MANUAL_PERCENT"?"Porcentaje":"Descuento (MXN)"}
@@ -126,14 +122,14 @@ export function BenefitsPreview({catalog,customers}:{catalog:Item[];customers:Cu
       <div className="stack">
         {result.perLine.map(line=><div key={line.id} style={{display:"flex",justifyContent:"space-between",gap:10}}>
           <span>{line.name}{line.thermosDiscount>0?" · termo":""}</span>
-          <strong>{mxn(line.amount-line.benefitDiscount)}</strong>
+          <strong>{mxn(line.amount-line.benefitDiscount-line.redeemedValue)}</strong>
         </div>)}
       </div>
       <hr/>
       <div style={{display:"flex",justifyContent:"space-between"}}><span>Precio de lista</span><strong>{mxn(result.subtotal)}</strong></div>
       <div style={{display:"flex",justifyContent:"space-between"}}><span>Descuento por termo</span><strong>−{mxn(result.thermosSavings)}</strong></div>
       <div style={{display:"flex",justifyContent:"space-between"}}><span>Otro descuento</span><strong>−{mxn(result.ordinaryDiscount)}</strong></div>
-      <div style={{display:"flex",justifyContent:"space-between"}}><span>Puntos aplicados</span><strong>−{mxn(result.redeemedValue)}</strong></div>
+      <div style={{display:"flex",justifyContent:"space-between"}}><span>Puntos aplicados ({result.redeemedPoints.toFixed(2)} pts)</span><strong>−{mxn(result.redeemedValue)}</strong></div>
       <div className="pos-total"><strong>Total simulado a pagar</strong><strong>{mxn(result.due)}</strong></div>
       <p className="muted">Puntos utilizados: {result.redeemedPoints.toFixed(2)} · Puntos estimados nuevos: +{result.earnablePoints.toFixed(2)} (hipótesis: 5% del importe pagado).</p>
       {result.warnings.map((warning,i)=><p key={i} className="status-warn" role="alert">{warning}</p>)}
