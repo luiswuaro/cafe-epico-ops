@@ -30,7 +30,7 @@ export function CheckoutLoyalty({
     if(registration.customer && registration.customer.id!==selectedId){
       onSelect(registration.customer.id,registration.customer);
     }
-  },[registration.customer,selectedId,onSelect]);
+  },[registration.customer,onSelect]);
   const customer=customers.find(x=>x.id===selectedId)??registration.customer;
   const pointsBalance=customer?.pointsBalance??0;
   const {points,valid,remaining}=redeemAmount(redeemPoints,pointsBalance,total);
@@ -39,7 +39,8 @@ export function CheckoutLoyalty({
   function simulateCreate(form:FormData){
     const name=String(form.get("name")??"").trim();
     if(name.length<2)return;
-    onSelect(crypto.randomUUID(),{id:crypto.randomUUID(),name,pointsBalance:0});
+    const id=crypto.randomUUID();
+    onSelect(id,{id,name,pointsBalance:0});
   }
   const fields=<>
     <label>Nombre del cliente
