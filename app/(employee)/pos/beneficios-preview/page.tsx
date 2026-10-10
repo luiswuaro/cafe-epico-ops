@@ -30,7 +30,7 @@ export default async function BenefitsPreviewPage(){
       catalog={catalog.filter(x=>x.active).map(x=>({
         id:x.id,name:x.name,category:x.category,price:x.price,
       }))}
-      customers={customers.filter(x=>x.isActive).map(x=>({
+      customers={customers.map(x=>({
         id:x.id,name:x.name,pointsBalance:Number(x.pointsBalance),
       }))}
     />
