@@ -99,10 +99,15 @@ export default async function RoastingPage({
             "hibean-file-large": "El JSON supera los 3.5 MB permitidos en esta importación. No se registró ningún batch. Comparte el archivo para preparar una carga de mayor tamaño.",
             "hibean-read": "No fue posible leer el archivo. Revisa que no esté dañado y vuelve a seleccionarlo.",
             "hibean-parse": "La estructura del JSON provocó un error al interpretarla. No se registró el tueste; conserva el archivo para revisión.",
+            "hibean-no-data": "HiBean no incluyó muestras de curva utilizables. No se registró el tueste.",
+            "hibean-server": "El servidor no pudo preparar el borrador. No se registró ningún tueste. Comparte el código de diagnóstico que aparece debajo para investigar.",
             "hibean-format": "No se reconoció el formato HiBean en ese archivo. Exporta el tueste como JSON completo desde HiBean.",
             "hibean-json": "El archivo no contiene un objeto JSON válido. Vuelve a exportarlo desde HiBean.",
           } as Record<string, string>)[params.error] ??
           "No se pudo completar la operación. Código: " + params.error}
+          {typeof params.ref==="string"&&/^[A-Z0-9]{8}$/.test(params.ref)&&(
+            <span style={{display:"block",fontWeight:700}}>Diagnóstico: {params.ref}</span>
+          )}
         </p>
       )}
       {typeof params.saved === "string" && (
