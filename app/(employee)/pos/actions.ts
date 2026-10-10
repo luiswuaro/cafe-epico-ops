@@ -356,6 +356,50 @@ async function createShadowOrder(
   return order.id;
 }
 
+/** Inline error response for preview/shadow operations; never show a generic page crash. */
+function safeShadowError(error:unknown):string {
+  const known=error instanceof Error?error.message:"";
+  if(known==="Abre la caja antes de cobrar en efectivo" ||
+    known==="Cliente no válido" ||
+    known==="Producto no disponible en el catálogo POS" ||
+    known==="Termo propio sólo aplica a bebidas para llevar." ||
+    known==="Precio no válido para termo propio." ||
+    known.startsWith("Para consumo aquí, selecciona una mesa") ||
+    known.startsWith("El nombre del ticket debe"))
+    return known.slice(0,260);
+  if(error instanceof z.ZodError)
+    return "Revisa los datos del pedido y la forma de pago.";
+  // Avoid leaking SQL statements, personal information or connection metadata.
+  const trace=randomUUID().slice(0,8).toUpperCase();
+  console.error("POS_SHADOW_FORM_FAILED",trace,error);
+  return "No se pudo registrar el espejo. El pedido sigue en el carrito. Referencia: "+trace;
+}
+
+export async function submitShadowSale(
+  _previous:{error:string|null},formData:FormData,
+):Promise<{error:string|null}>{
+  let orderId:string;
+  try{
+    const method=paymentSchema.parse(String(formData.get("paymentMethod")??""));
+    orderId=await createShadowOrder(formData,"PAID",method);
+  }catch(error){
+    return {error:safeShadowError(error)};
+  }
+  redirect("/pos?saved="+orderId);
+}
+
+export async function submitShadowCommand(
+  _previous:{error:string|null},formData:FormData,
+):Promise<{error:string|null}>{
+  let orderId:string;
+  try{
+    orderId=await createShadowOrder(formData,"SENT");
+  }catch(error){
+    return {error:safeShadowError(error)};
+  }
+  redirect("/pos/orders?created="+orderId);
+}
+
 export async function createShadowSale(formData: FormData) {
   const paymentMethod = paymentSchema.parse(
     String(formData.get("paymentMethod") ?? ""),
