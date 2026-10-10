@@ -177,3 +177,14 @@ La ejecución de GitHub Actions prueba estructura, tipos, lint y compilación, *
 - Existencia final `QA_CAFE_G`: **5,829.900 g**. Movimientos del experimento: simulación de faltante −5,838.800 g; compensación +5,838.800 g; venta −18.900 g.
 - La caja registra **$40.00** para el folio, y el neto acumulado de `pos_cash_movements` QA es **$310.00**. Con fondo de apertura de $500, el efectivo esperado es **$810.00**.
 - Se confirma integridad del cobro posterior al rechazo; sigue pendiente el ensayo concurrente QA-08 desde dos dispositivos, impresión ESC/POS física y demás escenarios críticos.
+
+
+## QA-08 — COBRO CONCURRENTE DESDE COMPUTADORA Y CELULAR: aprobado (2026-10-10 UTC)
+
+- Comanda QA `SH-261009182456-DCA3`, orden `9161d835-3a67-4316-96be-df72992f2ba6`, 1 Americano QA caliente `DINE_IN`, $40.
+- Dos clientes en el mismo Preview QA abrieron la misma pantalla de cobro y presionaron prácticamente a la vez: el celular obtuvo recibo; la computadora recibió `La comanda ya fue cobrada`.
+- **Lecturas SQL verificadas:** `PAID` a las 00:30:04.491 UTC, **un solo pago CASH $40**, un solo `pos_cash_movements SALE +$40`, un solo `inventory_movements POS_LIVE_ORDER SALE -18.900 g`, `inventory_effect_applied=true`.
+- Saldo QA café: `5,829.900→5,811.000 g`. Efectivo neto QA: $350 más apertura de $500 = **$850 esperado**.
+- Durante la ventana posterior a 00:29 UTC, producción `cafe-epico` registró 0 pagos/0 movimientos de inventario; QA 1 pago/1 movimiento.
+- **Hallazgo UX (no transaccional):** en PC, la pantalla mostraba el mensaje `La comanda ya fue cobrada` y debajo texto incorrecto `El ticket sigue abierto` y `Ticket no disponible`. El código del Preview se corrigió para consultar `pos_orders` scoped por organización/sucursal cuando deja de existir entre las comandas abiertas, mostrar **Pago registrado** y un enlace al recibo original en `/pos/receipt/<id>`.
+- **Pendiente:** comprobar visualmente el mensaje corregido en el siguiente Preview; pruebas con sesiones de diferentes empleados, mayor concurrencia y fallos intermedios no se validaron aquí.
