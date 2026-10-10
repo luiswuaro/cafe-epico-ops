@@ -8,6 +8,7 @@ import { DirectPrintTicketButton } from "./direct-print-button";
 import { PrintTicketButton } from "./print-button";
 import { AutoKitchenPrint } from "../../orders/auto-kitchen-print";
 import { kitchenOrderIdentity } from "@/src/application/pos/kitchen-slip";
+import {extraLabels,preparationNote} from "@/src/application/pos/extras";
 import { getPosPrintSettings } from "@/src/application/pos/print-settings";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
 import {
@@ -242,7 +243,7 @@ export default async function ReceiptPage({
             orderNote:order.order.note,
             lines:lines.map(line=>({
               id:line.id,name:line.nameSnapshot,category:line.categorySnapshot,
-              quantity:Number(line.quantity),note:line.note,
+              quantity:Number(line.quantity),note:preparationNote(line.note,line.expectedConsumption),
               serviceMode:typeof line.expectedConsumption?.serviceMode==="string"
                 ?line.expectedConsumption.serviceMode:order.order.serviceMode,
               roundId:typeof line.expectedConsumption?.roundId==="string"
@@ -276,6 +277,7 @@ export default async function ReceiptPage({
             items: lines.map((line) => ({
               quantity: Number(line.quantity),
               name: line.nameSnapshot,
+              extra: extraLabels(line.expectedConsumption,{showPrices:true}).join(" · ")||null,
               note: (line.expectedConsumption?.serviceMode==="TAKEAWAY"?"Para llevar":"Aquí")+
                 (line.note?" · "+line.note:""),
               total: money.format(Number(line.lineTotal)),
@@ -427,6 +429,8 @@ export default async function ReceiptPage({
               <div className="receipt-line-note">
                 {line.expectedConsumption?.serviceMode==="TAKEAWAY"?"Para llevar":"Para consumir aquí"}
               </div>
+              {extraLabels(line.expectedConsumption,{showPrices:true}).map((label,i)=>
+                <div key={i} className="receipt-line-note">↳ {label}</div>)}
               {printSettings.showItemNotes && line.note && (
                 <div className="receipt-line-note">↳ {line.note}</div>
               )}
