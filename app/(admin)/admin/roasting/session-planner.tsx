@@ -18,6 +18,7 @@ export function RoastingSessionPlanner({lots}:{lots:Lot[]}){
   const [realWeights,setRealWeights]=useState<Record<number,string>>({});
   const [hydrated,setHydrated]=useState(false);
   useEffect(()=>{
+    const timer=window.setTimeout(()=>{
     try{
       const raw=window.localStorage.getItem(PLAN_STORAGE_KEY);
       if(raw){
@@ -34,6 +35,8 @@ export function RoastingSessionPlanner({lots}:{lots:Lot[]}){
       }
     }catch{/* Almacenamiento no disponible: mantener plan por defecto. */}
     setHydrated(true);
+    },0);
+    return ()=>window.clearTimeout(timer);
   },[lots]);
   useEffect(()=>{
     if(!hydrated)return;
