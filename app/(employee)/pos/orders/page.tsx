@@ -149,7 +149,11 @@ export default async function PosOrdersPage({
                       {elapsedMinutes(order.createdAt)} min
                     </p>
                     <h2>
-                      {order.tableLabel||(order.serviceMode==="TAKEAWAY"?"Para llevar":"Aquí")}
+                      {kitchenOrderIdentity({
+                        ticketLabel:order.tableLabel,
+                        customerName:order.customerName,
+                        folio:order.folio,
+                      }).table}
                     </h2>
                   </div>
                   <strong>{money.format(Number(order.total))}</strong>
@@ -188,8 +192,12 @@ export default async function PosOrdersPage({
 
                 <div className="muted">
                   Tomó: {order.employeeName ?? "Empleado"}
-                  {order.customerName
-                    ? " · Cliente: " + order.customerName
+                  {kitchenOrderIdentity({
+                    ticketLabel:order.tableLabel,
+                    customerName:order.customerName,
+                    folio:order.folio,
+                  }).customerName
+                    ? " · Cliente: "+order.customerName
                     : ""}
                 </div>
 
