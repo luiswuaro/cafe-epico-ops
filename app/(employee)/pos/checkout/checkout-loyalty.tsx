@@ -16,12 +16,12 @@ export function redeemAmount(value:string,balance:number,total:number){
 }
 
 export function CheckoutLoyalty({
-  customers,selectedId,onSelect,redeemPoints,onRedeemChange,total,liveEnabled,
+  customers,selectedId,onSelect,redeemPoints,onRedeemChange,total,liveEnabled,identityOnly=false,
 }:{
   customers:CheckoutCustomer[];selectedId:string;
   onSelect:(id:string,created?:CheckoutCustomer)=>void;
   redeemPoints:string;onRedeemChange:(value:string)=>void;
-  total:number;liveEnabled:boolean;
+  total:number;liveEnabled:boolean;identityOnly?:boolean;
 }){
   const [search,setSearch]=useState("");
   const [registration,registrationAction,registrationPending]=useActionState(
@@ -58,8 +58,8 @@ export function CheckoutLoyalty({
   return <section className="card stack" aria-label="Cliente y canje de puntos"
     style={{padding:16,gap:12}}>
     <div style={{display:"flex",justifyContent:"space-between",gap:12,alignItems:"center"}}>
-      <strong>Cliente y puntos</strong>
-      <small className="muted">1 punto = $1 · +5% sobre dinero pagado</small>
+      <strong>{identityOnly?"Cliente del pedido":"Cliente y puntos"}</strong>
+      {!identityOnly&&<small className="muted">1 punto = $1 · +5% sobre dinero pagado</small>}
     </div>
     <label>Buscar cliente
       <input type="search" value={search} placeholder="Nombre del cliente"
@@ -86,7 +86,7 @@ export function CheckoutLoyalty({
         </form>}
       {registration.error&&<p className="status-bad" role="alert">{registration.error}</p>}
     </details>
-    {customer?<div className="stack" style={{gap:10}}>
+    {!identityOnly&&customer?<div className="stack" style={{gap:10}}>
       <div className="row" style={{display:"flex",justifyContent:"space-between",gap:8}}>
         <span>Saldo disponible</span><strong>{money(pointsBalance)} · {pointsBalance.toFixed(2)} pts</strong>
       </div>
@@ -111,6 +111,6 @@ export function CheckoutLoyalty({
         <strong>A cobrar con dinero</strong><strong>{money(remaining)}</strong>
       </div>
       <p className="muted">Puntos nuevos: <strong>+{calculateEarnedPointsFromRealMoney(remaining).toFixed(2)} pts</strong> (5% de lo cobrado realmente).</p>
-    </div>:<p className="muted">Puedes cobrar sin cliente o seleccionarlo para usar sus puntos.</p>}
+    </div>:!identityOnly?<p className="muted">Puedes cobrar sin cliente o seleccionarlo para usar sus puntos.</p>:null}
   </section>;
 }
