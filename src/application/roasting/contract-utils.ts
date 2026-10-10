@@ -5,7 +5,7 @@ export type ContractDefect = {
 export const defectTypes = [
   "Negro completo","Negro parcial","Agrio completo","Agrio parcial",
   "Inmaduro","Brocado severo","Brocado leve","Concha","Quebrado",
-  "Cáscara/pergamino","Materia extraña","Quaker (post-tueste)","Otro",
+  "Cáscara/pergamino","Materia extraña","Grano vano","Otro",
 ] as const;
 export const mass = (value:string|number|null|undefined):number =>
   value==null?0:Number(value);
