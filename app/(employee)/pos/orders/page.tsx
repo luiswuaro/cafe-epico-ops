@@ -345,16 +345,17 @@ export default async function PosOrdersPage({
                       <summary>Cobrar cuenta completa · espejo</summary>
                       <form action={payShadowCommand} className="stack">
                         <input type="hidden" name="orderId" value={order.id}/>
-                        <label>Método de pago
-                          <select name="paymentMethod" defaultValue={cash.session?"CASH":"CARD"}>
-                            <option value="CASH" disabled={!cash.session}>
-                              Efectivo{cash.session?"":" · abre caja"}
-                            </option>
-                            <option value="CARD">Tarjeta</option>
-                            <option value="TRANSFER">Transferencia</option>
+                        <p className="muted">Prueba ESPEJO: no cobra dinero real, no mueve caja
+                          ni descuenta inventario. En efectivo se simula pago exacto,
+                          con cambio de $0.</p>
+                        <label>Método de pago simulado
+                          <select name="paymentMethod" defaultValue="CASH">
+                            <option value="CASH">Efectivo simulado</option>
+                            <option value="CARD">Tarjeta simulada</option>
+                            <option value="TRANSFER">Transferencia simulada</option>
                           </select>
                         </label>
-                        <button type="submit">Marcar pagada · {money.format(Number(order.total))}</button>
+                        <button type="submit">Marcar pagada (espejo) · {money.format(Number(order.total))}</button>
                       </form>
                     </details>
                 )}
