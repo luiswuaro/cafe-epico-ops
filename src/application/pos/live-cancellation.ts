@@ -86,15 +86,32 @@ export async function cancelLiveOrder(input:{
         eq(inventoryBalances.inventoryItemId,movement.inventoryItemId),
       ));
     }
+    // Revertir por cliente en un solo saldo neto (EARN y REDEEM),
+    // evitando saldos transitorios negativos y canjes duplicados.
+    const reversalTotals=new Map<string,number>();
+    for(const entry of points){
+      const delta=-Number(entry.points);
+      reversalTotals.set(entry.customerId,
+        Math.round(((reversalTotals.get(entry.customerId)??0)+delta)*100)/100);
+    }
+    for(const [customerId,delta] of reversalTotals){
+      const [updatedCustomer]=await tx.update(posCustomers).set({
+        pointsBalance:sql`${posCustomers.pointsBalance} + ${delta}`,updatedAt:now,
+      }).where(and(
+        eq(posCustomers.id,customerId),
+        eq(posCustomers.organizationId,input.organizationId),
+        sql`${posCustomers.pointsBalance} + ${delta} >= 0`,
+      )).returning({id:posCustomers.id});
+      if(!updatedCustomer)throw new Error(
+        "No se puede cancelar automáticamente: parte de los puntos ganados ya se utilizó. Requiere revisión administrativa."
+      );
+    }
     for(const entry of points){
       const refund=-Number(entry.points);
       await tx.insert(posLoyaltyEntries).values({
         organizationId:input.organizationId,customerId:entry.customerId,orderId:order.id,
         entryType:"REVERSAL",points:refund.toFixed(2),note:"Cancelación "+order.folio+" · "+entry.entryType,
       });
-      await tx.update(posCustomers).set({
-        pointsBalance:sql`${posCustomers.pointsBalance} + ${refund}`,updatedAt:now,
-      }).where(and(eq(posCustomers.id,entry.customerId),eq(posCustomers.organizationId,input.organizationId)));
     }
     if(cashMovements.length){
       await tx.insert(posCashMovements).values(cashMovements.map(m=>({
