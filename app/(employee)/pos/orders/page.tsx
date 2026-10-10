@@ -203,6 +203,10 @@ export default async function PosOrdersPage({
                   </div>
                 )}
 
+                {order.mode==="LIVE"&&
+                  <Link className="button pos-prebill-link" href={"/pos/orders/"+order.id+"/prebill"}>
+                    Imprimir precuenta · {order.tableLabel??"mesa"}
+                  </Link>}
                 {(
                   <Link
                     href={"/pos/orders/" + order.id + "/split"}
