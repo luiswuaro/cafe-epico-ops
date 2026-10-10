@@ -369,7 +369,7 @@ export async function submitShadowSale(
   }catch(error){
     return {error:safeShadowError(error)};
   }
-  redirect("/pos/receipt/"+orderId);
+  redirect("/pos/receipt/"+orderId+"?autoKitchen=paid-direct");
 }
 
 export async function submitShadowCommand(
@@ -394,7 +394,7 @@ export async function createShadowSale(formData: FormData) {
     "PAID",
     paymentMethod,
   );
-  redirect("/pos/receipt/" + orderId);
+  redirect("/pos/receipt/" + orderId + "?autoKitchen=paid-direct");
 }
 
 export async function createShadowCommand(formData: FormData) {
