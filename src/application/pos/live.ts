@@ -2,6 +2,8 @@ import { and, eq, sql } from "drizzle-orm";
 import { getPosCatalog, type PosServiceMode } from "@/src/application/pos/catalog";
 import {priceExtras, readExtraSnapshots, type ExtraRequest} from "@/src/application/pos/extras";
 import {getPosExtraCatalog} from "@/src/application/pos/extra-catalog";
+import {OWN_CONTAINER_DISCOUNT_MXN,canUseOwnContainer,isOwnContainerDisposable,
+  isOwnContainerSnapshot,ownContainerUnitPrice,preparedOwnContainerComponents} from "@/src/domain/pos/own-container";
 import {dailyTakeawayTicketLabel,effectiveOrderServiceMode,validateTicketLabel} from "@/src/application/pos/ticket-names";
 import { isCostOnlyComponent, costOnlyRecipeMeasure } from "@/src/application/pos/component-policy";
 import { getDb } from "@/src/infrastructure/db/client";
@@ -16,6 +18,7 @@ export type LiveCart = Array<{
   quantity: number;
   note: string | null;
   serviceMode?:PosServiceMode;
+  customerContainer?:boolean;
   extras?:ExtraRequest[];
   // ID interno de la línea congelada de una comanda guardada; jamás se toma de una petición del navegador.
   sourceLineId?:string;
@@ -85,6 +88,14 @@ export async function checkoutLiveOrder(input:{
       throw new Error("Piloto LIVE limitado a "+pilotProduct+". No se cobró otro producto.");
     }
     const lineMode=line.serviceMode??input.serviceMode;
+    const customerContainer=snapshot
+      ?isOwnContainerSnapshot(snapshot.expectedConsumption)
+      :line.customerContainer===true;
+    if(customerContainer&&!canUseOwnContainer(item,lineMode))
+      throw new Error("Termo propio sólo aplica a bebidas para llevar.");
+    if(snapshot && line.customerContainer!==undefined &&
+      line.customerContainer!==customerContainer)
+      throw new Error("El estado de termo propio de la comanda cambió.");
     if(snapshot && snapshot.expectedConsumption?.serviceMode!==lineMode)
       throw new Error("El servicio de la línea guardada no coincide.");
     const resolvedExtras=snapshot
@@ -104,7 +115,10 @@ export async function checkoutLiveOrder(input:{
             quantity:Number(comp.quantity)/snapshotQuantity,
           };
         }):[])
-      :[...item.serviceRecipes[lineMode].components,...resolvedExtras.components];
+      :preparedOwnContainerComponents(
+        [...item.serviceRecipes[lineMode].components,...resolvedExtras.components],
+        customerContainer,
+      );
     if(recipeComponents.length===0 || recipeComponents.some(c=>!c.name||
       !Number.isFinite(c.quantity)||c.quantity<=0)){
       throw new Error("La receta original de "+item.name+" no está disponible para cobro.");
@@ -114,7 +128,10 @@ export async function checkoutLiveOrder(input:{
       const hasCup=names.some(name=>/VASO/.test(name));
       const hasLid=names.some(name=>/TAPA/.test(name));
       const hasStraw=names.some(name=>/POPOTE|PAJILLA/.test(name));
-      if(lineMode==="TAKEAWAY" && (!hasCup || !hasLid)){
+      if(customerContainer && recipeComponents.some(isOwnContainerDisposable)){
+         throw new Error("Termo propio no debe descontar vasos, tapas ni desechables.");
+       }
+       if(lineMode==="TAKEAWAY" && !customerContainer && (!hasCup || !hasLid)){
         throw new Error("Receta de "+item.name+" para llevar incompleta: falta vaso o tapa.");
       }
       if(lineMode==="DINE_IN" && names.some(name=>/VASO|TAPA|MANGA|FAJILLA|SERVILLETA/.test(name))){
@@ -124,11 +141,12 @@ export async function checkoutLiveOrder(input:{
         throw new Error("Receta fría de "+item.name+" para consumir aquí no incluye popote.");
       }
     }
-    const price=snapshot?Number(snapshot.unitPrice):Number((item.price+resolvedExtras.unitPrice).toFixed(2));
+    const price=snapshot?Number(snapshot.unitPrice):
+      ownContainerUnitPrice(item.price,resolvedExtras.unitPrice,customerContainer);
     if(!Number.isFinite(price)||price<=0)
       throw new Error("Precio guardado no válido.");
     return {
-      ...line,item,lineMode,price,extraSnapshots:resolvedExtras.extras,
+      ...line,item,lineMode,customerContainer,price,extraSnapshots:resolvedExtras.extras,
       total:Number((price*line.quantity).toFixed(2)),
       components:recipeComponents.map(c=>({
         ...c,quantity:Number((c.quantity*line.quantity).toFixed(6)),
@@ -363,6 +381,11 @@ export async function checkoutLiveOrder(input:{
       unitPrice:line.price.toFixed(2),quantity:String(line.quantity),lineTotal:line.total.toFixed(2),
       note:line.note,expectedConsumption:{
         mode:"LIVE",serviceMode:line.lineMode,extras:line.extraSnapshots,
+        customerContainer:line.customerContainer,
+        discount:line.customerContainer?{
+          code:"OWN_THERMOS",amountPerUnit:OWN_CONTAINER_DISCOUNT_MXN,
+          total:Number((OWN_CONTAINER_DISCOUNT_MXN*line.quantity).toFixed(2)),
+        }:null,
         components:line.components.map(component => ({
           ...component,
           inventoryPolicy:isCostOnlyComponent(component) ? "COST_ONLY" : "TRACKED",
