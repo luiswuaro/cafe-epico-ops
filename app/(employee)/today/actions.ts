@@ -9,9 +9,6 @@ import { assertEmployeePermission } from "@/src/infrastructure/auth/permissions"
 import { getDb } from "@/src/infrastructure/db/client";
 import {
   auditEvents,
-  inventoryBalances,
-  inventoryItems,
-  loyverseInventoryMappings,
   operationalEvents,
 } from "@/src/infrastructure/db/schema";
 
