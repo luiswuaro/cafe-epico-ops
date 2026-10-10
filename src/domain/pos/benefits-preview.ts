@@ -3,20 +3,21 @@
  * Sin escrituras: cobrar LIVE exige validación de permisos,
  * elegibilidad y contabilidad transaccional independiente.
  */
+export const POINT_REDEMPTION_MXN_PER_POINT = 1 as const;
 export type BenefitKind = "NONE"|"STAFF_FREE"|"STAFF_10"|"POINTS"|"MANUAL_FIXED"|"MANUAL_PERCENT";
 export type Scope = "LINE"|"TICKET";
 export type BenefitLine = {id:string;name:string;category:"CALIENTES"|"FRÍAS"|"ALIMENTOS";basePrice:number;extras:number;ownThermos:boolean};
 export type BenefitRequest = {
   kind:BenefitKind;scope:Scope;lineId:string;
   value:number;reason:string;
-  availablePoints:number;mxnPerPoint:number;
+  availablePoints:number;customerSelected:boolean;
   staffFreeAlreadyUsed:boolean;
 };
 export type BenefitResult = {
   subtotal:number;thermosSavings:number;ordinaryDiscount:number;
   redeemedPoints:number;redeemedValue:number;due:number;
   earnablePoints:number;warnings:string[];valid:boolean;
-  perLine:Array<{id:string;name:string;listPrice:number;thermosDiscount:number;benefitDiscount:number;amount:number}>;
+  perLine:Array<{id:string;name:string;listPrice:number;thermosDiscount:number;benefitDiscount:number;redeemedValue:number;amount:number}>;
 };
 const round=(v:number)=>Math.round((v+Number.EPSILON)*100)/100;
 const finite=(v:number)=>Number.isFinite(v)&&v>=0;
@@ -28,7 +29,7 @@ export function calculateBenefitPreview(lines:BenefitLine[],request:BenefitReque
     if(line.ownThermos && line.category==="ALIMENTOS")warnings.push("Termo propio solo corresponde a bebidas.");
     const listPrice=round(line.basePrice+line.extras);
     const thermosDiscount=line.ownThermos&&line.category!=="ALIMENTOS"?Math.min(5,line.basePrice):0;
-    return {id:line.id,name:line.name,listPrice,thermosDiscount,benefitDiscount:0,amount:round(listPrice-thermosDiscount)};
+    return {id:line.id,name:line.name,listPrice,thermosDiscount,benefitDiscount:0,redeemedValue:0,amount:round(listPrice-thermosDiscount)};
   });
   const subtotal=round(mapped.reduce((n,l)=>n+l.listPrice,0));
   const thermosSavings=round(mapped.reduce((n,l)=>n+l.thermosDiscount,0));
@@ -77,16 +78,27 @@ export function calculateBenefitPreview(lines:BenefitLine[],request:BenefitReque
       }
     }
   } else if(request.kind==="POINTS"){
-    if(!finite(request.availablePoints)||!finite(request.mxnPerPoint)||request.mxnPerPoint<=0)
-      warnings.push("Falta confirmar el valor monetario de cada punto.");
+    if(!request.customerSelected)warnings.push("Selecciona un cliente registrado para canjear puntos.");
+    if(!finite(request.availablePoints))warnings.push("El saldo de puntos no es válido.");
+    if(!finite(request.value)||request.value<=0)warnings.push("Ingresa una cantidad de puntos mayor que cero.");
     if(request.value>request.availablePoints)warnings.push("El cliente no tiene suficientes puntos.");
     const availableTarget=round(target.reduce((n,l)=>n+l.amount,0));
-    if(request.mxnPerPoint>0 && round(request.value*request.mxnPerPoint)>availableTarget)
+    if(round(request.value*POINT_REDEMPTION_MXN_PER_POINT)>availableTarget)
       warnings.push("El canje supera el importe del producto o cuenta.");
   }
   const ordinaryDiscount=round(mapped.reduce((n,l)=>n+l.benefitDiscount,0));
   const redeemedPoints=request.kind==="POINTS"&&!warnings.length?round(request.value):0;
-  const redeemedValue=round(redeemedPoints*request.mxnPerPoint);
+  const redeemedValue=round(redeemedPoints*POINT_REDEMPTION_MXN_PER_POINT);
+  if(redeemedValue>0){
+    const availableTarget=round(target.reduce((sum,line)=>sum+line.amount,0));
+    let allocated=0;
+    target.forEach((line,index)=>{
+      const reduction=index===target.length-1?round(redeemedValue-allocated):
+        round(redeemedValue*line.amount/availableTarget);
+      line.redeemedValue=reduction;
+      allocated=round(allocated+reduction);
+    });
+  }
   const due=round(Math.max(0,currentTotal-ordinaryDiscount-redeemedValue));
   const earnablePoints=round(due*.05);
   return {subtotal,thermosSavings,ordinaryDiscount,redeemedPoints,redeemedValue,due,
