@@ -1,6 +1,7 @@
 /** Cotización pura de beneficios por línea para el preview POS.
- * Una misma cuenta puede contener compras de cliente y consumos de varios
- * empleados. Los puntos del cliente jamás se calculan sobre líneas de personal.
+ * Un ticket con cliente identificado no admite cortesías ni descuentos de
+ * personal. Un ticket de personal puede incluir varios trabajadores, pero
+ * debe permanecer SIN cliente asociado.
  * Los descuentos de personal NO están habilitados en checkout LIVE.
  */
 export type StaffBenefitKind="NONE"|"INCLUDED_DRINK"|"ADDITIONAL_10";
@@ -27,9 +28,11 @@ export type StaffBenefitTicketResult={
 };
 const round=(n:number)=>Math.round((n+Number.EPSILON)*100)/100;
 
-export function calculateStaffTicket(lines:StaffBenefitLine[]):StaffBenefitTicketResult{
+export function calculateStaffTicket(lines:StaffBenefitLine[],customerId:string|null=null):StaffBenefitTicketResult{
   const warnings:string[]=[];
   const freePerEmployee=new Set<string>();
+  if(customerId&&lines.some(line=>line.staffBenefit!=="NONE"))
+    warnings.push("Ticket con cliente registrado: retira el cliente o los beneficios de personal. No se pueden combinar.");
   const perLine=lines.map((line,index):StaffBenefitLineResult=>{
     const label=`${index+1}. ${line.name}`;
     const staff=line.staffBenefit!=="NONE";
@@ -55,7 +58,7 @@ export function calculateStaffTicket(lines:StaffBenefitLine[]):StaffBenefitTicke
     const thermosDiscount=line.ownThermos&&line.category!=="ALIMENTOS"?
       Math.min(5,line.basePrice):0;
     const afterThermos=round(listedAmount-thermosDiscount);
-    const eligibleStaff=staff && line.category!=="ALIMENTOS" && Boolean(line.employeeId)
+    const eligibleStaff=staff && !customerId && line.category!=="ALIMENTOS" && Boolean(line.employeeId)
       && !line.ownThermos &&
       (line.staffBenefit!=="INCLUDED_DRINK"||line.serviceMode==="DINE_IN");
     const staffDiscount=eligibleStaff?round(Math.min(afterThermos,
