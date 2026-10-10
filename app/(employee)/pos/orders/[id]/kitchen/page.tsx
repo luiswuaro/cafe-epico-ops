@@ -23,8 +23,7 @@ export default async function KitchenSlipPage({params,searchParams}:{
   if(!employee.homeStoreId)throw new Error("Sin sucursal asignada");
   await assertEmployeePermission(employee.id,"pos.sell",employee.homeStoreId);
   const state=await getOrderSplitState(employee.organizationId,employee.homeStoreId,id);
-  if(!state||(state.order.mode!=="LIVE"&&
-    !(process.env.VERCEL_ENV==="preview"&&state.order.mode==="SHADOW")))
+  if(!state||(state.order.mode!=="LIVE"&&state.order.mode!=="SHADOW"))
     throw new Error("Comanda no encontrada");
   if(state.order.status==="CANCELLED")throw new Error("No se imprimen comandas canceladas");
   const client=state.order.customerId
