@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { and, eq } from "drizzle-orm";
 import { DirectPrintTicketButton } from "./direct-print-button";
 import { PrintTicketButton } from "./print-button";
+import { AutoKitchenPrint } from "../../orders/auto-kitchen-print";
 import { getPosPrintSettings } from "@/src/application/pos/print-settings";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
 import {
@@ -118,6 +119,7 @@ export default async function ReceiptPage({
           id: posOrderSplitLines.id,
           quantity: posOrderSplitLines.quantity,
           nameSnapshot: posOrderLines.nameSnapshot,
+          categorySnapshot:posOrderLines.categorySnapshot,
           lineTotal: posOrderSplitLines.lineTotal,
           note: posOrderLines.note,
           expectedConsumption: posOrderLines.expectedConsumption,
@@ -133,6 +135,7 @@ export default async function ReceiptPage({
           id: posOrderLines.id,
           quantity: posOrderLines.quantity,
           nameSnapshot: posOrderLines.nameSnapshot,
+          categorySnapshot:posOrderLines.categorySnapshot,
           lineTotal: posOrderLines.lineTotal,
           note: posOrderLines.note,
           expectedConsumption: posOrderLines.expectedConsumption,
@@ -211,6 +214,28 @@ export default async function ReceiptPage({
 
   return (
     <main className="receipt-shell">
+      {query.autoKitchen==="paid"&&
+        order.order.mode==="LIVE"&&
+        order.order.status==="PAID"&&
+        (!split||split.status==="PAID")&&
+        <AutoKitchenPrint event="paid"
+          eventId={order.order.id+(split?"-"+split.id:"")}
+          slip={{
+            folio:order.order.folio,
+            table:order.order.tableLabel||
+              (order.order.serviceMode==="TAKEAWAY"?"Para llevar":"Aquí"),
+            orderNote:order.order.note,
+            lines:lines.map(line=>({
+              id:line.id,name:line.nameSnapshot,category:line.categorySnapshot,
+              quantity:Number(line.quantity),note:line.note,
+              serviceMode:typeof line.expectedConsumption?.serviceMode==="string"
+                ?line.expectedConsumption.serviceMode:order.order.serviceMode,
+              roundId:typeof line.expectedConsumption?.roundId==="string"
+                ?line.expectedConsumption.roundId:null,
+            })),
+          }}
+        />}
+
       <div className="receipt-toolbar no-print">
         <Link
           href={
