@@ -28,12 +28,12 @@ type Customer = {
 
 type ServiceMode="DINE_IN"|"TAKEAWAY";
 type CartLine = {
-  key:string;externalId:string;note:string;serviceMode:ServiceMode;
+  key:string;externalId:string;note:string;serviceMode:ServiceMode;espressoShots:number;
 };
 type SavedTicket={
   id:string;folio:string;name:string;total:number;customerId:string|null;
   status:string;serviceMode:ServiceMode;
-  lines:Array<{id:string;name:string;quantity:number;note:string|null;unitPrice:number;serviceMode:ServiceMode;isAdditionalRound:boolean;roundId:string|null}>;
+  lines:Array<{id:string;name:string;quantity:number;note:string|null;unitPrice:number;serviceMode:ServiceMode;isAdditionalRound:boolean;roundId:string|null;extrasLabel:string|null}>;
 };
 
 type Props = {
@@ -109,7 +109,8 @@ export function PosClient({
   });
 
   const historicalRoundIds=[...new Set((savedTicket?.lines??[]).map(line=>line.roundId??"INITIAL"))];
-  const newSubtotal=cartLines.reduce((sum,line)=>sum+line.item.price,0);
+  const unitPrice=(line:typeof cartLines[number])=>line.item.price+line.espressoShots*10;
+  const newSubtotal=cartLines.reduce((sum,line)=>sum+unitPrice(line),0);
   const total=(savedTicket?.total??0)+newSubtotal;
   const units=(savedTicket?.lines.reduce((sum,line)=>sum+line.quantity,0)??0)+cartLines.length;
 
@@ -164,7 +165,7 @@ export function PosClient({
         key: globalThis.crypto.randomUUID(),
         externalId,
         note: "",
-        serviceMode,
+        serviceMode,espressoShots:0,
       },
     ]);
   }
@@ -180,13 +181,17 @@ export function PosClient({
         key: globalThis.crypto.randomUUID(),
         externalId: line.externalId,
         note: "",
-        serviceMode:line.serviceMode,
+        serviceMode:line.serviceMode,espressoShots:line.espressoShots,
       },
     ]);
   }
 
   function updateServiceMode(key:string,next:ServiceMode){
     setCart(current=>current.map(line=>line.key===key?{...line,serviceMode:next}:line));
+  }
+
+  function setEspressoShots(key:string,count:number){
+    setCart(rows=>rows.map(line=>line.key===key?{...line,espressoShots:Math.max(0,Math.min(2,count))}:line));
   }
 
   function updateNote(key: string, note: string) {
@@ -210,7 +215,12 @@ export function PosClient({
               <strong>{index+1}. {line.item.name}</strong>
               <p className="muted">{line.serviceMode==="DINE_IN"?"Aquí":"Para llevar"}{line.note?" · "+line.note:""}</p>
             </div>
-            <strong>{money.format(line.item.price)}</strong>
+            <div style={{textAlign:"right"}}>
+              <strong>{money.format(unitPrice(line))}</strong>
+              {line.espressoShots>0&&<small className="muted" style={{display:"block"}}>
+                + {line.espressoShots} espresso extra · {money.format(line.espressoShots*10)}
+              </small>}
+            </div>
           </div>)}
         </div>
         <div className="pos-total"><strong>TOTAL</strong><strong>{money.format(total)}</strong></div>
@@ -218,7 +228,8 @@ export function PosClient({
           <input type="hidden" name="clientOrderId" value={liveClientOrderId}/>
           <input type="hidden" name="cart" value={JSON.stringify(cartLines.map(line=>({
             externalId:line.externalId,quantity:1,note:line.note.trim()||null,
-            serviceMode:line.serviceMode
+            serviceMode:line.serviceMode,
+            extras:line.espressoShots?[{id:"ESPRESSO_SHOT",quantity:line.espressoShots}]:[]
           })))}/>
           <input type="hidden" name="serviceMode" value={serviceMode}/>
           <input type="hidden" name="customerId" value={customerId}/>
@@ -409,6 +420,7 @@ export function PosClient({
                       <strong>{money.format(line.unitPrice*line.quantity)}</strong>
                     </div>
                     <span className="muted">{line.serviceMode==="DINE_IN"?"Aquí · sin empaque":"Para llevar · con empaque"}</span>
+                    {line.extrasLabel&&<p className="muted">{line.extrasLabel}</p>}
                     {line.note&&<p className="muted">{line.note}</p>}
                   </div>
                 </div>
@@ -433,7 +445,7 @@ export function PosClient({
                     <strong>
                       {index + 1}. {line.item.name}
                     </strong>
-                    <strong>{money.format(line.item.price)}</strong>
+                    <strong>{money.format(unitPrice(line))}</strong>
                   </div>
 
                   <label style={{display:"block",marginTop:8}}>
@@ -445,6 +457,18 @@ export function PosClient({
                       <option value="TAKEAWAY">Para llevar · con vaso y tapa</option>
                     </select>
                   </label>
+                  {line.item.category!=="ALIMENTOS"&&<div className="row" style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginTop:10}}>
+                    <span>Espresso extra · +$10.00 c/u</span>
+                    <div style={{display:"flex",alignItems:"center",gap:10}}>
+                      <button type="button" disabled={line.espressoShots===0}
+                        onClick={()=>setEspressoShots(line.key,line.espressoShots-1)}
+                        aria-label={"Quitar espresso extra de "+line.item.name}>−</button>
+                      <strong aria-live="polite">{line.espressoShots}</strong>
+                      <button type="button" disabled={line.espressoShots>=2}
+                        onClick={()=>setEspressoShots(line.key,line.espressoShots+1)}
+                        aria-label={"Añadir espresso extra a "+line.item.name}>+</button>
+                    </div>
+                  </div>}
                   <input
                     className="pos-line-note"
                     value={line.note}
@@ -549,6 +573,7 @@ export function PosClient({
                 quantity: 1,
                 note: line.note.trim() || null,
                 serviceMode:line.serviceMode,
+                extras:line.espressoShots?[{id:"ESPRESSO_SHOT",quantity:line.espressoShots}]:[],
               })),
             )}
           />
