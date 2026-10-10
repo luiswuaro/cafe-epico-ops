@@ -44,7 +44,7 @@ const monthDays = (period: string) => {
   return new Date(y,m,0).getDate();
 };
 type Mode = "DINE_IN"|"TAKEAWAY"|"THERMOS";
-type Promo = "NONE"|"THERMOS_10"|"STAFF_10"|"STAFF_FREE";
+type Promo = "NONE"|"THERMOS_5"|"STAFF_10"|"STAFF_FREE";
 function verdict(cost:{known:number;unpriced:string[]}) {
   return cost.unpriced.length===0 ? "COGS cubierto" : "Sin precio: "+cost.unpriced.join(", ");
 }
@@ -151,19 +151,20 @@ export function FinancialWorkbench({data}:{data:Data}){
 
   const chosen=data.menu.find(x=>x.id===productId);
   const canThermos=service==="THERMOS" && chosen?.category!=="ALIMENTOS";
-  const actualPromo:Promo = promo==="THERMOS_10" && !canThermos ? "NONE"
+  const actualPromo:Promo = promo==="THERMOS_5" && !canThermos ? "NONE"
     : promo==="STAFF_FREE" ? "STAFF_FREE" : promo==="STAFF_10" && canThermos ? "NONE" : promo;
   const modeCost=chosen?(service==="DINE_IN"?chosen.dineIn:
     service==="THERMOS"?chosen.thermos:chosen.takeaway):null;
   const baseCost=chosen?(service==="DINE_IN"?chosen.dineIn:chosen.takeaway):null;
-  const discount=chosen&&(actualPromo==="THERMOS_10"||actualPromo==="STAFF_10")?round(chosen.price*.1)
-    : actualPromo==="STAFF_FREE"&&chosen?chosen.price:0;
+  const discount=chosen&&actualPromo==="THERMOS_5"?5
+    :chosen&&actualPromo==="STAFF_10"?round(chosen.price*.1)
+    :actualPromo==="STAFF_FREE"&&chosen?chosen.price:0;
   const finalPrice=chosen?round(chosen.price-discount):0;
   const baseMargin=chosen&&baseCost
     ?round(estimateTaxesOnGrossSales(chosen.price).afterTaxes-baseCost.known):0;
   const effectiveMargin=modeCost
     ?round(estimateTaxesOnGrossSales(finalPrice).afterTaxes-modeCost.known):0;
-  const discountBlocked=promo==="THERMOS_10"&&!canThermos ||
+  const discountBlocked=promo==="THERMOS_5"&&!canThermos ||
     promo==="STAFF_10"&&canThermos;
   const desc=discountBlocked
     ?"No aplicable: descuentos por termo y de colaboradora no se acumulan."
@@ -171,8 +172,8 @@ export function FinancialWorkbench({data}:{data:Data}){
       ?"Bebida de cortesía incluida en la prestación diaria: ingreso $0, el insumo sí es costo de personal. Una cortesía por turno requiere control nominal."
       : actualPromo==="STAFF_10"
         ?"Simulación para bebidas adicionales de Azucena, posteriores a la cortesía incluida. Requiere identificación y registro en POS."
-        : actualPromo==="THERMOS_10"
-          ?"Termo propio para llevar: 10% de descuento; receta sin vaso, tapa, manga ni popote desechable."
+        : actualPromo==="THERMOS_5"
+          ?"Termo propio para llevar: $5 de descuento por bebida; receta sin vaso, tapa, manga ni popote desechable."
           :"Sin promoción.";
 
   const products=useMemo(()=>{
@@ -326,14 +327,14 @@ export function FinancialWorkbench({data}:{data:Data}){
         <label>Producto <select value={productId} onChange={e=>setProductId(e.target.value)}>
           {data.menu.map(x=><option key={x.id} value={x.id}>{x.name} · {money.format(x.price)}</option>)}</select></label>
         <label>Presentación
-          <select value={service} onChange={e=>{setService(e.target.value as Mode);setPromo("NONE");}}>
+          <select value={service} onChange={e=>{const next=e.target.value as Mode;setService(next);setPromo(next==="THERMOS"?"THERMOS_5":"NONE");}}>
             <option value="DINE_IN">Consumo aquí</option><option value="TAKEAWAY">Para llevar / vaso desechable</option>
             <option value="THERMOS">Para llevar / termo propio</option>
           </select></label>
         <label>Regla
           <select value={promo} onChange={e=>setPromo(e.target.value as Promo)}>
             <option value="NONE">Precio normal</option>
-            <option value="THERMOS_10">10% termo propio</option>
+            <option value="THERMOS_5">$5 termo propio</option>
             <option value="STAFF_10">10% Azucena · bebida adicional</option>
             <option value="STAFF_FREE">Cortesía de Azucena · primera bebida</option>
           </select>
@@ -348,7 +349,7 @@ export function FinancialWorkbench({data}:{data:Data}){
           <small className="muted">{verdict(modeCost)} · sin fijos ni comisión; IVA 16%, ISR 2%</small></article>
       </div>}
       {chosen&&modeCost&&<p className="muted">Costo conocido receta: {money.format(modeCost.known)} · empaque: {money.format(modeCost.packaging)} · IVA estimado: {money.format(estimateTaxesOnGrossSales(finalPrice).vat)} · ISR estimado: {money.format(estimateTaxesOnGrossSales(finalPrice).isr)} · variación de contribución vs precio normal de esa presentación: {money.format(effectiveMargin-baseMargin)}. Para termo el ahorro está condicionado a que las piezas descartadas tengan precio cargado.</p>}
-      <p className="status-warn">Reglas a instrumentar al cobrar: autorización por rol, validación de termo, límite de 1 cortesía diaria, elegibilidad de Azucena, descuento por línea (no por ticket), bloqueo de acumulaciones y auditoría. El primer consumo gratuito debe registrarse para descontar ingredientes aunque no genere venta.</p>
+      <p className="status-warn">Reglas: el descuento fijo de $5 por termo propio se aplica por bebida en POS, sin consumo de empaque; las cortesías y descuentos de personal siguen sujetos a instrumentación y autorización. El primer consumo gratuito debe registrarse para descontar ingredientes aunque no genere venta.</p>
     </section>
   </div>;
 }
