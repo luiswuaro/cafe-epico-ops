@@ -569,7 +569,7 @@ export async function payShadowCommand(formData: FormData) {
   if (!order) throw new Error("Comanda no encontrada");
   if(order.mode!=="SHADOW")throw new Error("Usa Cobrar LIVE para esta comanda.");
   if (!["SENT", "PREPARING", "READY"].includes(order.status)) {
-    redirect("/pos?saved=" + order.id);
+    redirect("/pos/receipt/" + order.id);
   }
 
   const [existingSplit] = await db
@@ -635,7 +635,7 @@ export async function payShadowCommand(formData: FormData) {
     redirect("/pos/orders?error="+encodeURIComponent(
       "El pago simulado no se confirmó. La comanda conserva su estado; revisa antes de reintentar."));
   }
-  redirect("/pos?saved=" + order.id);
+  redirect("/pos/receipt/" + order.id);
 }
 
 export async function createPosCustomer(formData: FormData) {
