@@ -1,6 +1,7 @@
 # Paquete operativo POS: beneficios y canjes — SOLO PREVIEW
 
 **Estado**: primer bloque del PR #74. El calculador no cobra ni escribe datos.
+**Regla confirmada**: 1 punto acumulado vale $1.00 MXN cuando se canjea (10/oct/2026). Tasa no editable por cajeros.
 **Integración**: preparado a partir del PR #73. El presupuesto compartido del PR #72
 se integrará tras resolver diferencias en `financial-workbench.tsx` y `globals.css`.
 
@@ -11,15 +12,15 @@ se integrará tras resolver diferencias en `financial-workbench.tsx` y `globals.
 | Bebida con termo | -5 MXN por unidad y elimina empaques de receta | Validar bebida+takeaway; receta correcta y snapshot por línea |
 | Cortesía personal | Seleccionar una bebida y beneficiario (empleado) | Una bebida de precio base por turno; reservar beneficio dentro de transacción; cobrar extras; inventario real |
 | 10% personal | Elegir bebida adicional | Identificar beneficiario; calcular 10% del precio base con permisos/condiciones aprobadas |
-| Puntos por bebida | Canjear saldo por una línea | Convertir a MXN con tasa aprobada y usar puntos reales solo una vez |
-| Puntos por cuenta | Canjear hasta cubrir saldo | Pago mixto efectivo/tarjeta/transferencia + puntos; sin saldos negativos |
+| Puntos por bebida | Canjear saldo por una línea, 1 punto = 1 MXN | Usar puntos reales solo una vez y reflejar el canje en esa línea |
+| Puntos por cuenta | Canjear hasta cubrir saldo, 1 punto = 1 MXN | Pago mixto efectivo/tarjeta/transferencia + puntos; sin saldos negativos |
 | Descuento manual | Importe fijo o % sobre línea/cuenta | Motivo obligatorio; autorizar rol propietario; auditar autorizador distinto del cajero |
 | Cuenta dividida | Canje/beneficio exclusivo de la fracción pagada | No descontar dos veces ni aplicar más que saldo de la fracción |
 | Cancelación | Vista reversión | Revertir EARN y REDEEM; controlar devoluciones externas y saldo reutilizado |
 
 ## Pendientes de aprobación del propietario
 
-- [ ] Valor en MXN de un punto; no usar tasa predeterminada.
+- [x] Valor de canje autorizado por propietario: **1 punto = $1 MXN**, conversión fija en dominio y pantalla (10/10/2026).
 - [ ] Qué compras acreditan el 5% cuando se usan puntos o descuentos.
 - [ ] Si los puntos y el descuento por termo pueden combinarse.
 - [ ] Definir si cortesía de personal cubre extras y si puede aplicarse a termo.
