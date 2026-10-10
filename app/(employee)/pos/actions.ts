@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getPosCatalog, type PosServiceMode } from "@/src/application/pos/catalog";
 import {priceExtras} from "@/src/application/pos/extras";
+import {OWN_CONTAINER_DISCOUNT_MXN,canUseOwnContainer,ownContainerUnitPrice,preparedOwnContainerComponents} from "@/src/domain/pos/own-container";
 import {getPosExtraCatalog} from "@/src/application/pos/extra-catalog";
 import {dailyTakeawayTicketLabel,effectiveOrderServiceMode,validateTicketLabel} from "@/src/application/pos/ticket-names";
 import { cancelLiveOrder } from "@/src/application/pos/live-cancellation";
@@ -35,6 +36,7 @@ const cartSchema = z
       quantity: z.number().int().min(1).max(20),
       note: z.string().trim().max(180).nullable().optional(),
       serviceMode: z.enum(["DINE_IN","TAKEAWAY"]).optional(),
+      customerContainer:z.boolean().optional(),
       extras: z.array(z.object({id:z.string().min(1).max(90),quantity:z.number().int().min(1).max(2)})).max(1).optional(),
     }),
   )
@@ -94,9 +96,14 @@ async function buildOrderInput(
     if (!item) throw new Error("Producto no disponible en el catálogo POS");
 
     const extras=priceExtras(line.extras,item,extrasCatalog);
-    const unitPrice=Number((item.price+extras.unitPrice).toFixed(2));
-    const lineTotal = Number((unitPrice * line.quantity).toFixed(2));
     const lineMode = line.serviceMode ?? serviceMode;
+    const customerContainer=line.customerContainer===true;
+    if(customerContainer&&!canUseOwnContainer(item,lineMode))
+      throw new Error("Termo propio sólo aplica a bebidas para llevar.");
+    const unitPrice=ownContainerUnitPrice(item.price,extras.unitPrice,customerContainer);
+    if(!Number.isFinite(unitPrice)||unitPrice<=0)
+      throw new Error("Precio no válido para termo propio.");
+    const lineTotal = Number((unitPrice * line.quantity).toFixed(2));
     const serviceRecipe = item.serviceRecipes[lineMode as PosServiceMode];
 
     return {
@@ -109,9 +116,16 @@ async function buildOrderInput(
       expectedConsumption: {
         mode,
         serviceMode: lineMode,extras:extras.extras,
+        customerContainer,
+        discount:customerContainer?{
+          code:"OWN_THERMOS",amountPerUnit:OWN_CONTAINER_DISCOUNT_MXN,
+          total:Number((OWN_CONTAINER_DISCOUNT_MXN*line.quantity).toFixed(2)),
+        }:null,
         sourceRecipeExternalId: serviceRecipe.externalId,
         sourceCategory: serviceRecipe.sourceCategory,
-        components: [...serviceRecipe.components,...extras.components].map((component) => ({
+        components: preparedOwnContainerComponents(
+          [...serviceRecipe.components,...extras.components],customerContainer,
+        ).map((component) => ({
           variantExternalId: component.variantExternalId,
           itemExternalId: component.itemExternalId,
           name: component.name,
