@@ -19,6 +19,7 @@ export async function submitLiveSale(_previous:{error:string|null},formData:Form
   await assertEmployeePermission(employee.id,"pos.sell",employee.homeStoreId);
 
   let savedOrderId:string;
+  let newlyPaid=false;
   try {
   const parsed=z.object({
     clientOrderId:z.string().uuid(),
@@ -58,9 +59,10 @@ export async function submitLiveSale(_previous:{error:string|null},formData:Form
     allowStockShortage:parsed.allowStockShortage,
     });
   savedOrderId=result.id;
+  newlyPaid=!result.alreadyRecorded;
   }catch(error){
     const message=error instanceof Error?error.message:"No se pudo cobrar. Revisa caja, receta e inventario.";
     return {error:message.slice(0,350)};
   }
-  redirect("/pos/receipt/"+savedOrderId);
+  redirect("/pos/receipt/"+savedOrderId+(newlyPaid?"?autoKitchen=paid":""));
 }
