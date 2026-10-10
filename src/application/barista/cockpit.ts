@@ -6,19 +6,13 @@ import {
   inArray,
   isNull,
 } from "drizzle-orm";
-import { getInventoryIntelligence } from "@/src/application/loyverse/inventory-intelligence";
+import { getOpsInventoryIntelligence } from "@/src/application/inventory/ops-intelligence";
 import { getPosReadiness } from "@/src/application/pos/readiness";
 import { getDb } from "@/src/infrastructure/db/client";
 import {
   espressoQualityChecks,
   inventoryBalances,
   inventoryItems,
-  loyverseInventoryMappings,
-  loyverseCategories,
-  loyverseItems,
-  loyverseReceiptLines,
-  loyverseReceipts,
-  loyverseVariants,
   operationalEvents,
   roastBarAssignments,
   roastBatches,
@@ -56,68 +50,32 @@ export async function getBaristaCockpit(employee: {
   if (!employee.homeStoreId) throw new Error("Employee has no home store");
 
   const db = getDb();
-  // Loyverse sólo alimenta las tendencias históricas. El stock vigente es OPS.
   const [inventory, readiness, opsRows] = await Promise.all([
-    getInventoryIntelligence(employee.organizationId),
+    getOpsInventoryIntelligence(employee.organizationId, employee.homeStoreId),
     getPosReadiness(employee.organizationId, employee.homeStoreId),
     db.select({
-      variantExternalId: loyverseInventoryMappings.loyverseVariantExternalId,
-      name: inventoryItems.name,
-      unit: inventoryItems.canonicalUnit,
-      factor: loyverseInventoryMappings.factorToCanonical,
-      minimumStock: inventoryItems.minimumStock,
-      quantity: inventoryBalances.theoreticalQuantity,
-    }).from(loyverseInventoryMappings)
-      .innerJoin(inventoryItems, and(
-        eq(inventoryItems.id, loyverseInventoryMappings.inventoryItemId),
-        eq(inventoryItems.organizationId, employee.organizationId),
-      ))
-      .leftJoin(inventoryBalances, and(
-        eq(inventoryBalances.organizationId, employee.organizationId),
-        eq(inventoryBalances.storeId, employee.homeStoreId),
-        eq(inventoryBalances.locationId, loyverseInventoryMappings.locationId),
-        eq(inventoryBalances.inventoryItemId, loyverseInventoryMappings.inventoryItemId),
-      ))
-      .where(and(
-        eq(loyverseInventoryMappings.organizationId, employee.organizationId),
-        eq(loyverseInventoryMappings.storeId, employee.homeStoreId),
-        eq(loyverseInventoryMappings.isActive, true),
-        eq(inventoryItems.isActive, true),
-        eq(inventoryItems.trackingType, "QUANTITY"),
-      )),
+      id:inventoryItems.id,name:inventoryItems.name,
+      unit:inventoryItems.canonicalUnit,minimumStock:inventoryItems.minimumStock,
+      quantity:inventoryBalances.theoreticalQuantity,
+    }).from(inventoryBalances)
+      .innerJoin(inventoryItems,eq(inventoryItems.id,inventoryBalances.inventoryItemId))
+      .where(and(eq(inventoryBalances.organizationId,employee.organizationId),
+        eq(inventoryBalances.storeId,employee.homeStoreId),
+        eq(inventoryItems.isActive,true),eq(inventoryItems.trackingType,"QUANTITY"))),
   ]);
-  const byVariantRows = new Map<string, typeof opsRows>();
-  for (const row of opsRows) {
-    const matches = byVariantRows.get(row.variantExternalId) ?? [];
-    matches.push(row);
-    byVariantRows.set(row.variantExternalId, matches);
-  }
-  // Una equivalencia duplicada o sin balance se atiende en auditoría de POS,
-  // no generando alertas de inventario basadas en saldos obsoletos.
-  const opsByVariant = new Map([...byVariantRows].flatMap(([id, rows]) => {
-    if (rows.length !== 1 || rows[0].quantity == null) return [];
-    const row = rows[0];
-    return [[id, {
-      variantExternalId: id,
-      name: row.name,
-      unit: row.unit,
-      quantity: Number(row.quantity),
-      factor: Number(row.factor),
-      minimumStock: row.minimumStock == null ? null : Number(row.minimumStock),
-    }] as const];
-  }));
+  const opsByVariant=new Map(opsRows.map(row=>[row.id,{
+    variantExternalId:row.id,name:row.name,unit:row.unit,quantity:Number(row.quantity),
+    factor:1,minimumStock:row.minimumStock==null?null:Number(row.minimumStock),
+  }]));
 
   const local = localParts();
   const dayStart = new Date(local.date + "T00:00:00-06:00");
-  const loyverseStoreExternalId = inventory.selectedStore?.externalId ?? "";
 
   const [
     [activeRoast],
     qcsToday,
     incidents,
     barEventsToday,
-    loyverseCategoriesToday,
-    soldRowsToday,
   ] = await Promise.all([
     db
       .select({
@@ -227,79 +185,7 @@ export async function getBaristaCockpit(employee: {
       )
       .orderBy(desc(operationalEvents.occurredAt))
       .limit(150),
-    db
-      .select({
-        externalId: loyverseCategories.externalId,
-        name: loyverseCategories.name,
-      })
-      .from(loyverseCategories)
-      .where(
-        eq(
-          loyverseCategories.organizationId,
-          employee.organizationId,
-        ),
-      ),
-    loyverseStoreExternalId
-      ? db
-          .select({
-            quantity: loyverseReceiptLines.quantity,
-            itemPayload: loyverseItems.payload,
-          })
-          .from(loyverseReceiptLines)
-          .innerJoin(
-            loyverseReceipts,
-            and(
-              eq(
-                loyverseReceipts.organizationId,
-                loyverseReceiptLines.organizationId,
-              ),
-              eq(
-                loyverseReceipts.externalId,
-                loyverseReceiptLines.receiptExternalId,
-              ),
-            ),
-          )
-          .innerJoin(
-            loyverseVariants,
-            and(
-              eq(
-                loyverseVariants.organizationId,
-                loyverseReceiptLines.organizationId,
-              ),
-              eq(
-                loyverseVariants.externalId,
-                loyverseReceiptLines.variantExternalId,
-              ),
-            ),
-          )
-          .innerJoin(
-            loyverseItems,
-            and(
-              eq(
-                loyverseItems.organizationId,
-                loyverseVariants.organizationId,
-              ),
-              eq(
-                loyverseItems.externalId,
-                loyverseVariants.loyverseItemExternalId,
-              ),
-            ),
-          )
-          .where(
-            and(
-              eq(
-                loyverseReceipts.organizationId,
-                employee.organizationId,
-              ),
-              eq(loyverseReceipts.receiptType, "SALE"),
-              eq(
-                loyverseReceipts.storeExternalId,
-                loyverseStoreExternalId,
-              ),
-              gte(loyverseReceipts.receiptDate, dayStart),
-            ),
-          )
-      : Promise.resolve([]),
+
   ]);
 
   const currentShift = local.hour < 16 ? "MORNING" : "AFTERNOON";
@@ -514,28 +400,7 @@ export async function getBaristaCockpit(employee: {
     lossByItem.set(key, current);
   }
 
-  const categoryNameById = new Map(
-    loyverseCategoriesToday.map((row) => [row.externalId, row.name]),
-  );
-  const excludedFromBeverageRate = new Set([
-    "ALIMENTOS",
-    "INSUMOS",
-    "EXTRAS",
-    "CAFE A GRANEL",
-  ]);
-  const soldUnitsToday = soldRowsToday.reduce((sum, row) => {
-    const payload = row.itemPayload as Record<string, unknown>;
-    const categoryId =
-      typeof payload.category_id === "string"
-        ? payload.category_id
-        : null;
-    const categoryName =
-      categoryId == null ? null : categoryNameById.get(categoryId) ?? null;
-    if (!categoryName || excludedFromBeverageRate.has(categoryName)) {
-      return sum;
-    }
-    return sum + Number(row.quantity ?? 0);
-  }, 0);
+  const soldUnitsToday = inventory.todaySoldUnits;
   const remakeRate =
     soldUnitsToday > 0
       ? (remakeEvents.length / soldUnitsToday) * 100
