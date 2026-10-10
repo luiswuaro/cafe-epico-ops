@@ -188,3 +188,13 @@ La ejecución de GitHub Actions prueba estructura, tipos, lint y compilación, *
 - Durante la ventana posterior a 00:29 UTC, producción `cafe-epico` registró 0 pagos/0 movimientos de inventario; QA 1 pago/1 movimiento.
 - **Hallazgo UX (no transaccional):** en PC, la pantalla mostraba el mensaje `La comanda ya fue cobrada` y debajo texto incorrecto `El ticket sigue abierto` y `Ticket no disponible`. El código del Preview se corrigió para consultar `pos_orders` scoped por organización/sucursal cuando deja de existir entre las comandas abiertas, mostrar **Pago registrado** y un enlace al recibo original en `/pos/receipt/<id>`.
 - **Pendiente:** comprobar visualmente el mensaje corregido en el siguiente Preview; pruebas con sesiones de diferentes empleados, mayor concurrencia y fallos intermedios no se validaron aquí.
+
+
+## QA-09 — PANEL MÓVIL DE CUENTA ANCLADO (PENDIENTE DE VERIFICACIÓN VISUAL)
+
+- Se añadió barra compacta inferior exclusiva de pantallas de hasta 760 px; queda **encima** de la navegación fija de Hoy/POS/Comandas, con unidades, total y botón táctil `Ver cuenta`.
+- La cuenta original se presenta en un panel inferior expandible, sin clonar formularios ni estados. El detalle y las notas se desplazan independientemente; `Guardar ticket` y `Cobrar` permanecen fijos en su pie.
+- Usa las mismas acciones del POS para cobro, creación de comanda, nueva ronda y modo espejo; botón `Cobrar` abre la pantalla de métodos ya existente.
+- Se incluyó cierre mediante ✕, pulsación fuera del panel y Escape, bloqueo temporal de scroll del documento y navegación por teclado dentro del panel.
+- Escritorio mantiene la cuenta lateral sin barra móvil.
+- **Pendiente:** probar desde móvil real (Android Chrome y, si es posible, Safari iOS), ver comportamiento del teclado con notas, guardar ticket y reabrir ronda, cambio `Aquí/Para llevar`, inventario/nota, navegación inferior, tamaños estrechos y rotación. Hasta superar esas pruebas no fusionar en producción.
