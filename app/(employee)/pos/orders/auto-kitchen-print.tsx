@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { printKitchenSlip } from "./kitchen-print-button";
-import { selectedKitchenSlip, type KitchenSlip } from "@/src/application/pos/kitchen-slip";
+import { type KitchenSlip } from "@/src/application/pos/kitchen-slip";
 import {
   AUTO_KITCHEN_DINE_IN_KEY,
   AUTO_KITCHEN_TAKEAWAY_KEY,
@@ -12,13 +12,14 @@ import {
 export type AutoKitchenEvent = "saved"|"paid";
 
 export function AutoKitchenPrint({
-  slip,event,eventId,
+  slip,event,eventId,roundId,
 }:{
   slip:KitchenSlip;
   event:AutoKitchenEvent;
   // Identificador de operación real: orden + ronda para guardado,
   // orden + pago o ID del split para cobro. Nunca un timestamp de página.
   eventId:string;
+  roundId?:string;
 }){
   const handled=useRef<string|null>(null);
   const [message,setMessage]=useState<string|null>(null);
@@ -36,9 +37,10 @@ export function AutoKitchenPrint({
 
     // Filtrar únicamente la última ronda para mesas; después seleccionar el
     // tipo de servicio. Impide imprimir rondas previas si la última es otra.
-    const latest=event==="saved"?selectedKitchenSlip(slip,"latest"):null;
-    const eligible=(latest?.lines??slip.lines)
-      .some(line=>line.serviceMode===mode);
+    const eligible=slip.lines.some(line=>
+      line.serviceMode===mode&&
+      (event!=="saved"||!roundId||(line.roundId||"INITIAL")===roundId)
+    );
     if(!eligible)return;
 
     // Reservar antes del I/O: un refresh, doble montaje de React o pestañas
@@ -48,7 +50,7 @@ export function AutoKitchenPrint({
     window.localStorage.setItem(attempt,new Date().toISOString());
 
     let active=true;
-    void printKitchenSlip(slip,event==="saved"?"latest":"all",mode)
+    void printKitchenSlip(slip,event==="saved"?"latest":"all",mode,roundId)
       .then(printer=>{
         if(active){setError(false);setMessage("Comanda enviada automáticamente a "+printer);}
       })
@@ -61,7 +63,7 @@ export function AutoKitchenPrint({
         }
       });
     return ()=>{active=false;};
-  },[event,eventId,slip]);
+  },[event,eventId,roundId,slip]);
 
   return message?<div role={error?"alert":"status"}
     className={"card no-print "+(error?"status-warn":"status-ok")}
