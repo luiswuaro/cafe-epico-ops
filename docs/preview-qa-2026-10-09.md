@@ -145,3 +145,14 @@ La ejecución de GitHub Actions prueba estructura, tipos, lint y compilación, *
 - `audit_events` contiene `POS_ORDER_SPLIT_SAVED` y dos `POS_LIVE_SPLIT_PAID`, además de la incorporación de la ronda. Sin pagos repetidos en esta operación.
 - Organización de producción `cafe-epico` conserva 19 órdenes, QA 7; comparación global de referencias pagos→órdenes con organización incorrecta: 0.
 - **Aún no validado:** impresión física de ambos tickets, cobro realmente simultáneo desde dispositivos distintos y casos de stock insuficiente. No se han alterado registros productivos por esta prueba.
+
+
+## QA-07 — INVENTARIO INSUFICIENTE: preparado para intentar cobro (2026-10-10 UTC)
+
+- Comanda QA `SH-261009181706-7E62`, orden `06a97045-4f45-44bf-9300-879bd7ce6652`, mesa `QA-07 FALTANTE`, `LIVE/SENT`, 1 Americano QA caliente, $40, `DINE_IN`.
+- Estado antes del intento: **0 pagos**. Requiere **18.900 g** de café según receta.
+- Inventario `QA_CAFE_G` anterior **5,848.800 g**. Se aplicó ajuste temporal únicamente a organización `cafe-epico-qa`: **10.000 g**, movimiento `MANUAL_ADJUSTMENT -5,838.800 g`, proveedor `OPS_QA_TEST`, idempotencia `QA07-LOWSTOCK-20261009`, referencia a la comanda.
+- Auditoría `QA_INVENTORY_SHORTAGE_SIMULATED`: antes 5,848.800 g, después 10.000 g, déficit teórico **8.900 g**, movimiento pendiente de restablecimiento **+5,838.800 g**.
+- Se verificó saldo actual 10.000 g, comanda `SENT`, 0 pagos; en producción no hay movimientos de proveedor `OPS_QA_TEST`.
+- **Próximo paso:** el operador intenta pagar **sin marcar autorización de diferencia de inventario**. Debe mostrar faltante 8.9 g, comanda sin pago, caja e inventario intactos; no repetir si muestra estado inesperado.
+- **PENDIENTE OBLIGATORIO:** una vez auditado el intento fallido, restablecer la existencia QA con un movimiento compensatorio positivo y guardar evidencia en auditoría. No restablecer mediante borrado del evento.
