@@ -43,8 +43,8 @@ export function priceExtras(raw:ExtraRequest[]|undefined,product:ExtraProduct,
     if(!source)throw new Error("No se encontró la receta de Espresso para el extra.");
     const recipe=source.serviceRecipes.DINE_IN.components.filter(c=>
       !/VASO|TAPA|MANGA|FAJILLA|POPOTE|PAJILLA|SERVILLETA|BOLSA|AGITADOR|PORTAVASO/i.test(c.name));
-    if(recipe.length===0||recipe.some(c=>!c.variantExternalId||!(c.quantity>0)))
-      throw new Error("La receta de espresso extra necesita ingredientes e inventario vinculados.");
+    if(recipe.length===0||!recipe.some(c=>Boolean(c.variantExternalId))||recipe.some(c=>!(c.quantity>0)))
+      throw new Error("La receta de espresso extra necesita ingredientes y al menos un insumo con inventario vinculado.");
     const copied=recipe.map(c=>({...c,quantity:Number((c.quantity*request.quantity).toFixed(6))}));
     extras.push({id:option.id,label:option.label,quantity:request.quantity,
       unitPrice:option.price,components:copied});
