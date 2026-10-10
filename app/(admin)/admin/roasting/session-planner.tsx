@@ -1,12 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type Lot={id:string;name:string;greenStockG:number|null;greenStockSource:string;targetUse:string};
 
 function fmt(v:number,d=0){return new Intl.NumberFormat("es-MX",{maximumFractionDigits:d}).format(v);}
 const MIN_CHARGE=100;
 const MAX_CHARGE=500;
+const PLAN_STORAGE_KEY="cafe-epico-roasting-session-planner-v1";
 
 export function RoastingSessionPlanner({lots}:{lots:Lot[]}){
   const [lotId,setLotId]=useState(lots[0]?.id??"");
@@ -15,6 +16,32 @@ export function RoastingSessionPlanner({lots}:{lots:Lot[]}){
   const [loss,setLoss]=useState("16");
   const [destination,setDestination]=useState("ESPRESSO");
   const [realWeights,setRealWeights]=useState<Record<number,string>>({});
+  const [hydrated,setHydrated]=useState(false);
+  useEffect(()=>{
+    try{
+      const raw=window.localStorage.getItem(PLAN_STORAGE_KEY);
+      if(raw){
+        const saved=JSON.parse(raw) as {
+          lotId?:string;target?:string;charge?:string;loss?:string;
+          destination?:string;realWeights?:Record<number,string>;
+        };
+        if(saved.lotId&&lots.some(l=>l.id===saved.lotId))setLotId(saved.lotId);
+        if(saved.target)setTarget(saved.target);
+        if(saved.charge)setCharge(saved.charge);
+        if(saved.loss)setLoss(saved.loss);
+        if(saved.destination)setDestination(saved.destination);
+        if(saved.realWeights&&typeof saved.realWeights==="object")setRealWeights(saved.realWeights);
+      }
+    }catch{/* Almacenamiento no disponible: mantener plan por defecto. */}
+    setHydrated(true);
+  },[lots]);
+  useEffect(()=>{
+    if(!hydrated)return;
+    try{
+      window.localStorage.setItem(PLAN_STORAGE_KEY,
+        JSON.stringify({lotId,target,charge,loss,destination,realWeights}));
+    }catch{/* Puede seguir usándose sin persistencia. */}
+  },[hydrated,lotId,target,charge,loss,destination,realWeights]);
   const selected=lots.find(l=>l.id===lotId);
   const grams=Number(target),batch=Number(charge),lossPct=Number(loss);
   const valid=Number.isFinite(grams)&&grams>0&&grams<=25000&&
@@ -107,7 +134,7 @@ export function RoastingSessionPlanner({lots}:{lots:Lot[]}){
         <td>{b.actualInvalid?"Revisar peso":b.loss==null?"—":fmt(b.loss,2)+"%"}</td>
       </tr>)}</tbody>
     </table></div>}
-    <p className="muted">Plan y pesos anotados aquí son una simulación local: no se guardan ni descuentan existencias. La confirmación del JSON registra el batch y el saldo verde de HiBean aprobado en OPS. La contabilización del consumo de verde y la entrada de tostado en el inventario interno es un paso separado, y no se ejecuta desde este planificador. Guarda el archivo JSON de cada batch en HiBean. No cierres esta pantalla antes de copiar tus pesos medidos.</p>
+    <p className="muted">{hydrated?"Sesión guardada automáticamente en este navegador.":"Preparando sesión local…"} Plan y pesos anotados aquí son una simulación local: no se guardan ni descuentan existencias. La confirmación del JSON registra el batch y el saldo verde de HiBean aprobado en OPS. La contabilización del consumo de verde y la entrada de tostado en el inventario interno es un paso separado, y no se ejecuta desde este planificador. Guarda el archivo JSON de cada batch en HiBean. Puedes volver después de importar un JSON; los pesos permanecerán guardados en este navegador. Copia también tu resumen como respaldo.</p>
     <button type="button" className="button" onClick={()=>{
       const summary=[
         "PLAN TUESTE OPS (no confirmado)",
