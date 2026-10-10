@@ -14,7 +14,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
-    "validate:structure": "node scripts/validate-structure.mjs && node scripts/validate-contract-pdf.mjs && node scripts/validate-own-container.mjs"
+    "validate:structure": "node scripts/validate-structure.mjs && node scripts/validate-contract-pdf.mjs && node scripts/validate-own-container.mjs && node scripts/validate-benefits-preview.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "0.12.7",
