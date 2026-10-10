@@ -43,6 +43,28 @@ en la pantalla de cobro habitual, sin reconstruir el ticket:
   sin navegación ni pérdida del carrito.
 - Al registrar desde POS se conserva el cliente elegido al entrar a cobrar.
 
+## Regla adicional confirmada: cliente registrado + consumo de personal (10/oct/2026)
+
+- **No excluir al cliente** al marcar una línea como personal. El cliente
+  puede permanecer registrado como titular/identificador del pedido.
+- Se aplica la política por renglón: líneas de cliente sí tienen elegibilidad
+  de puntos, mientras las líneas de personal no se pueden pagar con
+  puntos del cliente ni generan puntos para él.
+- Si TODAS las líneas se asignan al personal, mantener visible el nombre del
+  cliente registrado, pero indicar expresamente que los productos del
+  cliente suman $0, su canje aplicable es $0 y no genera puntos nuevos.
+- Azucena: bebida incluida gratuita **solo para consumir aquí**. Si se marcó
+  esa bebida como `TAKEAWAY`, la cotización invalida la cortesía
+  y muestra cómo corregir la preparación. No alterar silenciosamente
+  la modalidad seleccionada.
+- Bebidas adicionales del personal con 10%: **pueden ser para llevar**,
+  usando el empaque normal; el descuento se calcula sobre bebida base,
+  mientras los extras conservan precio completo.
+- Pendiente de política: acumulación simultánea de descuento por termo y
+  10% del personal; el preview mantiene combinación bloqueada.
+- **Solo preview:** no habilitar hasta escritura transaccional del beneficio,
+  inventario, autorización y regla por empleado/jornada.
+
 ## Beneficios de personal por producto y por empleado (preview)
 
 Cambio de arquitectura: el menú de **Azucena en toda la cuenta** fue sustituido
