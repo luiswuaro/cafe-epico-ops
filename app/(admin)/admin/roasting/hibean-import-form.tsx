@@ -1,19 +1,11 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { useFormStatus } from "react-dom";
-import { startHiBeanRoastImport } from "./import-actions";
+ 
 import {
   MAX_HIBEAN_JSON_BYTES,
   MAX_HIBEAN_JSON_MB,
 } from "@/src/domain/roasting/upload-constraints";
-
-function UploadButton({ ready }: { ready: boolean }) {
-  const { pending } = useFormStatus();
-  return <button type="submit" disabled={!ready || pending}>
-    {pending ? "Leyendo JSON… espera sin cerrar" : "Leer JSON y revisar antes de registrar"}
-  </button>;
-}
 
 /**
  * El cliente evita que archivos excesivos o JSON inválidos provoquen
@@ -24,6 +16,7 @@ export function HiBeanImportForm() {
   const [message, setMessage] = useState("");
   const [selectedName, setSelectedName] = useState("");
   const [ready, setReady] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const version = useRef(0);
 
   async function checkFile(file: File | undefined) {
@@ -67,12 +60,17 @@ export function HiBeanImportForm() {
     }
   }
 
-  return <form action={startHiBeanRoastImport} encType="multipart/form-data"
-    className="stack">
+  return <form action="/api/roasting/hibean/upload" method="post"
+    encType="multipart/form-data" className="stack"
+    onSubmit={event=>{
+      if(!ready||submitting){event.preventDefault();return;}
+      setSubmitting(true);
+    }}>
     <label>
       JSON de HiBean
       <input name="roastFile" type="file" accept=".json,application/json"
-        required onChange={event=>void checkFile(event.target.files?.[0])} />
+        required disabled={submitting}
+        onChange={event=>void checkFile(event.target.files?.[0])} />
     </label>
     <small className="muted">
       Máximo {MAX_HIBEAN_JSON_MB} MB por archivo. OPS sólo prepara la revisión;
@@ -80,6 +78,8 @@ export function HiBeanImportForm() {
     </small>
     {selectedName&&<small className="muted">Archivo: {selectedName}</small>}
     {message&&<p role="status" className={ready?"status-ok":"status-warn"}>{message}</p>}
-    <UploadButton ready={ready}/>
+    <button type="submit" disabled={!ready||submitting}>
+      {submitting?"Procesando JSON en servidor…": "Leer JSON y revisar antes de registrar"}
+    </button>
   </form>;
 }
