@@ -7,7 +7,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getPosCatalog, type PosServiceMode } from "@/src/application/pos/catalog";
 import {priceExtras} from "@/src/application/pos/extras";
-import {OWN_CONTAINER_DISCOUNT_MXN,canUseOwnContainer,ownContainerUnitPrice,preparedOwnContainerComponents} from "@/src/domain/pos/own-container";
+import {OWN_CONTAINER_DISCOUNT_MXN,canUseOwnContainer,ownContainerUnitPrice,preparedOwnContainerComponents,ownContainerReadinessErrors} from "@/src/domain/pos/own-container";
 import {getPosExtraCatalog} from "@/src/application/pos/extra-catalog";
 import {dailyTakeawayTicketLabel,effectiveOrderServiceMode,validateTicketLabel} from "@/src/application/pos/ticket-names";
 import { cancelLiveOrder } from "@/src/application/pos/live-cancellation";
@@ -200,8 +200,11 @@ async function createShadowOrder(
     const byId=new Map(readiness.products.map(p=>[p.id,p]));
     for(const line of input.lines){
       const state=byId.get(line.item.id)?.recipes.find(r=>r.mode===line.lineMode);
-      if(!state?.ready) throw new Error("Comanda bloqueada: "+line.item.name+" — "+
-        (state?.errors.join("; ")||"receta incompleta"));
+      const errors=state?ownContainerReadinessErrors(
+        state.errors,line.expectedConsumption.customerContainer===true,
+      ):["receta incompleta"];
+      if(errors.length)throw new Error("Comanda bloqueada: "+line.item.name+" — "+
+        errors.join("; "));
     }
   }
   const rawClientOrderId = String(formData.get("clientOrderId") ?? "").trim();
