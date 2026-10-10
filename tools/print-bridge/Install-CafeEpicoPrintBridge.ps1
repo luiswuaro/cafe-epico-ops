@@ -31,10 +31,12 @@ if (Test-Path $configPath) {
   }
 }
 
-if ($Instance -eq "Barra" -and -not $PSBoundParameters.ContainsKey("PrinterName")) {
-  if ($null -ne $existingConfig -and $existingConfig.printerName) {
+# Actualizar una instalación existente NUNCA debe sustituir el nombre
+# real de la impresora por el valor predeterminado del instalador.
+if (-not $PSBoundParameters.ContainsKey("PrinterName")) {
+  if ($null -ne $existingConfig -and -not [string]::IsNullOrWhiteSpace([string]$existingConfig.printerName)) {
     $PrinterName = [string]$existingConfig.printerName
-  } else {
+  } elseif ($Instance -eq "Barra") {
     throw "Para instalar Barra, especifica -PrinterName con el nombre exacto de la segunda impresora en Windows."
   }
 }
@@ -70,6 +72,10 @@ $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances 
 $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited
 
 if (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) {
+  # Detener proceso anterior ANTES de iniciar el nuevo: de otro modo
+  # podría seguir ocupando el puerto 9137/9138 y conservar código viejo.
+  Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+  Start-Sleep -Milliseconds 700
   Unregister-ScheduledTask -TaskName $taskName -Confirm:$false
 }
 

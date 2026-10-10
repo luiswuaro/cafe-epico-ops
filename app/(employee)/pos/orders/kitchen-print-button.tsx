@@ -190,6 +190,20 @@ export async function printKitchenSlip(
   if(!/^http:\/\/(127\.0\.0\.1|localhost):\d{2,5}\/?$/.test(config.url)){
     throw new Error("El puente debe usar localhost. Revisa configuración.");
   }
+  // Evitar tiras de símbolos cuando un firmware térmico deja de interpretar
+  // una imagen raster grande. Las versiones anteriores del puente mandaban
+  // todo el bitmap en un único comando GS v 0.
+  const statusResponse=await fetch(config.url.replace(/\/$/,"")+"/status",{
+    headers:{"X-Cafe-Epico-Token":config.token},
+    cache:"no-store",
+  });
+  if(!statusResponse.ok)throw new Error("No se pudo verificar el puente ESC/POS.");
+  const bridge=await statusResponse.json() as {
+    ok?:boolean;version?:string;rasterBands?:boolean;
+  };
+  if(!bridge.ok||bridge.rasterBands!==true){
+    throw new Error("Actualiza el puente de impresión a la versión 1.3.0 antes de imprimir comandas. Evitamos enviar bytes gráficos que la impresora podría imprimir como símbolos.");
+  }
   const raster=await buildKitchenRaster(slip,selection,serviceFilter,roundId);
   const response=await fetch(config.url.replace(/\/$/,"")+"/print",{
     method:"POST",
