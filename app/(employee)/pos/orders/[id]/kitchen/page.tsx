@@ -68,7 +68,10 @@ export default async function KitchenSlipPage({params,searchParams}:{
           return <div key={row.id} className="kitchen-slip-item">
             {showGroup&&<strong className="kitchen-slip-category">{currentGroup}</strong>}
             <div className="kitchen-slip-name">{row.quantity}× {row.name}</div>
-            {row.serviceMode==="TAKEAWAY"&&<div className="kitchen-slip-note">PARA LLEVAR</div>}
+            <div className="kitchen-slip-note">
+              {row.serviceMode==="TAKEAWAY"?"PARA LLEVAR"
+                :row.serviceMode==="DINE_IN"?"AQUÍ":"SERVICIO SIN DEFINIR"}
+            </div>
             {row.note&&<div className="kitchen-slip-note">NOTA: {row.note}</div>}
           </div>;
         })}

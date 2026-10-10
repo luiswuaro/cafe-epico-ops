@@ -59,7 +59,7 @@ function encodeBase64(bytes:Uint8Array) {
   return btoa(binary);
 }
 
-async function buildKitchenRaster(slip:KitchenSlip,selection:"latest"|"all",serviceFilter?:"DINE_IN"|"TAKEAWAY",roundId?:string){
+async function buildKitchenRaster(slip:KitchenSlip,selection:"latest"|"all",serviceFilter?:"DINE_IN"|"TAKEAWAY"|"BOTH",roundId?:string){
   await document.fonts.ready;
   const selected=roundId
     ?{
@@ -69,7 +69,11 @@ async function buildKitchenRaster(slip:KitchenSlip,selection:"latest"|"all",serv
     }
     :selectedKitchenSlip(slip,selection);
   const prepared=serviceFilter
-    ?{...selected,lines:selected.lines.filter(line=>line.serviceMode===serviceFilter)}
+    ?{...selected,lines:selected.lines.filter(line=>
+      serviceFilter==="BOTH"
+        ?line.serviceMode==="DINE_IN"||line.serviceMode==="TAKEAWAY"
+        :line.serviceMode===serviceFilter
+    )}
     :selected;
   if(!prepared.lines.length)throw new Error("La comanda no tiene productos para imprimir");
 
@@ -132,8 +136,11 @@ async function buildKitchenRaster(slip:KitchenSlip,selection:"latest"|"all",serv
       draw(category,"900 19px Arial, Helvetica, sans-serif",24);
     }
     draw(item.quantity+"× "+item.name,"900 25px Arial, Helvetica, sans-serif",29);
-    if(item.serviceMode==="TAKEAWAY")
-      draw("PARA LLEVAR","800 19px Arial, Helvetica, sans-serif",23,"left",12);
+    // El destino de cada bebida siempre va explícito, incluso en una
+    // comanda mixta con productos iguales y distintas modalidades.
+    const destination=item.serviceMode==="TAKEAWAY"?"PARA LLEVAR"
+      :item.serviceMode==="DINE_IN"?"AQUÍ":"SERVICIO SIN DEFINIR";
+    draw(destination,"900 19px Arial, Helvetica, sans-serif",23,"left",12);
     if(item.note)
       draw("NOTA: "+item.note,"900 20px Arial, Helvetica, sans-serif",24,"left",12);
     y+=4;
@@ -168,7 +175,7 @@ async function buildKitchenRaster(slip:KitchenSlip,selection:"latest"|"all",serv
 export async function printKitchenSlip(
   slip:KitchenSlip,
   selection:"latest"|"all"="latest",
-  serviceFilter?:"DINE_IN"|"TAKEAWAY",
+  serviceFilter?:"DINE_IN"|"TAKEAWAY"|"BOTH",
   roundId?:string,
 ):Promise<string>{
   const separate=window.localStorage.getItem(ROUTE_KEY)==="separate";
