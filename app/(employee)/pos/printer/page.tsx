@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { PrinterBridgeSetup, KitchenPrinterSetup } from "./printer-client";
+import { PrinterBridgeSetup, KitchenPrinterSetup, AutoKitchenPrintSettings } from "./printer-client";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
 import { assertEmployeePermission } from "@/src/infrastructure/auth/permissions";
 
@@ -67,6 +67,8 @@ export default async function PosPrinterPage() {
         <h2>Destino de las comandas de barra</h2>
         <p className="muted">Por defecto, las comandas salen en la misma POS-58. Si más adelante agregas una segunda impresora, conéctala a esta computadora e instala otro puente con puerto y token independientes.</p>
         <KitchenPrinterSetup />
+        <hr/>
+        <AutoKitchenPrintSettings />
         <details>
           <summary>Instalar segunda impresora en Windows (opcional)</summary>
           <p>Desde la raíz del proyecto, sustituye el nombre por el que aparece exactamente en «Impresoras y escáneres» de Windows:</p>
