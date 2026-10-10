@@ -107,7 +107,7 @@ export function RoastingSessionPlanner({lots}:{lots:Lot[]}){
         <td>{b.actualInvalid?"Revisar peso":b.loss==null?"—":fmt(b.loss,2)+"%"}</td>
       </tr>)}</tbody>
     </table></div>}
-    <p className="muted">Plan y pesos anotados aquí son una simulación local: no se guardan ni descuentan existencias. El registro oficial de cada batch y la actualización del inventario se realizan al confirmar su JSON de HiBean en la sección siguiente. Guarda el archivo JSON de cada batch en HiBean. No cierres esta pantalla antes de copiar tus pesos medidos.</p>
+    <p className="muted">Plan y pesos anotados aquí son una simulación local: no se guardan ni descuentan existencias. La confirmación del JSON registra el batch y el saldo verde de HiBean aprobado en OPS. La contabilización del consumo de verde y la entrada de tostado en el inventario interno es un paso separado, y no se ejecuta desde este planificador. Guarda el archivo JSON de cada batch en HiBean. No cierres esta pantalla antes de copiar tus pesos medidos.</p>
     <button type="button" className="button" onClick={()=>{
       const summary=[
         "PLAN TUESTE OPS (no confirmado)",
