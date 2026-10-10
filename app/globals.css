@@ -2650,3 +2650,26 @@ details[open]>.ops-chevron,details[open]>summary>.ops-chevron{transform:rotate(1
   .ops-contract-report{padding:.8rem}
 }
 @media print{.ops-contract-setup,.ops-contract-filter{display:none}}
+
+
+/* POS · termo propio: one action per takeaway beverage, visible in light/dark. */
+.pos-own-thermos-control{
+  display:flex;align-items:center;gap:.75rem;
+  margin-top:.65rem;padding:.7rem .8rem;min-height:65px;cursor:pointer;
+  background:var(--epic-soft);color:var(--epic-fg);
+  border:1px solid var(--epic-border);border-radius:13px;
+}
+.pos-own-thermos-control:has(input:checked){
+  background:var(--epic-success-bg);
+  border-color:var(--epic-success-ink);
+}
+.pos-own-thermos-control input[type="checkbox"]{
+  flex:none;width:22px;height:22px;min-height:22px;margin:0;
+  accent-color:var(--epic-accent);cursor:pointer;
+}
+.pos-own-thermos-control span{display:grid;min-width:0;gap:.18rem}
+.pos-own-thermos-control strong{font-size:.9rem;color:var(--epic-fg);font-weight:850}
+.pos-own-thermos-control small{font-size:.77rem;color:var(--epic-secondary);line-height:1.4}
+@media(max-width:760px){
+  .pos-own-thermos-control{min-height:66px;padding:.65rem}
+}
