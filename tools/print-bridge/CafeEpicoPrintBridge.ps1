@@ -120,13 +120,24 @@ function Add-RasterImage($list, $logo) {
   $align = Align-Code ([string]$logo.align)
   Add-Bytes $list ([byte[]](27,97,[byte]$align))
 
+  # POS-58 / ESC-POS: un bloque GS v 0 muy alto puede exceder el buffer
+  # gráfico del firmware y la cola restante termina imprimiéndose como
+  # caracteres aleatorios. Enviar bandas de 32 filas (max 1,536 bytes
+  # por banda a 384px) dentro del mismo trabajo RAW, sin feed intermedio.
+  $bandRows = 32
   $xL = [byte]($widthBytes -band 255)
   $xH = [byte](($widthBytes -shr 8) -band 255)
-  $yL = [byte]($height -band 255)
-  $yH = [byte](($height -shr 8) -band 255)
-
-  Add-Bytes $list ([byte[]](29,118,48,0,$xL,$xH,$yL,$yH))
-  Add-Bytes $list $data
+  for ($row = 0; $row -lt $height; $row += $bandRows) {
+    $rows = [int][Math]::Min($bandRows, $height - $row)
+    $bandLength = $rows * $widthBytes
+    $band = New-Object 'System.Byte[]' $bandLength
+    [Array]::Copy($data, $row * $widthBytes, $band, 0, $bandLength)
+    $yL = [byte]($rows -band 255)
+    $yH = [byte](($rows -shr 8) -band 255)
+    Add-Bytes $list ([byte[]](29,118,48,0,$xL,$xH,$yL,$yH))
+    Add-Bytes $list $band
+  }
+  # Único avance final, nunca entre bandas, para conservar el formato compacto.
   Add-Bytes $list ([byte[]](10))
 }
 
@@ -216,7 +227,8 @@ try {
         mode = "RAW_ESC_POS"
         graphics = $true
         fullTicketRaster = $true
-        version = "1.2.0"
+        version = "1.3.0"
+        rasterBands = $true
       }
       continue
     }
