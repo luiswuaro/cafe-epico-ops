@@ -1,7 +1,6 @@
 "use client";
 
 import { useRef, useState } from "react";
- 
 import {
   MAX_HIBEAN_JSON_BYTES,
   MAX_HIBEAN_JSON_MB,
@@ -69,7 +68,7 @@ export function HiBeanImportForm() {
     <label>
       JSON de HiBean
       <input name="roastFile" type="file" accept=".json,application/json"
-        required disabled={submitting}
+        required
         onChange={event=>void checkFile(event.target.files?.[0])} />
     </label>
     <small className="muted">
