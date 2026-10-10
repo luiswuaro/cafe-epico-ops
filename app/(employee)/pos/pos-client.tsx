@@ -91,6 +91,9 @@ export function PosClient({
     kind:StaffBenefitKind;employeeId:string;
   }>>({});
   function assignLineBenefit(key:string,update:{kind?:StaffBenefitKind;employeeId?:string}){
+    // Una reasignación cambia la base elegible para redención.
+    // Reiniciar el canje evita arrastrar puntos de una línea que pasó a personal.
+    setRedeemPoints("0");
     setLineBenefits(old=>({
       ...old,[key]:{
         kind:update.kind??old[key]?.kind??"NONE",
