@@ -62,9 +62,14 @@ export default async function SplitOrderPage({
             y puede generar su propio ticket. En LIVE, cada cuenta descuenta sólo los productos asignados al pagar.
           </p>
         </div>
-        <Link href="/pos/orders" className="button">
-          Volver a comandas
-        </Link>
+        <div className="pos-result-actions">
+          <Link href={"/pos/orders/"+state.order.id+"/prebill"} className="button pos-prebill-link">
+            Precuenta completa de mesa
+          </Link>
+          <Link href="/pos/orders" className="button">
+            Volver a comandas
+          </Link>
+        </div>
       </section>
 
       {isClosed&&<section className="card" role="status">
@@ -107,6 +112,11 @@ export default async function SplitOrderPage({
                 })}
               </div>
 
+              {state.order.mode==="LIVE"&&split.status!=="PAID"&&!isClosed&&
+                <Link className="button pos-prebill-link"
+                  href={"/pos/orders/"+state.order.id+"/prebill?split="+split.id}>
+                  Imprimir precuenta · {split.label}
+                </Link>}
               {split.status === "PAID" ? (
                 <Link
                   href={
