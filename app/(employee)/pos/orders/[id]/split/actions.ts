@@ -282,7 +282,7 @@ async function payOrderSplitUnsafe(formData: FormData) {
       employeeId:employee.id,actorUserId:user.id,
       existingOrderId:order.id,existingSplitId:split.id,clientOrderId:order.clientOrderId,
       cart,serviceMode:order.serviceMode as "DINE_IN"|"TAKEAWAY",
-      paymentMethod,tenderedAmount:paymentMethod==="CASH"?(tenderedRaw?Number(tenderedRaw):Number(split.total)):null,
+      paymentMethod,tenderedAmount:paymentMethod==="CASH"?(tenderedRaw===""?null:Number(tenderedRaw)):null,
       customerId,tableLabel:order.tableLabel,note:order.note,
       allowStockShortage,
     });
