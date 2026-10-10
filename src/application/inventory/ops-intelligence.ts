@@ -47,7 +47,15 @@ export async function getOpsInventoryIntelligence(organizationId:string,storeId:
     if(hourKey(m.occurredAt)<16)x.morning+=qty;else x.afternoon+=qty;
     usage.set(m.itemId,x);
   }
-  const smartRows=balances.map(b=>{
+  // Consolidar ubicaciones dentro de la misma sucursal para evitar
+  // subestimar el inventario cuando un insumo está en barra y almacén.
+  const perItem=new Map<string,{id:string;name:string;unit:string;minimum:string|null;theoretical:number}>();
+  for(const row of balances){
+    const old=perItem.get(row.id);
+    if(old)old.theoretical+=Number(row.theoretical);
+    else perItem.set(row.id,{...row,theoretical:Number(row.theoretical)});
+  }
+  const smartRows=[...perItem.values()].map(b=>{
     const stock=Number(b.theoretical),u=usage.get(b.id)??{total:0,morning:0,afternoon:0};
     const avgDailyUsage14=sampleDays?round3(Math.max(0,u.total)/sampleDays):0;
     const morning=sampleDays?round3(Math.max(0,u.morning)/sampleDays):0;
