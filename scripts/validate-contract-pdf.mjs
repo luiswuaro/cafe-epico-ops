@@ -50,12 +50,12 @@ try{
   assert.ok(pdf.length>3000,"PDF file is unexpectedly short");
   assert.equal(pdf.subarray(0,8).toString("latin1"),"%PDF-1.4");
   const content=pdf.toString("latin1");
-  const start=content.lastIndexOf("startxref\\n");
+  const start=content.lastIndexOf("startxref\n");
   assert.ok(start>0,"Missing xref pointer");
-  const xrefOffset=Number(content.slice(start+10).split(/\\s+/)[0]);
+  const xrefOffset=Number(content.slice(start+10).split(/\s+/)[0]);
   assert.ok(Number.isSafeInteger(xrefOffset)&&xrefOffset>0);
   assert.equal(content.slice(xrefOffset,xrefOffset+4),"xref");
-  const pageCount=Number(content.match(/\\/Count (\\d+)/)?.[1]);
+  const pageCount=Number(content.match(/\/Count (\d+)/)?.[1]);
   assert.ok(pageCount>=5,"Expected summary plus four batch pages");
   const poppler=spawnSync("pdftotext",["-","-"],{input:pdf,encoding:"utf8",maxBuffer:3e6});
   if(!poppler.error){
