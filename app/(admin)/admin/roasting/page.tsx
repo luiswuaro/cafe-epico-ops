@@ -807,7 +807,7 @@ export default async function RoastingPage({
               name="loyverseUnitToG"
               type="number"
               min="0.000001"
-              step="0.001"
+              step="any"
               defaultValue={1000}
             />
           </label>
@@ -1092,7 +1092,7 @@ export default async function RoastingPage({
                     name="loyverseUnitToG"
                     type="number"
                     min="0.000001"
-                    step="0.001"
+                    step="any"
                     defaultValue={lot.loyverseUnitToG}
                   />
                 </label>
