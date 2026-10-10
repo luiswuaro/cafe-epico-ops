@@ -268,7 +268,7 @@ export default async function ReceiptPage({
           href={
             split
               ? "/pos/orders/" + id + "/split"
-              : "/pos?saved=" + id
+              : order.order.mode==="SHADOW"?"/pos/orders":"/pos?saved=" + id
           }
           className="button"
         >
@@ -279,6 +279,7 @@ export default async function ReceiptPage({
           ticket={{
             folio: order.order.folio,
             kind: "RECEIPT",
+            simulation: order.order.mode==="SHADOW",
             status: order.order.status,
             cancelReason: order.order.cancelReason,
             date: ticketDate,
@@ -391,7 +392,8 @@ export default async function ReceiptPage({
             <p>{printSettings.headerMessage}</p>
           )}
           <p className="receipt-document-type">
-            {order.order.status==="CANCELLED"?"TICKET CANCELADO":"TICKET DE VENTA · PAGADO"}
+            {order.order.mode==="SHADOW"?"PRUEBA · PAGO SIMULADO":
+              order.order.status==="CANCELLED"?"TICKET CANCELADO":"TICKET DE VENTA · PAGADO"}
           </p>
           {split && <p><strong>{split.label} · ticket separado</strong></p>}
         </header>
