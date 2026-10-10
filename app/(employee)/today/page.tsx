@@ -39,7 +39,7 @@ function expectedRange(value: number) {
 }
 
 function operationalUnit(unit: string) {
-  return unit === "u. Loyverse" || unit === "peso/volumen"
+  return unit === "peso/volumen"
     ? "unidad sin configurar"
     : unit;
 }
@@ -266,7 +266,7 @@ export default async function TodayPage({
                 String(cockpit.traffic.dayPeak.hour).padStart(2, "0") +
                 ":00 · "
               : ""}
-            basado en {cockpit.sampleDays} día(s) comparable(s).
+            basado en {cockpit.sampleDays} día(s) con cobros reales en OPS.
           </p>
         </article>
 
@@ -629,12 +629,12 @@ export default async function TodayPage({
           <div className="metric">{cockpit.lossSummary.remakeEvents}</div>
           <p>
             {cockpit.lossSummary.remakeRate == null
-              ? "Sin base de ventas sincronizada para calcular tasa."
+              ? "Sin ventas LIVE de OPS suficientes para calcular tasa."
               : cockpit.lossSummary.remakeRate.toFixed(1) +
-                "% de las bebidas vendidas sincronizadas hoy."}
+                "% de las bebidas registradas en OPS hoy."}
           </p>
           <p className="muted">
-            Base de bebidas sincronizada:{" "}
+            Base de bebidas vendidas en OPS:{" "}
             {number.format(cockpit.lossSummary.soldUnitsToday)} bebida(s) ·
             costo de insumo asociado ≈{" "}
             {money.format(cockpit.lossSummary.estimatedRemakeCost)}.
