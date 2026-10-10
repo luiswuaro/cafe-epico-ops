@@ -1316,3 +1316,17 @@ export const roastContractDeliveries = pgTable("roast_contract_deliveries", {
   notes: text("notes"),
   ...timestamps,
 },t=>[index("roast_contract_deliveries_batch_idx").on(t.batchId)]);
+
+/** Finance operating budgets, separate from bank reconciliation, taxes, or POS ledger. */
+export const financialBudgets = pgTable("financial_budgets",{
+  id:uuid("id").primaryKey().defaultRandom(),
+  organizationId:uuid("organization_id").notNull()
+    .references(()=>organizations.id,{onDelete:"cascade"}),
+  expenses:jsonb("expenses").$type<import("@/src/domain/finance/budget").FinancialExpense[]>()
+    .notNull().default([]),
+  variableRatio:numeric("variable_ratio",{precision:6,scale:2}).notNull().default("30"),
+  cardRate:numeric("card_rate",{precision:6,scale:2}).notNull().default("3.5"),
+  revision:integer("revision").notNull().default(1),
+  updatedByEmployeeId:uuid("updated_by_employee_id").references(()=>employees.id,{onDelete:"set null"}),
+  ...timestamps,
+}, t=>[uniqueIndex("financial_budgets_org_uidx").on(t.organizationId)]);
