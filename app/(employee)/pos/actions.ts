@@ -394,7 +394,7 @@ export async function createShadowSale(formData: FormData) {
     "PAID",
     paymentMethod,
   );
-  redirect("/pos?saved=" + orderId);
+  redirect("/pos/receipt/" + orderId);
 }
 
 export async function createShadowCommand(formData: FormData) {
