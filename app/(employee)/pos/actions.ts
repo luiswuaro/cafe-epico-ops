@@ -369,7 +369,7 @@ export async function submitShadowSale(
   }catch(error){
     return {error:safeShadowError(error)};
   }
-  redirect("/pos?saved="+orderId);
+  redirect("/pos/receipt/"+orderId);
 }
 
 export async function submitShadowCommand(
