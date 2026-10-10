@@ -2,7 +2,7 @@ import { and, eq, isNull, or } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { getDb } from "@/src/infrastructure/db/client";
 import { employeeRoles, employees, permissions, rolePermissions } from "@/src/infrastructure/db/schema";
-import { createSupabaseServerClient } from "./server";
+import { getCurrentEmployee } from "./current-employee";
 
 export async function employeeHasPermission(employeeId: string, permissionCode: string, storeId?: string) {
   const db = getDb();
@@ -22,13 +22,12 @@ export async function assertEmployeePermission(employeeId: string, permissionCod
 }
 
 export async function requirePermission(permissionCode: string, storeId?: string) {
-  const supabase = await createSupabaseServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-
-  const db = getDb();
-  const [employee] = await db.select({ id: employees.id, organizationId: employees.organizationId }).from(employees)
-    .where(and(eq(employees.userId, user.id), eq(employees.isActive, true))).limit(1);
-  if (!employee || !(await employeeHasPermission(employee.id, permissionCode, storeId))) redirect("/today?denied=1");
-  return { user, employeeId: employee.id, organizationId: employee.organizationId };
+  // Resolver siempre contra DEFAULT_ORGANIZATION_SLUG, igual que el POS.
+  // Una cuenta puede tener perfiles en Café Épico y Café Épico QA;
+  // nunca tomar el primer perfil arbitrario de la base compartida.
+  const {user,employee}=await getCurrentEmployee();
+  const scope=storeId ?? employee.homeStoreId ?? undefined;
+  if (!(await employeeHasPermission(employee.id,permissionCode,scope)))
+    redirect("/today?denied=1");
+  return {user,employeeId:employee.id,organizationId:employee.organizationId};
 }

@@ -1,6 +1,6 @@
 "use server";
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
@@ -13,6 +13,74 @@ import {
 } from "@/src/infrastructure/db/schema";
 
 const categorySchema = z.enum(["CALIENTES", "FRÍAS", "ALIMENTOS"]);
+const priceSchema = z.number().finite().positive().max(100000).refine(
+  (value) => Math.abs(value * 100 - Math.round(value * 100)) < 0.000001,
+  "El precio debe tener como máximo dos decimales.",
+);
+
+export async function updatePosCatalogPrice(formData: FormData) {
+  const { user, employee } = await getCurrentEmployee();
+  await assertEmployeePermission(
+    employee.id, "pos.catalog.manage", employee.homeStoreId ?? undefined,
+  );
+  const catalogId = String(formData.get("catalogId") ?? "").trim();
+  const price = priceSchema.parse(Number(formData.get("price")));
+  const db = getDb();
+  const now = new Date();
+  const newPrice = price.toFixed(2);
+  // Consultar catálogo antes de iniciar la transacción; no abrir otra conexión
+  // dentro de una transacción que mantiene un bloqueo de escritura.
+  const baseProduct = !catalogId.startsWith("manual:")
+    ? (await (await import("@/src/application/pos/catalog")).getPosCatalog(
+        employee.organizationId,{includeDisabled:true},
+      )).find(item=>item.id===catalogId && item.sourceType==="LOYVERSE")
+    : null;
+  if (!catalogId.startsWith("manual:") && !baseProduct)
+    throw new Error("Producto de Loyverse no encontrado.");
+
+  await db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${employee.organizationId}))`);
+    let oldPrice: number;
+    if (catalogId.startsWith("manual:")) {
+      const productId = z.string().uuid().parse(catalogId.slice(7));
+      const [product] = await tx.select().from(posManualProducts).where(and(
+        eq(posManualProducts.id, productId),
+        eq(posManualProducts.organizationId, employee.organizationId),
+      )).for("update").limit(1);
+      if (!product) throw new Error("Producto manual no encontrado.");
+      oldPrice = Number(product.price);
+      await tx.update(posManualProducts).set({
+        price: newPrice, updatedAt: now,
+      }).where(eq(posManualProducts.id, product.id));
+    } else {
+      if (!catalogId) throw new Error("Falta seleccionar un producto.");
+      const [existing] = await tx.select().from(posCatalogOverrides).where(and(
+        eq(posCatalogOverrides.organizationId,employee.organizationId),
+        eq(posCatalogOverrides.sourceExternalId,catalogId),
+      )).for("update").limit(1);
+      oldPrice=existing?.displayPrice!=null?Number(existing.displayPrice):baseProduct!.price;
+      await tx.insert(posCatalogOverrides).values({
+        organizationId: employee.organizationId,
+        sourceExternalId: catalogId,
+        displayPrice: newPrice,
+        updatedByEmployeeId: employee.id,
+      }).onConflictDoUpdate({
+        target: [posCatalogOverrides.organizationId, posCatalogOverrides.sourceExternalId],
+        set: { displayPrice: newPrice, updatedByEmployeeId: employee.id, updatedAt: now },
+      });
+    }
+    await tx.insert(auditEvents).values({
+      organizationId: employee.organizationId, storeId: employee.homeStoreId,
+      actorUserId: user.id, actorEmployeeId: employee.id,
+      action: "POS_CATALOG_PRICE_UPDATED",
+      entityType: "pos_catalog_item", entityId: catalogId,
+      beforeData: {price: oldPrice},
+      afterData: {price, source: catalogId.startsWith("manual:")?"OPS":"LOYVERSE_OVERRIDE"},
+    });
+  });
+  redirect("/admin/pos/catalog?priceSaved=" + encodeURIComponent(catalogId));
+}
+
 
 const recipeComponentSchema = z.object({
   variantExternalId: z.string().nullable().optional(),

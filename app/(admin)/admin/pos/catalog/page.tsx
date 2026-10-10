@@ -2,6 +2,7 @@ import {
   createManualPosProduct,
   savePosRecipe,
   togglePosCatalogItem,
+  updatePosCatalogPrice,
 } from "./actions";
 import { RecipeServiceEditor } from "./recipe-editor";
 import { SearchableCollection } from "@/components/searchable-collection";
@@ -15,7 +16,11 @@ const money = new Intl.NumberFormat("es-MX", {
   currency: "MXN",
 });
 
-export default async function PosCatalogAdminPage() {
+export default async function PosCatalogAdminPage({searchParams}:{
+  searchParams:Promise<Record<string,string|string[]|undefined>>;
+}) {
+  const params=await searchParams;
+  const priceSaved=typeof params.priceSaved==="string"?params.priceSaved:null;
   const { organizationId } = await requirePermission("pos.catalog.manage");
   const catalog = await getPosCatalog(organizationId, {
     includeDisabled: true,
@@ -40,6 +45,10 @@ export default async function PosCatalogAdminPage() {
           personalizas “Para llevar” cuando realmente cambia el consumo.
         </p>
       </section>
+
+      {priceSaved && <section className="card" role="status">
+        <p className="status-ok">Precio actualizado en OPS. Los tickets existentes mantienen su valor guardado.</p>
+      </section>}
 
       <details className="card pos-admin-create">
         <summary>+ Agregar producto nuevo</summary>
@@ -122,6 +131,24 @@ export default async function PosCatalogAdminPage() {
               </form>
             </div>
 
+            <details className="pos-recipe-editor">
+              <summary>Editar precio de venta</summary>
+              <form action={updatePosCatalogPrice} className="stack pos-price-edit">
+                <input type="hidden" name="catalogId" value={item.id}/>
+                <label>
+                  Precio en OPS (MXN)
+                  <input type="number" name="price" defaultValue={item.price.toFixed(2)}
+                    min="0.01" max="100000" step="0.01" required/>
+                </label>
+                <p className="muted">
+                  {item.sourceType==="LOYVERSE"
+                    ?"Precio independiente de Loyverse; sólo aplica al POS de OPS."
+                    :"Precio de producto creado en OPS."}
+                  {" "}Los tickets guardados conservan su precio original.
+                </p>
+                <button type="submit">Guardar precio</button>
+              </form>
+            </details>
             <details className="pos-recipe-editor">
               <summary>Editar receta</summary>
               <form action={savePosRecipe} className="stack">

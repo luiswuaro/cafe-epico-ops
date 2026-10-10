@@ -5,7 +5,7 @@ import { getCashState } from "@/src/application/pos/cash";
 import { getPosCustomers } from "@/src/application/pos/customers";
 import { getOrderSplitState } from "@/src/application/pos/splits";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
-import { assertEmployeePermission } from "@/src/infrastructure/auth/permissions";
+import { assertEmployeePermission,employeeHasPermission } from "@/src/infrastructure/auth/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -15,11 +15,14 @@ const money = new Intl.NumberFormat("es-MX", {
 });
 
 export default async function SplitOrderPage({
-  params,
+  params,searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams:Promise<Record<string,string|string[]|undefined>>;
 }) {
   const { id } = await params;
+  const query=await searchParams;
+  const paymentError=typeof query.error==="string"?query.error.slice(0,300):null;
   const { employee } = await getCurrentEmployee();
   if (!employee.homeStoreId) throw new Error("Sin sucursal asignada");
 
@@ -29,7 +32,7 @@ export default async function SplitOrderPage({
     employee.homeStoreId,
   );
 
-  const [state, cash, customers] = await Promise.all([
+  const [state, cash, customers, canOverrideStock] = await Promise.all([
     getOrderSplitState(
       employee.organizationId,
       employee.homeStoreId,
@@ -37,10 +40,13 @@ export default async function SplitOrderPage({
     ),
     getCashState(employee.organizationId, employee.homeStoreId),
     getPosCustomers(employee.organizationId),
+    employeeHasPermission(employee.id,"inventory.adjust",employee.homeStoreId),
   ]);
 
   if (!state) throw new Error("Orden no encontrada");
 
+  const isClosed=state.order.status==="CANCELLED" || 
+    (state.order.status==="PAID"&&state.splits.some(split=>split.status!=="PAID"));
   const hasPaidSplit = state.splits.some(
     (split) => split.status === "PAID",
   );
@@ -61,12 +67,23 @@ export default async function SplitOrderPage({
         </Link>
       </section>
 
+      {isClosed&&<section className="card" role="status">
+        <p className="status-warn">Ticket cerrado: {state.order.status==="CANCELLED"?"cancelado":"pagado"}.</p>
+        <p className="muted">Se conserva el historial de cuentas, pero ya no permite nuevos cobros ni modificar la división.</p>
+        <Link className="button" href={"/pos/receipt/"+state.order.id}>Ver ticket completo</Link>
+      </section>}
+
+      {paymentError && <section className="card" role="alert">
+        <p className="status-bad">Cobro no confirmado: {paymentError}</p>
+        <p className="muted">Comprueba cuáles cuentas siguen pendientes antes de repetir un pago. No se borró la división de la mesa.</p>
+      </section>}
+
       {state.splits.length > 0 && (
         <section className="split-existing-grid">
           {state.splits.map((split) => (
             <article className="card" key={split.id}>
               <p className="eyebrow">
-                {split.status === "PAID" ? "PAGADA" : "PENDIENTE"}
+                {split.status === "PAID" ? "PAGADA" : isClosed ? "CERRADA" : "PENDIENTE"}
               </p>
               <h2>{split.label}</h2>
               <strong className="metric">
@@ -102,9 +119,12 @@ export default async function SplitOrderPage({
                 >
                   Ver ticket
                 </Link>
+              ) : isClosed ? (
+                <p className="muted">Cuenta bloqueada: folio cerrado.</p>
               ) : (
                 <form action={payOrderSplit} className="stack">
                   <input type="hidden" name="splitId" value={split.id} />
+                  <input type="hidden" name="orderId" value={state.order.id} />
                   <label>
                     Método de pago
                     <select
@@ -131,6 +151,11 @@ export default async function SplitOrderPage({
                       <input type="number" name="tenderedAmount" step="0.01" min={0}
                         defaultValue={Number(split.total).toFixed(2)}/>
                     </label>
+                    {canOverrideStock&&<label>
+                      <input type="checkbox" name="allowStockShortage"/>
+                      {" "}Autorizar diferencia de inventario (sólo propietario)
+                      <small className="muted">Si el producto ya se entregó, registra consumo negativo auditado y realiza conteo físico.</small>
+                    </label>}
                   </>}
                   <button type="submit">
                     Cobrar {money.format(Number(split.total))}
@@ -142,7 +167,7 @@ export default async function SplitOrderPage({
         </section>
       )}
 
-      {state.splits.length>0 && !hasPaidSplit && (
+      {state.splits.length>0 && !hasPaidSplit && !isClosed && (
         <form action={resetUnpaidOrderSplit} className="card stack">
           <input type="hidden" name="orderId" value={state.order.id}/>
           <p className="muted">¿Cambió la forma de pago? Puedes quitar la división y cobrar la mesa completa. No se ha cobrado ninguna cuenta.</p>
@@ -150,7 +175,7 @@ export default async function SplitOrderPage({
         </form>
       )}
 
-      {!hasPaidSplit && (
+      {!hasPaidSplit && !isClosed && (
         <section className="card">
           <div className="section-heading">
             <div>

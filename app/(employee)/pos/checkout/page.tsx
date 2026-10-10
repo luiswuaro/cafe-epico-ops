@@ -1,4 +1,7 @@
 import Link from "next/link";
+import {and,eq} from "drizzle-orm";
+import {getDb} from "@/src/infrastructure/db/client";
+import {posOrders} from "@/src/infrastructure/db/schema";
 import { getOpenPosOrders } from "@/src/application/pos/orders";
 import { getCashState } from "@/src/application/pos/cash";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
@@ -22,6 +25,20 @@ export default async function PosCheckoutPage({searchParams}:{
     employeeHasPermission(employee.id,"inventory.adjust",employee.homeStoreId),
   ]);
   const order=orders.find(o=>o.id===orderId&&o.mode==="LIVE");
+  // Las cuentas que otro dispositivo acaba de cobrar salen de getOpenPosOrders.
+  // Consultar el estado real, restringido por organización y sucursal, antes de
+  // mostrar un error genérico que diga incorrectamente "ticket sigue abierto".
+  const [current]=!order && /^[0-9a-f-]{36}$/i.test(orderId)
+    ?await getDb().select({
+      id:posOrders.id,mode:posOrders.mode,status:posOrders.status,
+      folio:posOrders.folio,
+    }).from(posOrders).where(and(
+      eq(posOrders.id,orderId),
+      eq(posOrders.organizationId,employee.organizationId),
+      eq(posOrders.storeId,employee.homeStoreId),
+    )).limit(1)
+    :[undefined];
+  const paidOrder=!order && current?.mode==="LIVE" && current.status==="PAID" ? current : null;
   const error=typeof params.error==="string"?params.error.slice(0,340):null;
   return <main className="shell pos-shell">
     <section className="hero pos-hero">
@@ -32,14 +49,25 @@ export default async function PosCheckoutPage({searchParams}:{
       </div>
       <Link href={order?"/pos?ticket="+order.id:"/pos"} className="button">Volver al POS</Link>
     </section>
+    {paidOrder?<section className="card stack" role="status">
+      <p className="status-ok">Esta comanda ya fue cobrada desde otro dispositivo.</p>
+      <h2>Pago registrado · {paidOrder.folio}</h2>
+      <p>No se generó un segundo cobro. Puedes consultar o imprimir el ticket original.</p>
+      <div className="row" style={{display:"flex",gap:12,flexWrap:"wrap"}}>
+        <Link className="button" href={"/pos/receipt/"+paidOrder.id}>Ver ticket cobrado</Link>
+        <Link className="button" href="/pos">Volver al POS</Link>
+      </div>
+    </section>:<>
     {error&&<section className="card" role="alert">
       <p className="status-bad">No se cobró: {error}</p>
-      <p className="muted">El ticket sigue abierto. Corrige la existencia física o, si ya se entregó el pedido, solicita autorización del propietario.</p>
+      {order
+        ?<p className="muted">El ticket continúa pendiente. Si faltan insumos, verifica existencias o solicita autorización antes de intentar nuevamente.</p>
+        :<p className="muted">Consulta el estado del folio en Comandas antes de intentar de nuevo.</p>}
     </section>}
     {!order?<section className="card stack">
-      <h2>Ticket no disponible</h2>
-      <p>El ticket podría estar cobrado, cancelado o cerrado. No se ejecutó ningún cobro adicional.</p>
-      <Link className="button" href="/pos">Volver al POS</Link>
+      <h2>Ticket no disponible para cobro</h2>
+      <p>El ticket puede estar cancelado, cerrado o ya no disponible. No se ejecutó un cobro adicional.</p>
+      <Link className="button" href="/pos/orders">Consultar comandas</Link>
     </section>:
     <div className="grid-two">
       <section className="card stack">
@@ -64,6 +92,6 @@ export default async function PosCheckoutPage({searchParams}:{
         cashOpen={Boolean(cash.session)}
         canOverrideStock={canOverrideStock}
         partialPaid={order.status==="PARTIALLY_PAID"}/>
-    </div>}
+    </div>}</>}
   </main>;
 }

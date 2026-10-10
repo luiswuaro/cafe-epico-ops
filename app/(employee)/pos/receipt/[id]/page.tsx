@@ -1,6 +1,8 @@
+import {randomUUID} from "node:crypto";
+import {deliverExtraPackaging} from "./packaging-action";
 import Image from "next/image";
 import Link from "next/link";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { DirectPrintTicketButton } from "./direct-print-button";
 import { PrintTicketButton } from "./print-button";
 import { getPosPrintSettings } from "@/src/application/pos/print-settings";
@@ -11,6 +13,7 @@ import {
 } from "@/src/infrastructure/auth/permissions";
 import { getDb } from "@/src/infrastructure/db/client";
 import {
+  auditEvents,
   employees,
   posCustomers,
   posLoyaltyEntries,
@@ -40,6 +43,9 @@ export default async function ReceiptPage({
   const query = await searchParams;
   const requestedSplitId =
     typeof query.split === "string" ? query.split : null;
+  const cancelError=typeof query.cancelError==="string"?query.cancelError.slice(0,300):null;
+  const packagingError=typeof query.packagingError==="string"?query.packagingError.slice(0,300):null;
+  const packagingDone=query.packaged==="1";
 
   const { employee } = await getCurrentEmployee();
   if (!employee.homeStoreId) throw new Error("Sin sucursal asignada");
@@ -137,10 +143,7 @@ export default async function ReceiptPage({
               eq(posPayments.orderId, id),
               eq(posPayments.splitId, split.id),
             )
-          : and(
-              eq(posPayments.orderId, id),
-              isNull(posPayments.splitId),
-            ),
+          : eq(posPayments.orderId, id),
       ),
     employeeHasPermission(
       employee.id,
@@ -160,7 +163,8 @@ export default async function ReceiptPage({
   });
 
   const total = split ? Number(split.total) : Number(order.order.total);
-  const paymentMethod = payments.map((payment) => payment.method).join(" + ");
+  const paymentMethod = [...new Set(payments.map((payment) => payment.method))].join(" + ");
+  const paidAmount=payments.reduce((sum,payment)=>sum+Number(payment.amount),0);
   const loyalty=await db.select({
     customerId:posLoyaltyEntries.customerId,
     name:posCustomers.name,
@@ -184,6 +188,16 @@ export default async function ReceiptPage({
     ? applicable.reduce((sum,row)=>sum+Number(row.points),0).toFixed(2):null;
   const pointsBalance=order.order.status!=="CANCELLED"&&recipients.size===1
     ? Number(applicable[0].balance).toFixed(2):null;
+
+  const extraEvents=order.order.mode==="LIVE"&&order.order.status==="PAID"&&!split
+    ?await db.select({data:auditEvents.afterData}).from(auditEvents).where(and(
+      eq(auditEvents.organizationId,employee.organizationId),
+      eq(auditEvents.action,"POS_EXTRA_TAKEAWAY_PACKAGING"),
+      eq(auditEvents.entityId,id),
+    )):[];
+  const packagedUnits=(lineId:string)=>extraEvents
+    .filter(event=>event.data?.lineId===lineId)
+    .reduce((sum,event)=>sum+Number(event.data?.quantity??0),0);
 
   const service = order.order.tableLabel ||
     (order.order.serviceMode==="TAKEAWAY"?"Para llevar":"Aquí");
@@ -255,8 +269,28 @@ export default async function ReceiptPage({
         />
 
         <PrintTicketButton />
+        {!split&&order.order.mode==="LIVE"&&order.order.status==="PAID"&&
+          lines.some(line=>line.expectedConsumption?.serviceMode==="DINE_IN")&&
+          <a className="button receipt-extra-shortcut" href="#empaque-para-llevar">
+            <span aria-hidden="true">↗</span> Vaso para llevar
+          </a>}
       </div>
 
+      {!split&&order.order.status==="PARTIALLY_PAID"&&<section className="card no-print" role="status">
+        <p className="status-warn">Mesa parcialmente pagada · {money.format(paidAmount)} de {money.format(Number(order.order.total))} registrados.</p>
+        <p className="muted">No imprimas el total como venta liquidada. Continúa desde las cuentas pendientes.</p>
+        <Link className="button" href={"/pos/orders/"+id+"/split"}>Terminar cuentas pendientes</Link>
+      </section>}
+      {cancelError&&<section className="card no-print" role="alert">
+        <p className="status-bad">Cancelación no confirmada: {cancelError}</p>
+        <p className="muted">El ticket sigue disponible para revisión. Verifica pagos, caja e inventario antes de volver a intentar.</p>
+      </section>}
+      {packagingError&&<section className="card no-print" role="alert">
+        <p className="status-bad">No se entregó el envase: {packagingError}</p>
+      </section>}
+      {packagingDone&&<section className="card no-print" role="status">
+        <p className="status-ok">Envase adicional registrado en inventario y auditoría, sin nuevo cobro.</p>
+      </section>}
       <article className="receipt-paper">
         <header>
           {printSettings.showLogo &&
@@ -353,7 +387,7 @@ export default async function ReceiptPage({
         </div>
 
         <div className="receipt-meta">
-          <span>Pago</span>
+          <span>{order.order.status === "CANCELLED" ? "Pago original" : "Pago"}</span>
           <span>{paymentMethod || "—"}</span>
 
           {printSettings.showCustomer && receiptCustomer && (
@@ -377,9 +411,10 @@ export default async function ReceiptPage({
 
         {order.order.status === "CANCELLED" && (
           <div className="receipt-cancelled">
-            CANCELADO
+            CANCELADO · SIN VENTA ACTIVA
             <br />
             {order.order.cancelReason ?? ""}
+            <p>Consultar reversas en Caja y Auditoría de inventario</p>
           </div>
         )}
 
@@ -394,6 +429,55 @@ export default async function ReceiptPage({
         </footer>
       </article>
 
+      {split&&order.order.status==="PAID"&&<div className="no-print receipt-toolbar">
+        <Link className="button" href={"/pos/receipt/"+id}>Ver ticket completo y opciones de empaque</Link>
+      </div>}
+      {!split&&order.order.mode==="LIVE"&&order.order.status==="PAID"&&
+        lines.some(line=>line.expectedConsumption?.serviceMode==="DINE_IN")&&
+        <section id="empaque-para-llevar" className="card no-print receipt-extra-packaging" aria-labelledby="receipt-packaging-title">
+          <div className="receipt-extra-header">
+            <div>
+              <p className="eyebrow">AJUSTE DE SERVICIO · POSTVENTA</p>
+              <h2 id="receipt-packaging-title">Entregar vaso para llevar</h2>
+            </div>
+            <span className="pill">Sin cobrar otra bebida</span>
+          </div>
+          <p className="muted receipt-extra-description">
+            Si el cliente no terminó su bebida, selecciona cuál desea llevar.
+            OPS registra únicamente el vaso, la tapa y los accesorios adicionales de la receta para llevar.
+            La venta y el consumo de café originales se conservan.
+          </p>
+          <div className="receipt-extra-list">
+            {lines.filter(line=>line.expectedConsumption?.serviceMode==="DINE_IN").map((line,index)=>{
+              const remaining=Number(line.quantity)-packagedUnits(line.id);
+              return <div key={line.id} className="receipt-packaging-line">
+                <div className="receipt-packaging-product">
+                  <span className="receipt-packaging-index">{index+1}</span>
+                  <div>
+                    <strong>{line.nameSnapshot}</strong>
+                    <p className="muted">
+                      {remaining>0
+                        ?remaining+" bebida(s) con empaque disponible"
+                        :"Empaque adicional ya registrado"}
+                    </p>
+                  </div>
+                </div>
+                {remaining>0
+                  ?<form action={deliverExtraPackaging} className="receipt-packaging-form">
+                    <input type="hidden" name="orderId" value={id}/>
+                    <input type="hidden" name="lineId" value={line.id}/>
+                    <input type="hidden" name="requestId" value={randomUUID()}/>
+                    <label>Cantidad
+                      <input type="number" name="quantity" min="1" max={remaining} defaultValue="1" step="1" required/>
+                    </label>
+                    <button type="submit">Registrar empaque</button>
+                  </form>
+                  :<span className="receipt-packaging-complete">Registrado ✓</span>}
+              </div>;
+            })}
+          </div>
+          <p className="receipt-packaging-footnote">No modifica el precio, los puntos ni las cantidades de ingredientes vendidos.</p>
+        </section>}
       {canCancel &&
         !split &&
         order.order.status !== "CANCELLED" && (

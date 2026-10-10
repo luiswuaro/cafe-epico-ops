@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { getOpenCashSession } from "@/src/application/pos/cash";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
-import { assertEmployeePermission } from "@/src/infrastructure/auth/permissions";
+import { assertEmployeePermission,employeeHasPermission } from "@/src/infrastructure/auth/permissions";
 import { getDb } from "@/src/infrastructure/db/client";
 import {
   auditEvents,
@@ -28,7 +28,7 @@ const allocationSchema = z.array(
 
 const paymentSchema = z.enum(["CASH", "CARD", "TRANSFER"]);
 
-export async function saveOrderSplit(formData: FormData) {
+async function saveOrderSplitUnsafe(formData: FormData) {
   const { user, employee } = await getCurrentEmployee();
   if (!employee.homeStoreId) throw new Error("Sin sucursal asignada");
 
@@ -196,10 +196,26 @@ export async function saveOrderSplit(formData: FormData) {
     });
   });
 
-  redirect("/pos/orders/" + order.id + "/split?saved=1");
+  return "/pos/orders/" + order.id + "/split?saved=1";
 }
 
-export async function payOrderSplit(formData: FormData) {
+export async function saveOrderSplit(formData:FormData){
+  const id=String(formData.get("orderId")??"");
+  const fallback=/^[0-9a-f-]{36}$/i.test(id)
+    ?"/pos/orders/"+id+"/split":"/pos/orders";
+  let destination:string;
+  try{destination=await saveOrderSplitUnsafe(formData);}
+  catch(error){
+    console.error("POS_SPLIT_SAVE_FAILED",{orderId:id,error});
+    const message=error instanceof Error&&/^(Sólo |La cuenta |La división |La orden |Hay un producto |Asignación |Orden |Producto )/.test(error.message)
+      ?error.message.slice(0,260)
+      :"No fue posible dividir la cuenta. Revisa la asignación de productos y el estado del ticket.";
+    redirect(fallback+"?error="+encodeURIComponent(message));
+  }
+  redirect(destination);
+}
+
+async function payOrderSplitUnsafe(formData: FormData) {
   const { user, employee } = await getCurrentEmployee();
   if (!employee.homeStoreId) throw new Error("Sin sucursal asignada");
 
@@ -228,7 +244,7 @@ export async function payOrderSplit(formData: FormData) {
 
   if (!split) throw new Error("Cuenta dividida no encontrada");
   if (split.status === "PAID") {
-    redirect("/pos/receipt/" + split.orderId + "?split=" + split.id);
+    return "/pos/receipt/" + split.orderId + "?split=" + split.id;
   }
 
   const [order] = await db
@@ -253,11 +269,14 @@ export async function payOrderSplit(formData: FormData) {
     const cart=shares.map(share=>{
       const line=byLine.get(share.orderLineId);
       if(!line)throw new Error("Producto no encontrado en la comanda.");
-      return {externalId:line.catalogExternalId,quantity:Number(share.quantity),note:line.note,
+      return {sourceLineId:line.id,externalId:line.catalogExternalId,quantity:Number(share.quantity),note:line.note,
         serviceMode:line.expectedConsumption?.serviceMode==="TAKEAWAY"?"TAKEAWAY" as const:"DINE_IN" as const};
     });
     const customerId=formData.has("customerId") ? (String(formData.get("customerId")??"").trim()||null) : order.customerId;
     const tenderedRaw=String(formData.get("tenderedAmount")??"").trim();
+    const allowStockShortage=formData.get("allowStockShortage")==="on";
+    if(allowStockShortage && !await employeeHasPermission(employee.id,"inventory.adjust",employee.homeStoreId))
+      throw new Error("Sólo el propietario puede autorizar diferencias de inventario.");
     const result=await checkoutLiveOrder({
       organizationId:employee.organizationId,storeId:employee.homeStoreId,
       employeeId:employee.id,actorUserId:user.id,
@@ -265,8 +284,9 @@ export async function payOrderSplit(formData: FormData) {
       cart,serviceMode:order.serviceMode as "DINE_IN"|"TAKEAWAY",
       paymentMethod,tenderedAmount:paymentMethod==="CASH"?(tenderedRaw?Number(tenderedRaw):Number(split.total)):null,
       customerId,tableLabel:order.tableLabel,note:order.note,
+      allowStockShortage,
     });
-    redirect("/pos/receipt/"+result.id+"?split="+split.id);
+    return "/pos/receipt/"+result.id+"?split="+split.id;
   }
 
 
@@ -364,10 +384,32 @@ export async function payOrderSplit(formData: FormData) {
     });
   });
 
-  redirect("/pos/receipt/" + order.id + "?split=" + split.id);
+  return "/pos/receipt/" + order.id + "?split=" + split.id;
 }
 
-export async function resetUnpaidOrderSplit(formData:FormData){
+export async function payOrderSplit(formData:FormData){
+  const orderId=String(formData.get("orderId")??"").trim();
+  const back=/^[0-9a-f-]{36}$/i.test(orderId)
+    ? "/pos/orders/"+orderId+"/split" : "/pos/orders";
+  let destination:string;
+  try{
+    destination=await payOrderSplitUnsafe(formData);
+  }catch(error){
+    // El error queda registrado en Vercel; el cajero conserva la cuenta y puede revisar su estado.
+    console.error("POS_SPLIT_PAYMENT_FAILED",{
+      orderId,splitId:String(formData.get("splitId")??""),
+      error,
+    });
+    const raw=error instanceof Error?error.message:"";
+    const safe=/^(Falta |Abre |La cuenta |La comanda |Esta cuenta |El total |Los datos |Producto |Cuenta |Insumo |Unidad |Sólo |El efectivo |Cliente |Hay cuentas |Piloto |Cobros LIVE)/.test(raw)
+      ?raw.slice(0,260)
+      :"No se pudo confirmar el cobro. Verifica el estado de la cuenta y los movimientos antes de reintentar.";
+    redirect(back+"?error="+encodeURIComponent(safe));
+  }
+  redirect(destination);
+}
+
+async function resetUnpaidOrderSplitUnsafe(formData:FormData){
   const {user,employee}=await getCurrentEmployee();
   if(!employee.homeStoreId)throw new Error("Sin sucursal.");
   await assertEmployeePermission(employee.id,"pos.sell",employee.homeStoreId);
@@ -395,5 +437,20 @@ export async function resetUnpaidOrderSplit(formData:FormData){
       });
     }
   });
-  redirect("/pos/orders");
+  return "/pos/orders";
+}
+
+export async function resetUnpaidOrderSplit(data:FormData){
+  const id=String(data.get("orderId")??"");
+  let destination:string;
+  try{destination=await resetUnpaidOrderSplitUnsafe(data);}
+  catch(error){
+    console.error("POS_SPLIT_RESET_FAILED",{orderId:id,error});
+    const message=error instanceof Error&&/^(La mesa |No se puede )/.test(error.message)
+      ?error.message.slice(0,260)
+      :"No se pudo quitar la división. Revisa si alguna cuenta ya fue pagada.";
+    redirect((/^[0-9a-f-]{36}$/i.test(id)?"/pos/orders/"+id+"/split":"/pos/orders")+
+      "?error="+encodeURIComponent(message));
+  }
+  redirect(destination);
 }
