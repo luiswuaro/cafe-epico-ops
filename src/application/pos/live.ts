@@ -326,7 +326,8 @@ export async function checkoutLiveOrder(input:{
           employeeId:input.employeeId,clientOrderId:input.clientOrderId,
           folio:"OP-"+now.toISOString().replace(/[-:TZ.]/g,"").slice(0,14)+"-"+input.clientOrderId.slice(-5).toUpperCase(),
           mode:"LIVE",status:"PAID",serviceMode:input.serviceMode,
-          tableLabel:input.serviceMode==="DINE_IN"?input.tableLabel:null,
+          // El nombre identifica también los pedidos para llevar y mixtos.
+          tableLabel:input.tableLabel?.trim()||null,
           customerId:input.customerId,businessDate:businessDate(now),
           subtotal:total.toFixed(2),total:total.toFixed(2),note:input.note,
           loyaltyPointsPreview:(input.customerId?total*0.05:0).toFixed(2),

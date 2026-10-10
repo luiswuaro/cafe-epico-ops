@@ -2,6 +2,7 @@ import Link from "next/link";
 import { CommandBoardAutoRefresh } from "./auto-refresh";
 import { KitchenPrintButton } from "./kitchen-print-button";
 import { AutoKitchenPrint } from "./auto-kitchen-print";
+import { kitchenOrderIdentity } from "@/src/application/pos/kitchen-slip";
 import { AddLiveProducts } from "./add-live-products";
 import { createLiveCommandCustomer, setLiveCommandCustomer } from "./live-actions";
 import { getPosCatalog } from "@/src/application/pos/catalog";
@@ -88,7 +89,7 @@ export default async function PosOrdersPage({
         roundId={autoRoundId}
         slip={{
           folio:autoOrder.folio,
-          table:autoOrder.tableLabel||(autoOrder.serviceMode==="TAKEAWAY"?"Para llevar":"Aquí"),
+          ...kitchenOrderIdentity({ticketLabel:autoOrder.tableLabel,customerName:autoOrder.customerName,folio:autoOrder.folio}),
           orderNote:autoOrder.note,
           lines:autoOrder.lines.map(line=>({
             id:line.id,name:line.name,category:line.category,
@@ -148,7 +149,11 @@ export default async function PosOrdersPage({
                       {elapsedMinutes(order.createdAt)} min
                     </p>
                     <h2>
-                      {order.tableLabel||(order.serviceMode==="TAKEAWAY"?"Para llevar":"Aquí")}
+                      {kitchenOrderIdentity({
+                        ticketLabel:order.tableLabel,
+                        customerName:order.customerName,
+                        folio:order.folio,
+                      }).table}
                     </h2>
                   </div>
                   <strong>{money.format(Number(order.total))}</strong>
@@ -187,8 +192,12 @@ export default async function PosOrdersPage({
 
                 <div className="muted">
                   Tomó: {order.employeeName ?? "Empleado"}
-                  {order.customerName
-                    ? " · Cliente: " + order.customerName
+                  {kitchenOrderIdentity({
+                    ticketLabel:order.tableLabel,
+                    customerName:order.customerName,
+                    folio:order.folio,
+                  }).customerName
+                    ? " · Cliente: "+order.customerName
                     : ""}
                 </div>
 
@@ -240,7 +249,7 @@ export default async function PosOrdersPage({
                   <KitchenPrintButton
                     slip={{
                       folio:order.folio,
-                      table:order.tableLabel||(order.serviceMode==="TAKEAWAY"?"Para llevar":"Aquí"),
+                      ...kitchenOrderIdentity({ticketLabel:order.tableLabel,customerName:order.customerName,folio:order.folio}),
                       orderNote:order.note,
                       lines:order.lines.map(line=>({
                         id:line.id,
