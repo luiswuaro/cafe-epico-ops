@@ -1,6 +1,7 @@
 import Link from "next/link";
+import { HiBeanImportForm } from "./hibean-import-form";
 import { RoastingSessionPlanner } from "./session-planner";
-import { startHiBeanRoastImport } from "./import-actions";
+
 import {
   assignRoastBatchToBar,
   recordRoastBatch,
@@ -92,7 +93,17 @@ export default async function RoastingPage({
       </section>
 
       {typeof params.error === "string" && (
-        <p className="alert">No se pudo guardar: {params.error}</p>
+        <p className="alert" role="alert">
+          {({
+            "hibean-file": "Selecciona un archivo JSON de HiBean antes de leerlo.",
+            "hibean-file-large": "El JSON supera los 3.5 MB permitidos en esta importación. No se registró ningún batch. Comparte el archivo para preparar una carga de mayor tamaño.",
+            "hibean-read": "No fue posible leer el archivo. Revisa que no esté dañado y vuelve a seleccionarlo.",
+            "hibean-parse": "La estructura del JSON provocó un error al interpretarla. No se registró el tueste; conserva el archivo para revisión.",
+            "hibean-format": "No se reconoció el formato HiBean en ese archivo. Exporta el tueste como JSON completo desde HiBean.",
+            "hibean-json": "El archivo no contiene un objeto JSON válido. Vuelve a exportarlo desde HiBean.",
+          } as Record<string, string>)[params.error] ??
+          "No se pudo completar la operación. Código: " + params.error}
+        </p>
       )}
       {typeof params.saved === "string" && (
         <p className="card status-ok">Registro actualizado.</p>
@@ -391,22 +402,7 @@ export default async function RoastingPage({
           por HiBean. Antes de guardar, te obliga a confirmar o corregir esa
           existencia.
         </p>
-        <form
-          action={startHiBeanRoastImport}
-          encType="multipart/form-data"
-          className="stack"
-        >
-          <label>
-            JSON de HiBean
-            <input
-              name="roastFile"
-              type="file"
-              accept=".json,application/json"
-              required
-            />
-          </label>
-          <button type="submit">Leer JSON y revisar antes de registrar</button>
-        </form>
+        <HiBeanImportForm />
       </section>
 
       <section className="card" style={{ marginTop: "1rem" }}>
