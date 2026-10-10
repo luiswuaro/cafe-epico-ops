@@ -3,6 +3,7 @@ import { CommandBoardAutoRefresh } from "./auto-refresh";
 import { KitchenPrintButton } from "./kitchen-print-button";
 import { AutoKitchenPrint } from "./auto-kitchen-print";
 import { kitchenOrderIdentity } from "@/src/application/pos/kitchen-slip";
+import {extraLabels,preparationNote} from "@/src/application/pos/extras";
 import { AddLiveProducts } from "./add-live-products";
 import { createLiveCommandCustomer, setLiveCommandCustomer } from "./live-actions";
 import { getPosCatalog } from "@/src/application/pos/catalog";
@@ -92,7 +93,7 @@ export default async function PosOrdersPage({
           orderNote:autoOrder.note,
           lines:autoOrder.lines.map(line=>({
             id:line.id,name:line.name,category:line.category,
-            quantity:Number(line.quantity),note:line.note,
+            quantity:Number(line.quantity),note:preparationNote(line.note,line.expectedConsumption),
             serviceMode:typeof line.expectedConsumption?.serviceMode==="string"
               ?line.expectedConsumption.serviceMode:null,
             roundId:typeof line.expectedConsumption?.roundId==="string"
@@ -177,6 +178,8 @@ export default async function PosOrdersPage({
                             </span>
                           )}
                         </div>
+                        {extraLabels(line.expectedConsumption,{showPrices:true}).map((label,i)=>
+                          <div key={i} className="command-line-note">↳ {label}</div>)}
                         {line.note && <div className="command-line-note">↳ {line.note}</div>}
                       </div>
                     </div>
@@ -255,7 +258,7 @@ export default async function PosOrdersPage({
                         name:line.name,
                         category:line.category,
                         quantity:Number(line.quantity),
-                        note:line.note,
+                        note:preparationNote(line.note,line.expectedConsumption),
                         serviceMode:typeof line.expectedConsumption?.serviceMode==="string"
                           ?line.expectedConsumption.serviceMode:null,
                         roundId:typeof line.expectedConsumption?.roundId==="string"
