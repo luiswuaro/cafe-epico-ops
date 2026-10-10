@@ -7,9 +7,13 @@ import {
   isNull,
 } from "drizzle-orm";
 import { getInventoryIntelligence } from "@/src/application/loyverse/inventory-intelligence";
+import { getPosReadiness } from "@/src/application/pos/readiness";
 import { getDb } from "@/src/infrastructure/db/client";
 import {
   espressoQualityChecks,
+  inventoryBalances,
+  inventoryItems,
+  loyverseInventoryMappings,
   loyverseCategories,
   loyverseItems,
   loyverseReceiptLines,
@@ -52,7 +56,57 @@ export async function getBaristaCockpit(employee: {
   if (!employee.homeStoreId) throw new Error("Employee has no home store");
 
   const db = getDb();
-  const inventory = await getInventoryIntelligence(employee.organizationId);
+  // Loyverse sólo alimenta las tendencias históricas. El stock vigente es OPS.
+  const [inventory, readiness, opsRows] = await Promise.all([
+    getInventoryIntelligence(employee.organizationId),
+    getPosReadiness(employee.organizationId, employee.homeStoreId),
+    db.select({
+      variantExternalId: loyverseInventoryMappings.loyverseVariantExternalId,
+      name: inventoryItems.name,
+      unit: inventoryItems.canonicalUnit,
+      factor: loyverseInventoryMappings.factorToCanonical,
+      minimumStock: inventoryItems.minimumStock,
+      quantity: inventoryBalances.theoreticalQuantity,
+    }).from(loyverseInventoryMappings)
+      .innerJoin(inventoryItems, and(
+        eq(inventoryItems.id, loyverseInventoryMappings.inventoryItemId),
+        eq(inventoryItems.organizationId, employee.organizationId),
+      ))
+      .leftJoin(inventoryBalances, and(
+        eq(inventoryBalances.organizationId, employee.organizationId),
+        eq(inventoryBalances.storeId, employee.homeStoreId),
+        eq(inventoryBalances.locationId, loyverseInventoryMappings.locationId),
+        eq(inventoryBalances.inventoryItemId, loyverseInventoryMappings.inventoryItemId),
+      ))
+      .where(and(
+        eq(loyverseInventoryMappings.organizationId, employee.organizationId),
+        eq(loyverseInventoryMappings.storeId, employee.homeStoreId),
+        eq(loyverseInventoryMappings.isActive, true),
+        eq(inventoryItems.isActive, true),
+        eq(inventoryItems.trackingType, "QUANTITY"),
+      )),
+  ]);
+  const byVariantRows = new Map<string, typeof opsRows>();
+  for (const row of opsRows) {
+    const matches = byVariantRows.get(row.variantExternalId) ?? [];
+    matches.push(row);
+    byVariantRows.set(row.variantExternalId, matches);
+  }
+  // Una equivalencia duplicada o sin balance se atiende en auditoría de POS,
+  // no generando alertas de inventario basadas en saldos obsoletos.
+  const opsByVariant = new Map([...byVariantRows].flatMap(([id, rows]) => {
+    if (rows.length !== 1 || rows[0].quantity == null) return [];
+    const row = rows[0];
+    return [[id, {
+      variantExternalId: id,
+      name: row.name,
+      unit: row.unit,
+      quantity: Number(row.quantity),
+      factor: Number(row.factor),
+      minimumStock: row.minimumStock == null ? null : Number(row.minimumStock),
+    }] as const];
+  }));
+
   const local = localParts();
   const dayStart = new Date(local.date + "T00:00:00-06:00");
   const loyverseStoreExternalId = inventory.selectedStore?.externalId ?? "";
