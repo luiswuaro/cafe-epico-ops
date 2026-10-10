@@ -176,6 +176,21 @@ export default async function ReceiptPage({
   const total = split ? Number(split.total) : Number(order.order.total);
   const paymentMethod = [...new Set(payments.map((payment) => payment.method))].join(" + ");
   const paidAmount=payments.reduce((sum,payment)=>sum+Number(payment.amount),0);
+  // Sólo mostrar importes entregados realmente registrados. No inferirlos en tickets antiguos.
+  // Si una orden tiene varias cuentas pagadas en efectivo, acumular recibido y cambio;
+  // para tickets de cuenta dividida la consulta ya está filtrada al split solicitado.
+  const cashPayments=payments.filter(payment=>payment.method==="CASH");
+  const cashDetailsRecorded=cashPayments.length>0&&cashPayments.every(payment=>
+    payment.tenderedAmount!==null&&payment.changeAmount!==null
+  );
+  const cashReceived=cashDetailsRecorded
+    ?money.format(cashPayments.reduce((cents,payment)=>
+      cents+Math.round(Number(payment.tenderedAmount)*100),0)/100)
+    :null;
+  const cashChange=cashDetailsRecorded
+    ?money.format(cashPayments.reduce((cents,payment)=>
+      cents+Math.round(Number(payment.changeAmount)*100),0)/100)
+    :null;
   const loyalty=await db.select({
     customerId:posLoyaltyEntries.customerId,
     name:posCustomers.name,
@@ -267,6 +282,8 @@ export default async function ReceiptPage({
             })),
             total: money.format(total),
             payment: paymentMethod || "-",
+            cashTendered: cashReceived,
+            cashChange,
             customer: receiptCustomer,
             pointsEarned,
             pointsBalance,
@@ -425,6 +442,12 @@ export default async function ReceiptPage({
         <div className="receipt-meta">
           <span>{order.order.status === "CANCELLED" ? "Pago original" : "Pago"}</span>
           <span>{paymentMethod || "—"}</span>
+          {cashReceived!==null&&cashChange!==null&&<>
+            <span>{order.order.status==="CANCELLED"?"Efectivo recibido (original)":"Efectivo recibido"}</span>
+            <strong>{cashReceived}</strong>
+            <span>{order.order.status==="CANCELLED"?"Cambio entregado (original)":"Cambio entregado"}</span>
+            <strong>{cashChange}</strong>
+          </>}
 
           {printSettings.showCustomer && receiptCustomer && (
             <>
