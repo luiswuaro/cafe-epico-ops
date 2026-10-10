@@ -1,3 +1,230 @@
+"use client";
+
+import { useActionState, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import { addProductsToLiveCommand } from "./orders/live-actions";
+import {
+  createPosCustomer,
+  saveLiveCommand,
+  createShadowCommand,
+  createShadowSale,
+} from "./actions";
+import { submitLiveSale } from "./live-actions";
+import type {ExtraOption} from "@/src/application/pos/extra-catalog";
+
+type CatalogItem = {
+  id: string;
+  name: string;
+  category: "CALIENTES" | "FRÍAS" | "ALIMENTOS";
+  price: number;
+};
+
+type Customer = {
+  id: string;
+  name: string;
+  phone: string | null;
+  email: string | null;
+  pointsBalance: number;
+};
+
+type ServiceMode="DINE_IN"|"TAKEAWAY";
+type CartLine = {
+  key:string;externalId:string;note:string;serviceMode:ServiceMode;extras:Array<{id:string;quantity:number}>;
+};
+type SavedTicket={
+  id:string;folio:string;name:string;total:number;customerId:string|null;
+  status:string;serviceMode:ServiceMode;
+  lines:Array<{id:string;name:string;quantity:number;note:string|null;unitPrice:number;serviceMode:ServiceMode;isAdditionalRound:boolean;roundId:string|null;extrasLabel:string|null}>;
+};
+
+type Props = {
+  catalog: CatalogItem[];
+  extrasOptions:ExtraOption[];
+  customers: Customer[];
+  selectedCustomerId?: string | null;
+  cashOpen: boolean;
+  liveEnabled: boolean;
+  savedTicket?:SavedTicket|null;
+  canOverrideStock:boolean;
+};
+
+function normalizeSearch(value:string) {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g,"")
+    .toLocaleLowerCase("es-MX").trim();
+}
+
+const money = new Intl.NumberFormat("es-MX", {
+  style: "currency",
+  currency: "MXN",
+  maximumFractionDigits: 2,
+});
+
+export function PosClient({
+  catalog,
+  extrasOptions,
+  customers,
+  selectedCustomerId = null,
+  cashOpen,
+  liveEnabled,
+  savedTicket=null,
+  canOverrideStock,
+}: Props) {
+  const [category, setCategory] = useState<"TODAS" | CatalogItem["category"]>(
+    "CALIENTES",
+  );
+  const [query, setQuery] = useState("");
+  const [cart, setCart] = useState<CartLine[]>([]);
+  const [serviceMode, setServiceMode] =
+    useState<ServiceMode>(savedTicket?.serviceMode??"DINE_IN");
+  const [customerId, setCustomerId] = useState(savedTicket?.customerId??selectedCustomerId??"");
+  const [additionRequestId]=useState(()=>globalThis.crypto.randomUUID());
+  const [liveClientOrderId] = useState(() => globalThis.crypto.randomUUID());
+  const [paymentMethod, setPaymentMethod] = useState<"CASH"|"CARD"|"TRANSFER">(cashOpen ? "CASH" : "CARD");
+  const [tendered, setTendered] = useState("");
+  const [checkoutOpen,setCheckoutOpen]=useState(false);
+  const [mobileCartOpen,setMobileCartOpen]=useState(false);
+  const mobileCartRef=useRef<HTMLElement>(null);
+  const mobileCartCloseRef=useRef<HTMLButtonElement>(null);
+  const mobileSummaryRef=useRef<HTMLButtonElement>(null);
+  const [allowStockShortage,setAllowStockShortage]=useState(false);
+  const [tableLabel,setTableLabel]=useState("");
+  const [orderNote,setOrderNote]=useState("");
+  const [checkoutState,checkoutAction,checkoutPending]=useActionState(submitLiveSale,{error:null});
+  const [saveState,saveAction,savePending]=useActionState(saveLiveCommand,{error:null});
+
+  const catalogById = useMemo(
+    () => new Map(catalog.map((item) => [item.id, item])),
+    [catalog],
+  );
+
+  const visible = useMemo(() => {
+    const q = normalizeSearch(query);
+    return catalog.filter((item) => {
+      const categoryOk = category === "TODAS" || item.category === category;
+      const queryOk = !q || normalizeSearch(item.name).includes(q);
+      return categoryOk && queryOk;
+    });
+  }, [catalog, category, query]);
+
+  const cartLines = cart.flatMap((line) => {
+    const item = catalogById.get(line.externalId);
+    return item ? [{ ...line, item }] : [];
+  });
+
+  const historicalRoundIds=[...new Set((savedTicket?.lines??[]).map(line=>line.roundId??"INITIAL"))];
+  const extraById=new Map(extrasOptions.map(option=>[option.id,option]));
+  const extraCharge=(line:CartLine)=>line.extras.reduce((sum,e)=>
+    sum+(extraById.get(e.id)?.price??0)*e.quantity,0);
+  const unitPrice=(line:typeof cartLines[number])=>line.item.price+extraCharge(line);
+  const newSubtotal=cartLines.reduce((sum,line)=>sum+unitPrice(line),0);
+  const total=(savedTicket?.total??0)+newSubtotal;
+  const units=(savedTicket?.lines.reduce((sum,line)=>sum+line.quantity,0)??0)+cartLines.length;
+
+  useEffect(()=>{
+    if(!mobileCartOpen)return;
+    const breakpoint=window.matchMedia("(max-width: 760px)");
+    if(!breakpoint.matches)return;
+    const oldOverflow=document.body.style.overflow;
+    document.body.style.overflow="hidden";
+    mobileCartCloseRef.current?.focus();
+    const onResize=()=>{if(!breakpoint.matches)setMobileCartOpen(false);};
+    const onKeyDown=(event:KeyboardEvent)=>{
+      if(event.key==="Escape"){
+        event.preventDefault();
+        setMobileCartOpen(false);
+      }
+      if(event.key!=="Tab"||!mobileCartRef.current)return;
+      const controls=Array.from(mobileCartRef.current.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex="-1"])'
+      )).filter(element=>element.getClientRects().length>0);
+      const first=controls[0],last=controls[controls.length-1];
+      if(!first||!last)return;
+      if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}
+      else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}
+    };
+    window.addEventListener("keydown",onKeyDown);
+    breakpoint.addEventListener("change",onResize);
+    return ()=>{
+      document.body.style.overflow=oldOverflow;
+      window.removeEventListener("keydown",onKeyDown);
+      breakpoint.removeEventListener("change",onResize);
+      mobileSummaryRef.current?.focus();
+    };
+  },[mobileCartOpen,checkoutOpen]);
+
+  const selectedCustomer =
+    customers.find((customer) => customer.id === customerId) ?? null;
+  const pointsPreview = selectedCustomer
+    ? Math.round(total * 0.05 * 100) / 100
+    : 0;
+
+  const productCount = (id: string) =>
+    cart.reduce(
+      (sum, line) => sum + (line.externalId === id ? 1 : 0),
+      0,
+    );
+
+  function add(externalId: string) {
+    setCart((current) => [
+      ...current,
+      {
+        key: globalThis.crypto.randomUUID(),
+        externalId,
+        note: "",
+        serviceMode,extras:[],
+      },
+    ]);
+  }
+
+  function remove(key: string) {
+    setCart((current) => current.filter((line) => line.key !== key));
+  }
+
+  function duplicate(line: CartLine) {
+    setCart((current) => [
+      ...current,
+      {
+        key: globalThis.crypto.randomUUID(),
+        externalId: line.externalId,
+        note: "",
+        serviceMode:line.serviceMode,extras:line.extras.map(e=>({...e})),
+      },
+    ]);
+  }
+
+  function updateServiceMode(key:string,next:ServiceMode){
+    setCart(current=>current.map(line=>line.key===key?{...line,serviceMode:next}:line));
+  }
+
+  function updateExtraQuantity(key:string,id:string,quantity:number){
+    setCart(current=>current.map(line=>{
+      if(line.key!==key)return line;
+      const without=line.extras.filter(extra=>extra.id!==id);
+      return {...line,extras:quantity>0?[...without,{id,quantity}]:without};
+    }));
+  }
+
+  function updateNote(key: string, note: string) {
+    setCart((current) =>
+      current.map((line) => (line.key === key ? { ...line, note } : line)),
+    );
+  }
+
+  if(checkoutOpen&&liveEnabled&&!savedTicket){
+    return <div className="pos-layout" style={{gridTemplateColumns:"minmax(0,1fr)"}}>
+      <section className="card stack" style={{maxWidth:780,margin:"0 auto",width:"100%"}}>
+        <p className="eyebrow">POS · COBRAR</p>
+        <h2>Elegir método de pago</h2>
+        <p className="muted">El pedido sigue en memoria hasta confirmar el cobro. Puedes volver sin perder productos ni notas.</p>
+        {checkoutState.error&&<div className="status-bad" role="alert">
+          No se cobró. {checkoutState.error}
+        </div>}
+        <div className="stack">
+          {cartLines.map((line,index)=><div key={line.key} style={{display:"flex",justifyContent:"space-between",gap:12}}>
+            <div>
+              <strong>{index+1}. {line.item.name}</strong>
+              <p className="muted">{line.serviceMode==="DINE_IN"?"Aquí":"Para llevar"}{line.note?" · "+line.note:""}</p>
+            </div>
             <div style={{textAlign:"right"}}>
               <strong>{money.format(unitPrice(line))}</strong>
               {line.extras.length>0&&<small className="muted" style={{display:"block"}}>
