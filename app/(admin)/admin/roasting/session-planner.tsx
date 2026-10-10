@@ -109,10 +109,17 @@ export function RoastingSessionPlanner({
 
   const plan=useMemo<PlannedBatch[]>(()=>{
     if(!valid)return [];
-    const total=Math.ceil(target/charge);
+    // Confirmed batches can have a different charge (e.g. the last
+    // 200 g or a test batch). Plan the remainder from actual consumption,
+    // not the assumption that every confirmed batch weighed "charge" grams.
+    const postedGreen=confirmed.reduce((sum,b)=>sum+b.greenWeightG,0);
+    const remainingGreen=Math.max(0,target-postedGreen);
+    const total=confirmed.length+Math.ceil(remainingGreen/charge);
     return Array.from({length:total},(_,index)=>{
       const recorded=confirmed[index]??null;
-      const green=recorded?.greenWeightG??Math.min(charge,target-index*charge);
+      const pendingIndex=index-confirmed.length;
+      const green=recorded?.greenWeightG??
+        Math.min(charge,remainingGreen-pendingIndex*charge);
       const expected=green*(1-lossPct/100);
       const key=config.lotId+":"+config.startDate+":"+index;
       const draftWeight=draftWeights[key]??draftWeights["legacy:"+index]??"";
