@@ -2,6 +2,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { getPosCatalog, type PosServiceMode } from "@/src/application/pos/catalog";
 import {priceExtras, readExtraSnapshots, type ExtraRequest} from "@/src/application/pos/extras";
 import {getPosExtraCatalog} from "@/src/application/pos/extra-catalog";
+import {dailyTakeawayTicketLabel,effectiveOrderServiceMode,validateTicketLabel} from "@/src/application/pos/ticket-names";
 import { isCostOnlyComponent, costOnlyRecipeMeasure } from "@/src/application/pos/component-policy";
 import { getDb } from "@/src/infrastructure/db/client";
 import {
@@ -134,6 +135,10 @@ export async function checkoutLiveOrder(input:{
       })),
     };
   });
+  const actualMode=effectiveOrderServiceMode(input.serviceMode,lines.map(line=>({serviceMode:line.lineMode})));
+  if(!input.existingOrderId && actualMode!==input.serviceMode)
+    throw new Error("El tipo de servicio cambió. Actualiza el pedido antes de cobrar.");
+  if(!input.existingOrderId)validateTicketLabel(actualMode,input.tableLabel);
   const total=Number(lines.reduce((sum,line)=>sum+line.total,0).toFixed(2));
   if(total<=0) throw new Error("El total de la venta es inválido.");
   if(input.paymentMethod==="CASH" &&
@@ -145,6 +150,16 @@ export async function checkoutLiveOrder(input:{
   const result=await db.transaction(async tx=>{
     // Serializar cobros de una sucursal: validación de caja, inventario y cliente es atómica.
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${input.storeId}))`);
+    let assignedLabel=input.tableLabel?.trim()||null;
+    if(!input.existingOrderId && !assignedLabel && actualMode==="TAKEAWAY"){
+      const [daily]=await tx.select({count:sql<number>`count(*)::int`})
+        .from(posOrders).where(and(
+          eq(posOrders.organizationId,input.organizationId),
+          eq(posOrders.storeId,input.storeId),
+          eq(posOrders.businessDate,businessDate(now)),
+        ));
+      assignedLabel=dailyTakeawayTicketLabel(Number(daily?.count??0)+1);
+    }
     // Si la comanda existe, se liquida sobre el MISMO folio.
     // El bloqueo protege contra cobros dobles desde distintos dispositivos.
     let pending:typeof posOrders.$inferSelect|undefined;
@@ -334,7 +349,7 @@ export async function checkoutLiveOrder(input:{
           folio:"OP-"+now.toISOString().replace(/[-:TZ.]/g,"").slice(0,14)+"-"+input.clientOrderId.slice(-5).toUpperCase(),
           mode:"LIVE",status:"PAID",serviceMode:input.serviceMode,
           // El nombre identifica también los pedidos para llevar y mixtos.
-          tableLabel:input.tableLabel?.trim()||null,
+          tableLabel:assignedLabel,
           customerId:input.customerId,businessDate:businessDate(now),
           subtotal:total.toFixed(2),total:total.toFixed(2),note:input.note,
           loyaltyPointsPreview:(input.customerId?total*0.05:0).toFixed(2),
