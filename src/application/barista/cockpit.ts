@@ -11,8 +11,6 @@ import { getPosReadiness } from "@/src/application/pos/readiness";
 import { getDb } from "@/src/infrastructure/db/client";
 import {
   espressoQualityChecks,
-  inventoryBalances,
-  inventoryItems,
   operationalEvents,
   roastBarAssignments,
   roastBatches,
@@ -50,23 +48,15 @@ export async function getBaristaCockpit(employee: {
   if (!employee.homeStoreId) throw new Error("Employee has no home store");
 
   const db = getDb();
-  const [inventory, readiness, opsRows] = await Promise.all([
+  const [inventory, readiness] = await Promise.all([
     getOpsInventoryIntelligence(employee.organizationId, employee.homeStoreId),
     getPosReadiness(employee.organizationId, employee.homeStoreId),
-    db.select({
-      id:inventoryItems.id,name:inventoryItems.name,
-      unit:inventoryItems.canonicalUnit,minimumStock:inventoryItems.minimumStock,
-      quantity:inventoryBalances.theoreticalQuantity,
-    }).from(inventoryBalances)
-      .innerJoin(inventoryItems,eq(inventoryItems.id,inventoryBalances.inventoryItemId))
-      .where(and(eq(inventoryBalances.organizationId,employee.organizationId),
-        eq(inventoryBalances.storeId,employee.homeStoreId),
-        eq(inventoryItems.isActive,true),eq(inventoryItems.trackingType,"QUANTITY"))),
   ]);
-  const opsByVariant=new Map(opsRows.map(row=>[row.id,{
-    variantExternalId:row.id,name:row.name,unit:row.unit,quantity:Number(row.quantity),
-    factor:1,minimumStock:row.minimumStock==null?null:Number(row.minimumStock),
+  const opsByVariant=new Map(inventory.smartRows.map(row=>[row.variantExternalId,{
+    variantExternalId:row.variantExternalId,name:row.itemName,unit:row.unitLabel,
+    quantity:row.inStock,factor:1,minimumStock:row.minimumStock,
   }]));
+
 
   const local = localParts();
   const dayStart = new Date(local.date + "T00:00:00-06:00");
