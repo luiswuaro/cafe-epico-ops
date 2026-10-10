@@ -43,22 +43,58 @@ en la pantalla de cobro habitual, sin reconstruir el ticket:
   sin navegación ni pérdida del carrito.
 - Al registrar desde POS se conserva el cliente elegido al entrar a cobrar.
 
-## Consumo de Azucena: política y primera validación visual
+## Beneficios de personal por producto y por empleado (preview)
 
-- Beneficio aprobado: **1 bebida incluida por jornada** y **10% de descuento**
-  en bebidas adicionales. Se registra como consumo del personal (beneficiaria Azucena),
-  distinto del programa de puntos.
-- El selector aparece en la pantalla de **Simular cobro**; no existe una
-  página extra. En espejo calcula cortesía sobre el precio base y deja los extras
-  monetarios aparte. En una bebida adicional calcula 10% sobre base.
-- Solo permite cotizar un ticket de **una bebida**; no combina termo propio
-  ni puntos de cliente ni alimentos. Estas son restricciones conservadoras del
-  prototipo, sujetas a validación operativa.
-- El beneficio todavía NO se ejecuta en LIVE: falta registro de consumo por
-  beneficiaria + fecha de trabajo, idempotencia, control concurrente, afectación
-  completa de inventario/COGS, separación contable y reversas por cancelación.
-- **No habilitar LIVE para personal** hasta completar pruebas contra PostgreSQL
-  aislada. La simulación no registra ni inventario, ni nómina, ni ingresos.
+Cambio de arquitectura: el menú de **Azucena en toda la cuenta** fue sustituido
+por la asignación **por línea de carrito**. El POS obtiene trabajadores activos
+de la misma organización/sucursal; ya no existe una empleada hardcodeada.
+
+Flujo de caja con dos o más personas:
+1. Agregar bebidas al mismo ticket (cliente + trabajadores).
+2. En **Cobrar / Simular cobro**, cada línea se asigna como:
+   * **Cliente / venta normal**, o
+   * **Personal · bebida incluida**, o
+   * **Personal · bebida adicional −10%**.
+3. En las líneas de personal, seleccionar a **qué trabajador** corresponde.
+   Se pueden elegir varios trabajadores distintos en un solo ticket.
+4. Elegir cliente registrado y canjear puntos únicamente contra **las líneas
+   de cliente**. Se suman por separado el cliente y el personal.
+5. En el resumen se muestran: total de lista, descuentos personal, base
+   de cliente, parte de personal, puntos canjeados y monto monetario total.
+   **Sólo el importe monetario de productos del cliente genera el 5%.**
+
+Ejemplo de prueba (valores ilustrativos):
+- Latte cliente $70, bebida incluida del empleado A $60 y bebida adicional
+  de empleado B $80 con $10 de extra: lista $220.
+- Descuento empleados: $60 + $8 = $68.
+- Saldo personal: $82; cliente: $70.
+- Si canjea 20 puntos del cliente: cobro monetario $132 y 2.50 puntos nuevos
+  para el cliente (su pago real fue $50).
+
+Reglas prototipo:
+- El descuento de personal se calcula sobre el precio base, no sobre extras.
+- Una cortesía por trabajador **dentro del mismo ticket**; aún falta bloquear
+  una segunda cortesía en otro ticket de la misma jornada.
+- No acumular descuento de termo y de personal sobre la misma bebida;
+  sí puede usar termo el cliente mientras otra línea sea de personal.
+- Los alimentos quedan fuera de este selector hasta definir la política.
+- El beneficiario no es necesariamente el cajero, por eso se elige empleado.
+- **Política por verificar:** se está simulando el mismo esquema de bebida
+  incluida + 10% para todos los empleados activos. Falta autorización del
+  propietario para establecer reglas individuales.
+
+### Bloqueo antes de operar en LIVE
+
+Los descuentos y cortesías de personal siguen **deshabilitados para cobro
+LIVE**. El botón de confirmar se desactiva cuando hay una línea de personal.
+La prueba actual es UI y cálculo puro sin mutaciones. Pendiente:
+- Reglas configurables por empleado (beneficiario, vigencia, turno/jornada).
+- Movimiento de inventario y COGS de cada producto regalado.
+- Registro transaccional por línea, trabajador y jornada (idempotencia,
+  bloqueo de concurrencia y reversas).
+- Cuentas divididas / comandas guardadas con beneficios por línea.
+- Conciliación con efectivo/tarjeta/transferencia, impuestos y puntos.
+- E2E multiusuario contra PostgreSQL aislada antes de habilitar el uso LIVE.
 
 ## Casos de negocio
 
