@@ -84,6 +84,10 @@ export default async function RoastingPage({
           guardar curvas.
         </p>
         <p>
+          <Link href="/admin/roasting/production">
+            <button>Planificar sesión de 5 kg · HiBean</button>
+          </Link>
+          {" "}
           <Link href="/admin/roasting/compare">
             <button>Comparar batches en Roast Engineer</button>
           </Link>
