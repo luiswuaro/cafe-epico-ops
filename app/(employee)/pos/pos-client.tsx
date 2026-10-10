@@ -341,7 +341,7 @@ export function PosClient({
             <option value="CARD">Tarjeta</option>
             <option value="TRANSFER">Transferencia</option>
           </select>
-        </label>:<p className="status-ok">Cuenta cubierta con puntos. Sin pago en efectivo, tarjeta o transferencia.</p>}
+        </label>:<p className="status-ok">{staffSelected?"Bebida incluida de Azucena: cortesía simulada, sin pago monetario.":"Cuenta cubierta con puntos. Sin pago en efectivo, tarjeta o transferencia."}</p>}
         {previewDue>0&&paymentMethod==="CASH"&&<div className="stack">
           <label>Importe recibido (simulado)
             <input type="number" min="0" step=".01" inputMode="decimal"
@@ -726,7 +726,7 @@ export function PosClient({
             )}
           />
           <input type="hidden" name="serviceMode" value={ticketServiceMode} />
-          <input type="hidden" name="customerId" value={customerId} />
+          <input type="hidden" name="customerId" value={!liveEnabled&&createdCustomer?.id===customerId?"":customerId} />
 
           {!savedTicket && (
             <details className="pos-cancel-panel" style={{padding:"8px 12px"}}>
