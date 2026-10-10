@@ -4,6 +4,7 @@ import Link from "next/link";
 import {createPortal} from "react-dom";
 import {useEffect,useState,useSyncExternalStore} from "react";
 import {usePathname} from "next/navigation";
+import {AppearanceSwitch} from "./appearance-switch";
 
 type IconName="home"|"pos"|"orders"|"cash"|"tasks"|"handoff"|"inventory"|"receipt"|"people"|"insights"|"audit"|"clock"|"recipes"|"sops"|"quality"|"issue"|"manage"|"settings"|"account"|"menu"|"close";
 type Entry={label:string;href:string;icon:IconName};
@@ -80,6 +81,7 @@ export function AppNavClient({canAdmin,canPos,canCash}:{
       entry("Turnos","/admin/reports/shifts","clock"),
       entry("Productividad","/admin/reports/productivity","insights"),
       entry("Tueste","/admin/roasting","quality"),
+      entry("Centro financiero","/admin/finance","insights"),
       entry("Configuración","/admin","settings"),
     ]}]:[]),
     {title:"Mi cuenta",items:[entry("Perfil y seguridad","/account/security","account")]},
@@ -107,6 +109,7 @@ export function AppNavClient({canAdmin,canPos,canCash}:{
           <button type="button" className="ops-drawer-close" onClick={()=>setOpen(false)}
             aria-label="Cerrar menú" autoFocus><Glyph name="close"/></button>
         </header>
+        <div className="ops-drawer-appearance"><AppearanceSwitch/></div>
         <nav className="ops-drawer-list" aria-label="Todas las secciones">
           {groups.map(group=><section key={group.title} className="ops-drawer-group">
             <p>{group.title}</p>
@@ -122,6 +125,7 @@ export function AppNavClient({canAdmin,canPos,canCash}:{
       {navLink(entry("Hoy","/today","home"),true)}
       {canPos&&navLink(entry("POS","/pos","pos"),true)}
       {canPos&&navLink(entry("Mesas","/pos/orders","orders"),true)}
+      {canCash&&navLink(entry("Caja","/pos/cash","cash"),true)}
       <button type="button" className={open?"is-active":""} aria-label="Abrir menú completo"
         aria-expanded={open} onClick={()=>setOpen(true)}>
         <span className="ops-nav-icon"><Glyph name="menu"/></span><span>Más</span>
@@ -137,6 +141,7 @@ export function AppNavClient({canAdmin,canPos,canCash}:{
         {canPos&&navLink(entry("Comandas","/pos/orders","orders"),true)}
         {canCash&&navLink(entry("Caja","/pos/cash","cash"),true)}
       </nav>
+      <AppearanceSwitch compact/>
       <button type="button" className="ops-menu-trigger" onClick={()=>setOpen(!open)}
         aria-expanded={open} aria-controls="ops-drawer"
         aria-label={open?"Cerrar menú completo":"Abrir menú completo"}>

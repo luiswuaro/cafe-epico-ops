@@ -557,14 +557,21 @@ export function PosClient({
           <strong>{money.format(total)}</strong>
         </div>
 
-        {!savedTicket&&<div className="pos-customer-box">
-          <label>
-            Cliente / puntos
+        {!savedTicket&&<section className="pos-customer-box" aria-labelledby="pos-customer-heading">
+          <div className="pos-customer-heading">
+            <span className="pos-customer-icon" aria-hidden="true">◎</span>
+            <div>
+              <h3 id="pos-customer-heading">Cliente y puntos</h3>
+              <p>Programa de lealtad · 5% de cada compra</p>
+            </div>
+          </div>
+          <label className="pos-customer-selector">
+            Identificar cliente
             <select
               value={customerId}
               onChange={(event) => setCustomerId(event.target.value)}
             >
-              <option value="">Sin cliente</option>
+              <option value="">Sin cliente · venta normal</option>
               {customers.map((customer) => (
                 <option key={customer.id} value={customer.id}>
                   {customer.name} · {customer.pointsBalance.toFixed(2)} pts
@@ -572,23 +579,16 @@ export function PosClient({
               ))}
             </select>
           </label>
-
           {selectedCustomer ? (
-            <p className="muted compact-copy">
-              Saldo actual:{" "}
-              <strong>{selectedCustomer.pointsBalance.toFixed(2)} pts</strong>
-              {" · "}
-              Esta compra generaría{" "}
-              <strong>{pointsPreview.toFixed(2)} pts</strong> al 5%.
-            </p>
+            <div className="pos-customer-points" aria-live="polite">
+              <div><span>Saldo disponible</span><strong>{selectedCustomer.pointsBalance.toFixed(2)} pts</strong></div>
+              <div><span>Ganará con esta compra</span><strong>+{pointsPreview.toFixed(2)} pts</strong></div>
+            </div>
           ) : (
-            <p className="muted compact-copy">
-              Selecciona un cliente para calcular el 5% de puntos.
-            </p>
+            <p className="pos-customer-help">Opcional. Puedes continuar sin cliente o registrarlo aquí.</p>
           )}
-
-          <details>
-            <summary>+ Registrar cliente</summary>
+          <details className="pos-customer-registration">
+            <summary><span aria-hidden="true">＋</span> Registrar cliente nuevo</summary>
             <form action={createPosCustomer} className="stack">
               <label>
                 Nombre
@@ -605,7 +605,7 @@ export function PosClient({
               <button type="submit">Guardar cliente</button>
             </form>
           </details>
-        </div>}
+        </section>}
 
         <form id="pos-order-command-form" action={savedTicket?addProductsToLiveCommand:liveEnabled?saveAction:createShadowSale} className="stack pos-checkout">
           {savedTicket&&<>
