@@ -4,6 +4,31 @@
  * elegibilidad y contabilidad transaccional independiente.
  */
 export const POINT_REDEMPTION_MXN_PER_POINT = 1 as const;
+export const LOYALTY_EARN_RATE = 0.05 as const;
+export type MonetaryPaymentMethod = "CASH"|"CARD"|"TRANSFER";
+export type MonetaryPayment = {method:MonetaryPaymentMethod;amount:number};
+/** Exclusivamente efectivo, tarjeta y transferencia: los puntos redimidos
+ * se mantienen fuera de esta lista y nunca generan acumulación. */
+export function calculateEarnedPointsFromRealMoney(paidMxn:number):number {
+  if(!Number.isFinite(paidMxn)||paidMxn<0)throw new Error("Pago monetario inválido.");
+  const cents=Math.round(paidMxn*100);
+  return Math.round((cents*LOYALTY_EARN_RATE)+Number.EPSILON)/100;
+}
+export function calculateEarnedPointsFromMonetaryPayments(payments:MonetaryPayment[]):{
+  monetaryPaid:number;earnedPoints:number;
+} {
+  if(!Array.isArray(payments))throw new Error("Lista de pagos inválida.");
+  let cents=0;
+  for(const payment of payments){
+    if(!["CASH","CARD","TRANSFER"].includes(payment.method)||
+      !Number.isFinite(payment.amount)||payment.amount<0)
+      throw new Error("Solo los pagos reales válidos generan puntos.");
+    cents+=Math.round(payment.amount*100);
+    if(!Number.isSafeInteger(cents))throw new Error("Importe monetario fuera de rango.");
+  }
+  const monetaryPaid=cents/100;
+  return {monetaryPaid,earnedPoints:calculateEarnedPointsFromRealMoney(monetaryPaid)};
+}
 export type BenefitKind = "NONE"|"STAFF_FREE"|"STAFF_10"|"POINTS"|"MANUAL_FIXED"|"MANUAL_PERCENT";
 export type Scope = "LINE"|"TICKET";
 export type BenefitLine = {id:string;name:string;category:"CALIENTES"|"FRÍAS"|"ALIMENTOS";basePrice:number;extras:number;ownThermos:boolean};
@@ -100,7 +125,7 @@ export function calculateBenefitPreview(lines:BenefitLine[],request:BenefitReque
     });
   }
   const due=round(Math.max(0,currentTotal-ordinaryDiscount-redeemedValue));
-  const earnablePoints=round(due*.05);
+  const earnablePoints=warnings.length===0?calculateEarnedPointsFromRealMoney(due):0;
   return {subtotal,thermosSavings,ordinaryDiscount,redeemedPoints,redeemedValue,due,
     earnablePoints,warnings,valid:warnings.length===0,perLine:mapped};
 }
