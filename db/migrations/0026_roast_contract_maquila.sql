@@ -1,6 +1,6 @@
 -- MAQUILA: café verde de terceros; no se mezcla con inventario propio ni Loyverse.
 -- Datos accesibles únicamente desde servidor autenticado con roast.manage.
-CREATE TABLE IF NOT EXISTS public.roast_contract_clients (
+CREATE TABLE IF NOT EXISTS roast_contract_clients (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
   name text NOT NULL CHECK (length(btrim(name)) >= 2),
@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS public.roast_contract_clients (
 );
 CREATE INDEX IF NOT EXISTS roast_contract_clients_org_idx ON public.roast_contract_clients(organization_id);
 
-CREATE TABLE IF NOT EXISTS public.roast_contract_lots (
+CREATE TABLE IF NOT EXISTS roast_contract_lots (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
   client_id uuid NOT NULL REFERENCES public.roast_contract_clients(id) ON DELETE RESTRICT,
@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS public.roast_contract_lots (
 );
 CREATE INDEX IF NOT EXISTS roast_contract_lots_org_client_idx ON public.roast_contract_lots(organization_id,client_id);
 
-CREATE TABLE IF NOT EXISTS public.roast_contract_batches (
+CREATE TABLE IF NOT EXISTS roast_contract_batches (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
   lot_id uuid NOT NULL REFERENCES public.roast_contract_lots(id) ON DELETE RESTRICT,
@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS public.roast_contract_batches (
 );
 CREATE INDEX IF NOT EXISTS roast_contract_batches_lot_date_idx ON public.roast_contract_batches(lot_id,roasted_at);
 
-CREATE TABLE IF NOT EXISTS public.roast_contract_deliveries (
+CREATE TABLE IF NOT EXISTS roast_contract_deliveries (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
   batch_id uuid NOT NULL REFERENCES public.roast_contract_batches(id) ON DELETE RESTRICT,
