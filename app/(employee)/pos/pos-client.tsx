@@ -1,224 +1,7 @@
-"use client";
-
-import { useActionState, useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
-import { addProductsToLiveCommand } from "./orders/live-actions";
-import {
-  createPosCustomer,
-  saveLiveCommand,
-  createShadowCommand,
-  createShadowSale,
-} from "./actions";
-import { submitLiveSale } from "./live-actions";
-
-type CatalogItem = {
-  id: string;
-  name: string;
-  category: "CALIENTES" | "FRÍAS" | "ALIMENTOS";
-  price: number;
-};
-
-type Customer = {
-  id: string;
-  name: string;
-  phone: string | null;
-  email: string | null;
-  pointsBalance: number;
-};
-
-type ServiceMode="DINE_IN"|"TAKEAWAY";
-type CartLine = {
-  key:string;externalId:string;note:string;serviceMode:ServiceMode;espressoShots:number;
-};
-type SavedTicket={
-  id:string;folio:string;name:string;total:number;customerId:string|null;
-  status:string;serviceMode:ServiceMode;
-  lines:Array<{id:string;name:string;quantity:number;note:string|null;unitPrice:number;serviceMode:ServiceMode;isAdditionalRound:boolean;roundId:string|null;extrasLabel:string|null}>;
-};
-
-type Props = {
-  catalog: CatalogItem[];
-  customers: Customer[];
-  selectedCustomerId?: string | null;
-  cashOpen: boolean;
-  liveEnabled: boolean;
-  savedTicket?:SavedTicket|null;
-  canOverrideStock:boolean;
-};
-
-function normalizeSearch(value:string) {
-  return value.normalize("NFD").replace(/[\u0300-\u036f]/g,"")
-    .toLocaleLowerCase("es-MX").trim();
-}
-
-const money = new Intl.NumberFormat("es-MX", {
-  style: "currency",
-  currency: "MXN",
-  maximumFractionDigits: 2,
-});
-
-export function PosClient({
-  catalog,
-  customers,
-  selectedCustomerId = null,
-  cashOpen,
-  liveEnabled,
-  savedTicket=null,
-  canOverrideStock,
-}: Props) {
-  const [category, setCategory] = useState<"TODAS" | CatalogItem["category"]>(
-    "CALIENTES",
-  );
-  const [query, setQuery] = useState("");
-  const [cart, setCart] = useState<CartLine[]>([]);
-  const [serviceMode, setServiceMode] =
-    useState<ServiceMode>(savedTicket?.serviceMode??"DINE_IN");
-  const [customerId, setCustomerId] = useState(savedTicket?.customerId??selectedCustomerId??"");
-  const [additionRequestId]=useState(()=>globalThis.crypto.randomUUID());
-  const [liveClientOrderId] = useState(() => globalThis.crypto.randomUUID());
-  const [paymentMethod, setPaymentMethod] = useState<"CASH"|"CARD"|"TRANSFER">(cashOpen ? "CASH" : "CARD");
-  const [tendered, setTendered] = useState("");
-  const [checkoutOpen,setCheckoutOpen]=useState(false);
-  const [mobileCartOpen,setMobileCartOpen]=useState(false);
-  const mobileCartRef=useRef<HTMLElement>(null);
-  const mobileCartCloseRef=useRef<HTMLButtonElement>(null);
-  const mobileSummaryRef=useRef<HTMLButtonElement>(null);
-  const [allowStockShortage,setAllowStockShortage]=useState(false);
-  const [tableLabel,setTableLabel]=useState("");
-  const [orderNote,setOrderNote]=useState("");
-  const [checkoutState,checkoutAction,checkoutPending]=useActionState(submitLiveSale,{error:null});
-  const [saveState,saveAction,savePending]=useActionState(saveLiveCommand,{error:null});
-
-  const catalogById = useMemo(
-    () => new Map(catalog.map((item) => [item.id, item])),
-    [catalog],
-  );
-
-  const visible = useMemo(() => {
-    const q = normalizeSearch(query);
-    return catalog.filter((item) => {
-      const categoryOk = category === "TODAS" || item.category === category;
-      const queryOk = !q || normalizeSearch(item.name).includes(q);
-      return categoryOk && queryOk;
-    });
-  }, [catalog, category, query]);
-
-  const cartLines = cart.flatMap((line) => {
-    const item = catalogById.get(line.externalId);
-    return item ? [{ ...line, item }] : [];
-  });
-
-  const historicalRoundIds=[...new Set((savedTicket?.lines??[]).map(line=>line.roundId??"INITIAL"))];
-  const unitPrice=(line:typeof cartLines[number])=>line.item.price+line.espressoShots*10;
-  const newSubtotal=cartLines.reduce((sum,line)=>sum+unitPrice(line),0);
-  const total=(savedTicket?.total??0)+newSubtotal;
-  const units=(savedTicket?.lines.reduce((sum,line)=>sum+line.quantity,0)??0)+cartLines.length;
-
-  useEffect(()=>{
-    if(!mobileCartOpen)return;
-    const breakpoint=window.matchMedia("(max-width: 760px)");
-    if(!breakpoint.matches)return;
-    const oldOverflow=document.body.style.overflow;
-    document.body.style.overflow="hidden";
-    mobileCartCloseRef.current?.focus();
-    const onResize=()=>{if(!breakpoint.matches)setMobileCartOpen(false);};
-    const onKeyDown=(event:KeyboardEvent)=>{
-      if(event.key==="Escape"){
-        event.preventDefault();
-        setMobileCartOpen(false);
-      }
-      if(event.key!=="Tab"||!mobileCartRef.current)return;
-      const controls=Array.from(mobileCartRef.current.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex="-1"])'
-      )).filter(element=>element.getClientRects().length>0);
-      const first=controls[0],last=controls[controls.length-1];
-      if(!first||!last)return;
-      if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}
-      else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}
-    };
-    window.addEventListener("keydown",onKeyDown);
-    breakpoint.addEventListener("change",onResize);
-    return ()=>{
-      document.body.style.overflow=oldOverflow;
-      window.removeEventListener("keydown",onKeyDown);
-      breakpoint.removeEventListener("change",onResize);
-      mobileSummaryRef.current?.focus();
-    };
-  },[mobileCartOpen,checkoutOpen]);
-
-  const selectedCustomer =
-    customers.find((customer) => customer.id === customerId) ?? null;
-  const pointsPreview = selectedCustomer
-    ? Math.round(total * 0.05 * 100) / 100
-    : 0;
-
-  const productCount = (id: string) =>
-    cart.reduce(
-      (sum, line) => sum + (line.externalId === id ? 1 : 0),
-      0,
-    );
-
-  function add(externalId: string) {
-    setCart((current) => [
-      ...current,
-      {
-        key: globalThis.crypto.randomUUID(),
-        externalId,
-        note: "",
-        serviceMode,espressoShots:0,
-      },
-    ]);
-  }
-
-  function remove(key: string) {
-    setCart((current) => current.filter((line) => line.key !== key));
-  }
-
-  function duplicate(line: CartLine) {
-    setCart((current) => [
-      ...current,
-      {
-        key: globalThis.crypto.randomUUID(),
-        externalId: line.externalId,
-        note: "",
-        serviceMode:line.serviceMode,espressoShots:line.espressoShots,
-      },
-    ]);
-  }
-
-  function updateServiceMode(key:string,next:ServiceMode){
-    setCart(current=>current.map(line=>line.key===key?{...line,serviceMode:next}:line));
-  }
-
-  function setEspressoShots(key:string,count:number){
-    setCart(rows=>rows.map(line=>line.key===key?{...line,espressoShots:Math.max(0,Math.min(2,count))}:line));
-  }
-
-  function updateNote(key: string, note: string) {
-    setCart((current) =>
-      current.map((line) => (line.key === key ? { ...line, note } : line)),
-    );
-  }
-
-  if(checkoutOpen&&liveEnabled&&!savedTicket){
-    return <div className="pos-layout" style={{gridTemplateColumns:"minmax(0,1fr)"}}>
-      <section className="card stack" style={{maxWidth:780,margin:"0 auto",width:"100%"}}>
-        <p className="eyebrow">POS · COBRAR</p>
-        <h2>Elegir método de pago</h2>
-        <p className="muted">El pedido sigue en memoria hasta confirmar el cobro. Puedes volver sin perder productos ni notas.</p>
-        {checkoutState.error&&<div className="status-bad" role="alert">
-          No se cobró. {checkoutState.error}
-        </div>}
-        <div className="stack">
-          {cartLines.map((line,index)=><div key={line.key} style={{display:"flex",justifyContent:"space-between",gap:12}}>
-            <div>
-              <strong>{index+1}. {line.item.name}</strong>
-              <p className="muted">{line.serviceMode==="DINE_IN"?"Aquí":"Para llevar"}{line.note?" · "+line.note:""}</p>
-            </div>
             <div style={{textAlign:"right"}}>
               <strong>{money.format(unitPrice(line))}</strong>
-              {line.espressoShots>0&&<small className="muted" style={{display:"block"}}>
-                + {line.espressoShots} espresso extra · {money.format(line.espressoShots*10)}
+              {line.extras.length>0&&<small className="muted" style={{display:"block"}}>
+                Extras · +{money.format(extraCharge(line))}
               </small>}
             </div>
           </div>)}
@@ -229,7 +12,7 @@ export function PosClient({
           <input type="hidden" name="cart" value={JSON.stringify(cartLines.map(line=>({
             externalId:line.externalId,quantity:1,note:line.note.trim()||null,
             serviceMode:line.serviceMode,
-            extras:line.espressoShots?[{id:"ESPRESSO_SHOT",quantity:line.espressoShots}]:[]
+            extras:line.extras
           })))}/>
           <input type="hidden" name="serviceMode" value={serviceMode}/>
           <input type="hidden" name="customerId" value={customerId}/>
@@ -457,18 +240,28 @@ export function PosClient({
                       <option value="TAKEAWAY">Para llevar · con vaso y tapa</option>
                     </select>
                   </label>
-                  {line.item.category!=="ALIMENTOS"&&<div className="row" style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginTop:10}}>
-                    <span>Espresso extra · +$10.00 c/u</span>
-                    <div style={{display:"flex",alignItems:"center",gap:10}}>
-                      <button type="button" disabled={line.espressoShots===0}
-                        onClick={()=>setEspressoShots(line.key,line.espressoShots-1)}
-                        aria-label={"Quitar espresso extra de "+line.item.name}>−</button>
-                      <strong aria-live="polite">{line.espressoShots}</strong>
-                      <button type="button" disabled={line.espressoShots>=2}
-                        onClick={()=>setEspressoShots(line.key,line.espressoShots+1)}
-                        aria-label={"Añadir espresso extra a "+line.item.name}>+</button>
+                  {line.item.category!=="ALIMENTOS"&&<details
+                    className="pos-cancel-panel" style={{marginTop:8,padding:"6px 10px"}}>
+                    <summary style={{cursor:"pointer",fontWeight:700}}>
+                      + Extras {line.extras.length>0?" · "+line.extras.reduce((n,e)=>n+e.quantity,0)+" seleccionado(s) · +"+money.format(extraCharge(line)):""}
+                    </summary>
+                    <div className="stack" style={{paddingTop:10,gap:8}}>
+                      {extrasOptions.length===0&&<small className="muted">Sin extras configurados.</small>}
+                      {extrasOptions.map(option=>{
+                        const qty=line.extras.find(e=>e.id===option.id)?.quantity??0;
+                        return <label key={option.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
+                          <span>{option.label} · <strong>+{money.format(option.price)}</strong>
+                            {!option.enabled&&<small className="muted" style={{display:"block"}}>{option.reason}</small>}
+                          </span>
+                          <select aria-label={option.label+" para "+line.item.name}
+                            disabled={!option.enabled} value={qty}
+                            onChange={event=>updateExtraQuantity(line.key,option.id,Number(event.target.value))}>
+                            {Array.from({length:option.maxQuantity+1},(_,n)=><option key={n} value={n}>{n}</option>)}
+                          </select>
+                        </label>;
+                      })}
                     </div>
-                  </div>}
+                  </details>}
                   <input
                     className="pos-line-note"
                     value={line.note}
@@ -573,7 +366,7 @@ export function PosClient({
                 quantity: 1,
                 note: line.note.trim() || null,
                 serviceMode:line.serviceMode,
-                extras:line.espressoShots?[{id:"ESPRESSO_SHOT",quantity:line.espressoShots}]:[],
+                extras:line.extras,
               })),
             )}
           />
