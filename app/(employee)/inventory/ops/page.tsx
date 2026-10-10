@@ -7,7 +7,7 @@ import { assertEmployeePermission, employeeHasPermission } from "@/src/infrastru
 import { getDb } from "@/src/infrastructure/db/client";
 import {
   inventoryBalances, inventoryItems, inventoryLocations,
-  inventoryMovements, loyverseInventoryMappings,
+  inventoryMovements,
 } from "@/src/infrastructure/db/schema";
 import { createOpsInventoryItem, registerOpsInventoryMovement } from "./actions";
 
@@ -40,7 +40,7 @@ export default async function OpsInventoryPage({
     employeeHasPermission(employee.id,"inventory.item.manage",employee.homeStoreId),
   ]);
   const db=getDb();
-  const [balances,locations,movements,mappings]=await Promise.all([
+  const [balances,locations,movements]=await Promise.all([
     db.select({
       id:inventoryItems.id,name:inventoryItems.name,category:inventoryItems.category,
       sku:inventoryItems.sku,unit:inventoryItems.canonicalUnit,
@@ -68,27 +68,18 @@ export default async function OpsInventoryPage({
       .where(and(eq(inventoryMovements.organizationId,employee.organizationId),
         eq(inventoryMovements.storeId,employee.homeStoreId)))
       .orderBy(desc(inventoryMovements.occurredAt)).limit(70),
-    db.select({itemId:loyverseInventoryMappings.inventoryItemId})
-      .from(loyverseInventoryMappings).where(and(
-        eq(loyverseInventoryMappings.organizationId,employee.organizationId),
-        eq(loyverseInventoryMappings.storeId,employee.homeStoreId),
-        eq(loyverseInventoryMappings.isActive,true),
-      )),
   ]);
   const locationNames=new Map(locations.map(l=>[l.id,l.name]));
-  const mapped=new Set(mappings.map(m=>m.itemId));
   const available=balances.filter(b=>b.trackingType==="QUANTITY");
   return <main className="shell pos-shell">
     <section className="hero pos-hero">
       <div>
         <p className="eyebrow">CAFÉ ÉPICO · INVENTARIO INTERNO</p>
         <h1>Inventario OPS</h1>
-        <p className="muted">Existencia real confirmada de OPS, independiente del espejo histórico de Loyverse. Compras, mermas, salidas y ajustes quedan auditados.</p>
+        <p className="muted">Inventario oficial de Café Épico. Ventas, compras, mermas y ajustes se reflejan en existencias OPS con historial auditable.</p>
       </div>
       <div className="pos-result-actions">
-        <Link className="button" href="/admin/pos/inventory-setup">Importar insumos de Loyverse</Link>
         <Link className="button" href="/pos/inventory-audit">Auditar recetas</Link>
-        <Link className="button" href="/inventory">Ver espejo Loyverse</Link>
       </div>
     </section>
     {(params.posted||params.created)&&<section className="card status-ok" role="status">
@@ -97,7 +88,7 @@ export default async function OpsInventoryPage({
     <section className="card stack">
       <h2>Existencias OPS · {available.length} renglones</h2>
       <p className="muted">El agua potable y el hielo propio se contabilizan únicamente en el escandallo y no aparecen como existencias descontables. Para sumar compras utiliza «Entrada». Para corregir después de contar utiliza «Ajuste por conteo», que reemplaza la cantidad actual (no la suma).</p>
-      {available.length===0&&<p>No hay saldos internos. Utiliza «Importar insumos de Loyverse» para confirmar el primer conteo.</p>}
+      {available.length===0&&<p>No hay insumos registrados. Da de alta los productos existentes desde este inventario.</p>}
       <SearchableCollection
         label="insumos de inventario"
         placeholder="Ej. leche, maracuyá, vaso, SKU..."
@@ -115,13 +106,12 @@ export default async function OpsInventoryPage({
             searchText:[
               item.sku??"",item.category,
               locationNames.get(item.locationId)??"",
-              mapped.has(item.id)?"Mapeado":"Sin mapear",
             ].join(" "),
             content: <details className="task" style={{padding:16}}>
           <summary>
             <strong>{item.name}</strong> · <strong>{qty.format(current)} {item.unit}</strong>
             {low&&<span className="status-warn"> · BAJO</span>}
-            <span className="muted"> · {locationNames.get(item.locationId)??"Ubicación"} · {mapped.has(item.id)?"Receta mapeada":"Sin vínculo a receta"}</span>
+            <span className="muted"> · {locationNames.get(item.locationId)??"Ubicación"}</span>
           </summary>
           <div className="stack" style={{marginTop:12}}>
             <p className="muted">Existencia actual: {qty.format(current)} {item.unit}. Cada movimiento conserva cantidad anterior, diferencia, responsable y motivo.</p>
@@ -156,7 +146,7 @@ export default async function OpsInventoryPage({
     </section>
     {canAdjust&&canCreate&&<section className="card stack">
       <h2>Crear insumo interno nuevo</h2>
-      <p className="muted">Para insumos que NO están ya en Loyverse. Si existe en Loyverse, usa «Importar insumos de Loyverse» y vincúlalo a la receta; evita duplicados.</p>
+      <p className="muted">Comprueba primero que el insumo no exista en OPS para evitar duplicados. La receta y la ubicación se configuran independientemente.</p>
       <form action={createOpsInventoryItem} className="stack">
         <input type="hidden" name="operationId" value={randomUUID()}/>
         <label>Nombre del insumo<input name="name" required minLength={2} maxLength={150}/></label>
