@@ -12,9 +12,29 @@ export type KitchenLine = {
 export type KitchenSlip = {
   folio: string;
   table: string;
+  customerName?: string | null;
   orderNote: string | null;
   lines: KitchenLine[];
 };
+
+/**
+ * Entrega de pedidos: la etiqueta escrita en el ticket manda sobre
+ * la cuenta de puntos. Si no hay ninguna, el folio corto identifica
+ * el pedido sin inventar un nombre ni imprimir datos personales.
+ */
+export function kitchenOrderIdentity(input:{
+  ticketLabel:string|null|undefined;
+  customerName:string|null|undefined;
+  folio:string;
+}):{table:string;customerName:string|null}{
+  const label=input.ticketLabel?.trim()||"";
+  const customer=input.customerName?.trim()||"";
+  const table=label||customer||"PEDIDO "+input.folio.slice(-6);
+  const extraCustomer=customer&&label&&
+    customer.toLocaleLowerCase("es")!==label.toLocaleLowerCase("es")
+    ?customer:null;
+  return {table,customerName:extraCustomer};
+}
 
 export const kitchenCategoryLabel=(category:string)=>category==="CALIENTES"
   ?"CALIENTES":category==="FRÍAS"||category==="FRIAS"?"FRÍAS":"ALIMENTOS";
