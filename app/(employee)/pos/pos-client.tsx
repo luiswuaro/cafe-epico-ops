@@ -191,7 +191,6 @@ export function PosClient({
   const staffSelected=staffBenefit!=="NONE";
   const staffPreviewDue=staffSelected
     ?Math.max(0,Math.round((total-staffQuote.discount)*100)/100):total;
-  const staffQuoteValid=staffQuote.warnings.length===0;
   const selectedCustomer =
     customers.find((customer) => customer.id === customerId) ??
     (createdCustomer?.id===customerId?createdCustomer:null);
