@@ -146,7 +146,7 @@ export async function getFinancialPreview(organizationId: string) {
     "Sólo ventas pagadas en OPS LIVE. Tickets antiguos Loyverse y SHADOW no se vuelven a sumar.",
     "COGS de receta: costos actualmente configurados, no necesariamente costo histórico de compra.",
     "Agua con tarifa estimada si viene del snapshot; hielo y otros insumos sin precio reducen la cobertura.",
-    "Nómina, IVA, RESICO, depreciación, comisiones y gastos extraordinarios requieren conciliación real.",
+    "IVA 16% sin acreditamiento e ISR RESICO 2% se calculan en el simulador sobre ventas OPS con IVA incluido; no incluyen otros giros, retenciones ni declaración SAT.",
   ];
   return {
     month: localMonth, saleStart: dates.length ? new Date(Math.min(...dates.map(x => x.valueOf()))).toISOString() : null,
