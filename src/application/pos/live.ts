@@ -1,6 +1,7 @@
 import { and, eq, sql } from "drizzle-orm";
 import { getPosCatalog, type PosServiceMode } from "@/src/application/pos/catalog";
 import {priceExtras, readExtraSnapshots, type ExtraRequest} from "@/src/application/pos/extras";
+import {getPosExtraCatalog} from "@/src/application/pos/extra-catalog";
 import { isCostOnlyComponent, costOnlyRecipeMeasure } from "@/src/application/pos/component-policy";
 import { getDb } from "@/src/infrastructure/db/client";
 import {
@@ -63,6 +64,7 @@ export async function checkoutLiveOrder(input:{
     :[];
   const byStoredId=new Map(stored.map(line=>[line.id,line]));
   const catalog=await getPosCatalog(input.organizationId,{includeDisabled:Boolean(input.existingOrderId)});
+  const extrasCatalog=await getPosExtraCatalog(input.organizationId);
   const products=new Map(catalog.map(item=>[item.id,item]));
   const lines=input.cart.map(line=>{
     const item=products.get(line.externalId);
@@ -86,7 +88,7 @@ export async function checkoutLiveOrder(input:{
       throw new Error("El servicio de la línea guardada no coincide.");
     const resolvedExtras=snapshot
       ?{unitPrice:0,extras:readExtraSnapshots(snapshot.expectedConsumption),components:[]}
-      :priceExtras(line.extras,item,catalog);
+      :priceExtras(line.extras,item,extrasCatalog);
     const frozen= snapshot?.expectedConsumption?.components;
     const snapshotQuantity=snapshot?Number(snapshot.quantity):0;
     const recipeComponents=snapshot
