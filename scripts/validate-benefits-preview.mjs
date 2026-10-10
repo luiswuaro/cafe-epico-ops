@@ -11,7 +11,22 @@ try {
   fs.writeFileSync(path.join(dir,"calc.cjs"),ts.transpileModule(source,{compilerOptions:{
     target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS,
   }}).outputText);
-  const {calculateBenefitPreview:calc}=createRequire(path.join(dir,"run.cjs"))("./calc.cjs");
+  const {calculateBenefitPreview:calc,calculateEarnedPointsFromRealMoney:earn,
+    calculateEarnedPointsFromMonetaryPayments:earnPayments}=createRequire(path.join(dir,"run.cjs"))("./calc.cjs");
+  // Las compras se premian solo por dinero efectivamente cobrado.
+  assert.equal(earn(100),5);
+  assert.equal(earn(0),0);
+  assert.equal(earn(54.65),2.73);
+  assert.equal(earnPayments([{method:"CASH",amount:100}]).earnedPoints,5);
+  assert.equal(earnPayments([{method:"CARD",amount:100}]).earnedPoints,5);
+  assert.equal(earnPayments([{method:"TRANSFER",amount:100}]).earnedPoints,5);
+  assert.deepEqual(earnPayments([
+    {method:"CASH",amount:25},{method:"CARD",amount:45},
+    {method:"TRANSFER",amount:30},
+  ]),{monetaryPaid:100,earnedPoints:5});
+  assert.throws(()=>earnPayments([{method:"POINTS",amount:50}]));
+  assert.throws(()=>earnPayments([{method:"CASH",amount:-1}]));
+
   const latte={id:"a",name:"Latte",category:"CALIENTES",basePrice:60,extras:0,ownThermos:false};
   const taro={id:"b",name:"Taro frío",category:"FRÍAS",basePrice:70,extras:0,ownThermos:false};
   const input=(kind,other={})=>({
@@ -33,6 +48,7 @@ try {
   assert.equal(r.valid,true);
   assert.equal(r.redeemedPoints,10);
   assert.equal(r.due,50);
+  assert.equal(r.earnablePoints,2.5); // $60 - $10 pts = $50 real
   r=calc([latte],input("POINTS",{value:20,customerSelected:false}));
   assert.equal(r.valid,false);
   assert.equal(r.redeemedPoints,0);
@@ -57,6 +73,16 @@ try {
   assert.equal(r.valid,true);
   assert.equal(r.due,0);
   assert.equal(r.earnablePoints,0);
+  // Cuenta de $150; 50 puntos (50 MXN) + 100 MXN cobrados = 5 pts nuevos.
+  const latte90={...latte,basePrice:90};
+  r=calc([latte90,taro],input("POINTS",{scope:"TICKET",value:50,availablePoints:50}));
+  assert.equal(r.valid,true);
+  assert.equal(r.due,110);
+  assert.equal(r.earnablePoints,5.5);
+  r=calc([{...latte,basePrice:80},taro],input("POINTS",{scope:"TICKET",value:50,availablePoints:50}));
+  assert.equal(r.due,100);
+  assert.equal(r.earnablePoints,5);
+
   r=calc([latte,taro],input("MANUAL_FIXED",{scope:"TICKET",value:5}));
   assert.equal(r.valid,true);
   assert.equal(r.ordinaryDiscount,5);
@@ -75,7 +101,7 @@ try {
   assert.equal(r.valid,false);
   r=calc([latte],input("MANUAL_FIXED",{reason:"",value:5}));
   assert.equal(r.valid,false);
-  console.log("POS beneficios preview: PASS (termo, personal, puntos, límites y descuentos)");
+  console.log("POS beneficios preview: PASS (termo, personal, 1pt=1MXN, 5% sobre dinero real, pagos mixtos, límites y descuentos)");
 } finally {
   fs.rmSync(dir,{recursive:true,force:true});
 }
