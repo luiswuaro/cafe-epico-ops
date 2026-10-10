@@ -194,50 +194,96 @@ export function FinancialWorkbench({data}:{data:Data}){
       <article className="card"><p className="eyebrow">COGS CONOCIDO</p><div className="metric">{money.format(knownCogs)}</div>
         <p>Componentes costificados: {priced}/{counted}</p>
         <small className="muted">{counted?Math.round(priced/counted*100):0}% cobertura; faltantes no contados como costo cero</small></article>
-      <article className="card"><p className="eyebrow">FIJOS MENSUALES · PRESUPUESTO</p>
-        <div className="metric">{money.format(fixedMonthly)}</div>
-        <p>Devengado proporcional estimado: {money.format(proratedFixed)}</p></article>
-      <article className="card"><p className="eyebrow">TECHO PROVISIONAL DE UTILIDAD</p>
+      <article className="card"><p className="eyebrow">GASTO RECURRENTE MENSUAL</p>
+        <div className="metric">{money.format(totalMonthly)}</div>
+        <p>Fijos: {money.format(fixedMonthly)} · Otros recurrentes: {money.format(variableMonthly)}</p>
+        <small className="muted">+ Puntuales del mes: {money.format(oneTimeExpense)} · cargo presupuestado al día: {money.format(expenseCharge)}</small>
+      </article>
+      <article className="card"><p className="eyebrow">IVA 16% + ISR RESICO 2%</p>
+        <div className="metric">{money.format(taxes.totalTaxes)}</div>
+        <p>IVA: {money.format(taxes.vat)} · ISR: {money.format(taxes.isr)}</p>
+        <small className="muted">Supuesto: precios con IVA incluido; IVA acreditable $0.</small>
+      </article>
+      <article className="card"><p className="eyebrow">TECHO PROVISIONAL DESPUÉS DE IMPUESTOS</p>
         <div className="metric">{money.format(upperNet)}</div>
         <p className="status-warn">NO es utilidad libre auditada</p>
-        <small className="muted">Descontados costos conocidos, gasto fijo proporcional, comisión modelada y reservas. Falta COGS no valorizado.</small></article>
+        <small className="muted">Incluye impuestos estimados y gastos que captures. Faltan insumos sin precio y conciliar pagos reales.</small>
+      </article>
     </section>
 
     <section className="card stack">
-      <h2>Conciliación financiera · mes en curso</h2>
-      <p className="muted">Los gastos son supuestos editables; no equivalen a facturas pagadas ni salen de caja. No se suman aquí ventas de Loyverse ni tickets SHADOW.</p>
+      <h2>Estado de resultados · {data.month}</h2>
+      <p className="muted">Ingresos de tickets cobrados OPS LIVE. Todos los precios se suponen con IVA incluido al 16%. No se suman tickets SHADOW, Loyverse ni ingresos de ingeniería ajenos al OPS.</p>
       <div className="table-scroll"><table>
         <tbody>
-        {[
-          ["Ventas pagadas OPS LIVE",data.sales],
-          ["− Costo de insumos y empaque con precio conocido",-knownCogs],
-          ["− Comisión tarjeta modelada ("+cardRate+"% de "+money.format(cardSales)+")",-cardCost],
-          ["= Contribución provisional",contribution],
-          ["− Fijos devengados estimados ("+currentDay+"/"+totalDays+" del mes)",-proratedFixed],
-          ["− Reservas fiscales ingresadas manualmente",-taxReserve],
-          ["− Extraordinarios ingresados manualmente",-extraCost],
-          ["= Techo provisional, sujeto a costos faltantes",upperNet]
-        ].map(([label,value],i)=><tr key={String(label)}><td>{i===7?<strong>{String(label)}</strong>:String(label)}</td>
-          <td style={{textAlign:"right"}}><strong>{money.format(Number(value))}</strong></td></tr>)}
+          {[
+            ["Ventas cobradas, IVA incluido",data.sales],
+            ["− IVA trasladado 16% (sin IVA acreditable)",-taxes.vat],
+            ["= Ventas base sin IVA",taxes.beforeVat],
+            ["− ISR RESICO supuesto 2% sobre ingresos sin IVA",-taxes.isr],
+            ["− Insumos y empaques con costo conocido",-knownCogs],
+            ["− Comisiones de tarjeta estimadas ("+cardRate+"% de "+money.format(cardSales)+")",-cardCost],
+            ["= Contribución provisional después de impuestos",contribution],
+            ["− Gastos mensuales proporcionales ("+currentDay+"/"+totalDays+" días)",-proratedMonthly],
+            ["− Gastos puntuales del mes",-oneTimeExpense],
+            ["= Resultado provisional antes de costos faltantes",upperNet]
+          ].map(([label,value],i)=><tr key={String(label)}>
+            <td>{[2,6,9].includes(i)?<strong>{String(label)}</strong>:String(label)}</td>
+            <td style={{textAlign:"right"}}><strong>{money.format(Number(value))}</strong></td>
+          </tr>)}
         </tbody>
       </table></div>
-      <p className="status-warn">Componentes sin costo: {unpriced.length?unpriced.join(", "):"ninguno identificado en las líneas registradas"}. Si faltan, la utilidad aparente está sobreestimada. Descuentos reales pendientes: esta pantalla sólo simula reglas nuevas.</p>
+      <small className="muted">Control fiscal parametrizado: IVA {IVA_RATE_PERCENT}% sobre venta base, acreditamiento $0; ISR {ISR_RESICO_ASSUMED_RATE_PERCENT}% sobre venta base sin IVA, sin deducción de gastos. Ejemplo: $116 cobrados = $100 base + $16 IVA + $2 de ISR; tras impuestos quedan $98 antes de costos. Son proyecciones operativas, no determinación fiscal oficial.</small>
+      {legacyTaxWarning&&<p className="status-warn">La antigua reserva fiscal manual no se trasladó al nuevo simulador para evitar duplicar IVA e ISR. Los demás gastos anteriores sí se conservaron.</p>}
+      <p className="status-warn">Insumos sin precio: {unpriced.length?unpriced.join(", "):"ninguno identificado"}. Faltantes no implican costo cero. Los gastos capturados aquí son presupuestos o registros manuales, no comprobantes bancarios conciliados.</p>
+    </section>
+
+    <section className="card stack">
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">CONTROL DE GASTOS · EDITABLE</p>
+          <h2>Gastos corrientes, fijos y extraordinarios</h2>
+        </div>
+        <button type="button" onClick={addExpense} disabled={expenses.length>=120}>+ Añadir gasto</button>
+      </div>
+      <p className="muted">Puedes modificar los conceptos iniciales, añadir cuantos gastos necesites y eliminarlos. Mensual: se prorratea hasta hoy; puntual: se descuenta completo sólo en {data.month}. Los datos quedan guardados únicamente en este navegador en la versión de pruebas.</p>
+      <div className="table-scroll"><table>
+        <thead><tr><th>Concepto</th><th>Tipo</th><th>Periodicidad</th><th>Importe MXN</th><th>Registro</th><th>Acción</th></tr></thead>
+        <tbody>
+          {currentExpenses.map(e=><tr key={e.id}>
+            <td><input aria-label={"Concepto de gasto "+e.id} value={e.name}
+              maxLength={100} onChange={event=>updateExpense(e.id,{name:event.target.value})}/></td>
+            <td><select aria-label={"Clasificación de "+e.name} value={e.classification}
+              onChange={event=>updateExpense(e.id,{classification:event.target.value as Expense["classification"]})}>
+              <option value="FIXED">Fijo</option><option value="VARIABLE">Variable</option>
+            </select></td>
+            <td><select aria-label={"Periodicidad de "+e.name} value={e.recurrence}
+              onChange={event=>updateExpense(e.id,{recurrence:event.target.value as Expense["recurrence"],month:data.month})}>
+              <option value="MONTHLY">Mensual</option><option value="ONE_OFF">Sólo este mes</option>
+            </select></td>
+            <td><input aria-label={"Importe de "+e.name} type="number" min="0" max="100000000" step="0.01"
+              value={e.amount} onChange={event=>updateExpense(e.id,{amount:validMoney(event.target.value)})}/></td>
+            <td><select aria-label={"Estado de "+e.name} value={e.status}
+              onChange={event=>updateExpense(e.id,{status:event.target.value as Expense["status"]})}>
+              <option value="ESTIMATED">Estimado</option><option value="PAID">Pagado (manual)</option>
+            </select></td>
+            <td><button type="button" onClick={()=>setExpenses(rows=>rows.filter(x=>x.id!==e.id))}
+              aria-label={"Eliminar "+e.name}>Quitar</button></td>
+          </tr>)}
+        </tbody>
+      </table></div>
+      <button type="button" className="button" onClick={addExpense} disabled={expenses.length>=120}>+ Añadir otro gasto</button>
       <div className="grid">
-      {defaultFixed.map(e=><label key={e.key}>{e.name} · MXN/mes
-        <input type="number" min="0" step="0.01" value={fixed[e.key]??0}
-          onChange={ev=>setFixed(c=>({...c,[e.key]:Math.max(0,Number(ev.target.value)||0)}))}/>
-      </label>)}
-      <label>Comisión tarjeta estimada (%)
+        <article className="card"><p className="eyebrow">FIJOS MENSUALES</p><div className="metric">{money.format(fixedMonthly)}</div></article>
+        <article className="card"><p className="eyebrow">VARIABLES MENSUALES</p><div className="metric">{money.format(variableMonthly)}</div></article>
+        <article className="card"><p className="eyebrow">PUNTUALES DEL MES</p><div className="metric">{money.format(oneTimeExpense)}</div></article>
+        <article className="card"><p className="eyebrow">MARCADOS COMO PAGADOS</p><div className="metric">{money.format(confirmedExpenses)}</div>
+          <small className="muted">Marcación manual; aún no conciliado</small></article>
+      </div>
+      <label>Comisión tarjeta estimada (% cobrado en tarjeta)
         <input type="number" min="0" max="30" step="0.1" value={cardRate}
           onChange={e=>setCardRate(Math.max(0,Math.min(30,Number(e.target.value)||0)))}/></label>
-      <label>Reserva fiscal a descontar este mes ($)
-        <input type="number" min="0" step="0.01" value={taxReserve}
-          onChange={e=>setTaxReserve(Math.max(0,Number(e.target.value)||0))}/></label>
-      <label>Gastos extraordinarios del mes ($)
-        <input type="number" min="0" step="0.01" value={extraCost}
-          onChange={e=>setExtraCost(Math.max(0,Number(e.target.value)||0))}/></label>
-      </div>
-      <small className="muted">La reserva fiscal NO representa automáticamente IVA ni ISR RESICO. Para utilidad neta validada se requiere separar IVA trasladado/acreditable, ISR efectivo, depreciación y comprobar desembolsos y precios.</small>
+      <p className="muted">No captures nuevamente IVA o ISR como gasto: se calculan automáticamente arriba. Evita duplicar comisiones si ya las incluyes como un gasto manual. El porcentaje variable para punto de equilibrio representa COGS y otros costos ligados directamente a la venta.</p>
     </section>
 
     <section className="grid">
@@ -245,11 +291,11 @@ export function FinancialWorkbench({data}:{data:Data}){
         <h2>Punto de equilibrio mensual</h2>
         <label>Costo variable asumido (% de ventas; escenario, no dato real)
           <input type="range" min="10" max="75" step="1" value={variableRatio} onChange={e=>setVariableRatio(Number(e.target.value))}/>
-          <strong>{variableRatio}% + comisiones proporcionales</strong>
+          <strong>{variableRatio}% sobre ventas con IVA + tasa efectiva de tarjeta + IVA/ISR</strong>
         </label>
         <div className="metric">{breakEven===null?"Sin equilibrio":money.format(breakEven)}</div>
         <p>{breakEvenTickets===null?"Sin promedio confiable":breakEvenTickets+" tickets/mes ("+Math.ceil(breakEvenTickets/totalDays)+"/día)"} al ticket observado de {money.format(unitAverage)}.</p>
-        <small className="muted">Hipótesis: gastos fijos mensuales / (1−% variable). No usar cobertura incompleta como margen real.</small>
+        <small className="muted">Escenario: (gastos mensuales + puntuales del mes) / ({(afterTaxRevenueRatio*100).toFixed(2)}% de ingresos después de IVA/ISR − {variableRatio}% costo variable − comisión ponderada). El porcentaje variable es una hipótesis; no corresponde automáticamente al COGS incompleto.</small>
       </article>
       <article className="card stack">
         <h2>Servicio y desechables · ventas observadas</h2>
@@ -263,10 +309,10 @@ export function FinancialWorkbench({data}:{data:Data}){
     <section className="card stack">
       <h2>Utilidad por bebida y modalidad · ventas reales OPS</h2>
       <input placeholder="Filtrar bebida" value={filter} onChange={e=>setFilter(e.target.value)}/>
-      <div className="table-scroll"><table><thead><tr><th>Producto</th><th>Servicio</th><th>Uds.</th><th>Venta</th><th>COGS identificado</th><th>Contribución máxima</th><th>Cobertura</th></tr></thead>
+      <div className="table-scroll"><table><thead><tr><th>Producto</th><th>Servicio</th><th>Uds.</th><th>Venta</th><th>COGS identificado</th><th>Máximo tras IVA/ISR y COGS conocido</th><th>Cobertura</th></tr></thead>
       <tbody>{Object.values(products).filter(x=>x.name.toLowerCase().includes(filter.toLowerCase())).sort((a,b)=>b.income-a.income).map(x=><tr key={x.name+x.mode}>
         <td>{x.name}</td><td>{x.mode==="DINE_IN"?"Aquí":"Llevar"}</td><td>{x.units}</td>
-        <td>{money.format(x.income)}</td><td>{money.format(x.cost)}</td><td>{money.format(x.income-x.cost)}</td>
+        <td>{money.format(x.income)}</td><td>{money.format(x.cost)}</td><td>{money.format(estimateTaxesOnGrossSales(x.income).afterTaxes-x.cost)}</td>
         <td>{x.unpriced.size?"Falta "+Array.from(x.unpriced).join(", "):"Completa"}</td></tr>)}</tbody></table></div>
     </section>
 
@@ -296,10 +342,10 @@ export function FinancialWorkbench({data}:{data:Data}){
         <article className="card"><p className="eyebrow">PRECIO BASE</p><div className="metric">{money.format(chosen.price)}</div></article>
         <article className="card"><p className="eyebrow">DESCUENTO</p><div className="metric">{money.format(discount)}</div></article>
         <article className="card"><p className="eyebrow">PRECIO FINAL</p><div className="metric">{money.format(finalPrice)}</div></article>
-        <article className="card"><p className="eyebrow">CONTRIBUCIÓN IDENTIFICADA</p><div className="metric">{money.format(effectiveMargin)}</div>
-          <small className="muted">{verdict(modeCost)} · sin fijos ni comisión</small></article>
+        <article className="card"><p className="eyebrow">CONTRIBUCIÓN POST IVA/ISR</p><div className="metric">{money.format(effectiveMargin)}</div>
+          <small className="muted">{verdict(modeCost)} · sin fijos ni comisión; IVA 16%, ISR 2%</small></article>
       </div>}
-      {chosen&&modeCost&&<p className="muted">Costo conocido receta: {money.format(modeCost.known)} · empaque: {money.format(modeCost.packaging)} · variación de contribución vs precio normal de esa presentación: {money.format(effectiveMargin-baseMargin)}. Para termo el ahorro está condicionado a que las piezas descartadas tengan precio cargado.</p>}
+      {chosen&&modeCost&&<p className="muted">Costo conocido receta: {money.format(modeCost.known)} · empaque: {money.format(modeCost.packaging)} · IVA estimado: {money.format(estimateTaxesOnGrossSales(finalPrice).vat)} · ISR estimado: {money.format(estimateTaxesOnGrossSales(finalPrice).isr)} · variación de contribución vs precio normal de esa presentación: {money.format(effectiveMargin-baseMargin)}. Para termo el ahorro está condicionado a que las piezas descartadas tengan precio cargado.</p>}
       <p className="status-warn">Reglas a instrumentar al cobrar: autorización por rol, validación de termo, límite de 1 cortesía diaria, elegibilidad de Azucena, descuento por línea (no por ticket), bloqueo de acumulaciones y auditoría. El primer consumo gratuito debe registrarse para descontar ingredientes aunque no genere venta.</p>
     </section>
   </div>;
