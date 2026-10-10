@@ -2,6 +2,7 @@ import {randomUUID} from "node:crypto";
 import {deliverExtraPackaging} from "./packaging-action";
 import Image from "next/image";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { and, eq } from "drizzle-orm";
 import { DirectPrintTicketButton } from "./direct-print-button";
 import { PrintTicketButton } from "./print-button";
@@ -103,6 +104,12 @@ export default async function ReceiptPage({
 
   if (requestedSplitId && !split) {
     throw new Error("Cuenta dividida no encontrada");
+  }
+  // La precuenta y el comprobante final no pueden confundirse: una
+  // comanda abierta o un split pendiente jamás imprimen un recibo pagado.
+  if (order.order.status!=="CANCELLED" &&
+      (split ? split.status!=="PAID" : order.order.status!=="PAID")) {
+    redirect("/pos/orders/"+id+"/prebill"+(split?"?split="+split.id:""));
   }
 
   const lines = split
@@ -219,6 +226,7 @@ export default async function ReceiptPage({
         <DirectPrintTicketButton
           ticket={{
             folio: order.order.folio,
+            kind: "RECEIPT",
             status: order.order.status,
             cancelReason: order.order.cancelReason,
             date: ticketDate,
@@ -327,6 +335,9 @@ export default async function ReceiptPage({
           {printSettings.headerMessage && (
             <p>{printSettings.headerMessage}</p>
           )}
+          <p className="receipt-document-type">
+            {order.order.status==="CANCELLED"?"TICKET CANCELADO":"TICKET DE VENTA · PAGADO"}
+          </p>
           {split && <p><strong>{split.label} · ticket separado</strong></p>}
         </header>
 
