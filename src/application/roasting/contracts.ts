@@ -2,30 +2,11 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "@/src/infrastructure/db/client";
 import {
   roastContractClients, roastContractLots, roastContractBatches,
-  roastContractDeliveries, type RoastContractDefect,
+  roastContractDeliveries,
 } from "@/src/infrastructure/db/schema";
 
-export type ContractDefect = RoastContractDefect;
-export const defectTypes = [
-  "Negro completo","Negro parcial","Agrio completo","Agrio parcial",
-  "Inmaduro","Brocado severo","Brocado leve","Concha","Quebrado",
-  "Cáscara/pergamino","Materia extraña","Quaker (post-tueste)","Otro",
-] as const;
-
-export const mass = (value:string|number|null|undefined):number =>
-  value==null ? 0 : Number(value);
-
-export const round2 = (n:number) => Math.round((n+Number.EPSILON)*100)/100;
-
-export function inspectDefects(sampleG:number|null, defects:ContractDefect[]) {
-  const totalG=round2(defects.reduce((sum,d)=>sum+d.grams,0));
-  const counts=defects.reduce((acc,d)=>acc+d.count,0);
-  return {
-    measured:sampleG!=null&&sampleG>0,
-    totalG,counts,
-    percentage:sampleG&&sampleG>0?round2(totalG/sampleG*100):null,
-  };
-}
+import { inspectDefects,mass,round2 } from "./contract-utils";
+export { defectTypes, inspectDefects,mass,round2 } from "./contract-utils";
 
 export async function getContractDashboard(organizationId:string) {
   const db=getDb();
