@@ -10,6 +10,9 @@ const CONTENT_WIDTH = PAPER_WIDTH - SIDE_MARGIN * 2;
 
 export type DirectReceiptPayload = {
   folio: string;
+  kind?: "PREBILL" | "RECEIPT";
+  paidAmount?: string;
+  outstanding?: string;
   status: string;
   cancelReason?: string | null;
   date: string;
@@ -337,6 +340,14 @@ async function buildRasterTicket(
     );
   }
 
+  y += 4;
+  y = drawCentered(
+    context,
+    ticket.kind === "PREBILL" ? "PRECUENTA · SIN LIQUIDAR" : "TICKET DE VENTA",
+    y,
+    "900 26px Arial, Helvetica, sans-serif",
+    30,
+  );
   if (ticket.splitLabel) {
     y += 4;
     y = drawCentered(
@@ -395,7 +406,20 @@ async function buildRasterTicket(
   });
 
   y += 3;
-  y = drawPair(context, "Pago original", ticket.payment || "—", y);
+  if (ticket.kind === "PREBILL") {
+    if (ticket.paidAmount) {
+      y = drawPair(context, "Abonado", ticket.paidAmount, y);
+    }
+    y = drawPair(context, "Por pagar", ticket.outstanding || ticket.total, y, {
+      font: "900 24px Arial, Helvetica, sans-serif", lineHeight: 30,
+    });
+    y += 5;
+    y = drawCentered(context,
+      "NO ES COMPROBANTE DE PAGO · IMPORTE SUJETO A CAMBIOS",
+      y, "900 18px Arial, Helvetica, sans-serif", 23);
+  } else {
+    y = drawPair(context, "Método(s) de pago", ticket.payment || "—", y);
+  }
   if (ticket.status === "CANCELLED") {
     y += 5;
     y = drawRule(context, y);
@@ -435,7 +459,7 @@ async function buildRasterTicket(
   y += 3;
   y = drawRule(context, y);
 
-  if (template.footerMessage) {
+  if (ticket.kind !== "PREBILL" && template.footerMessage) {
     y = drawCentered(
       context,
       template.footerMessage,
@@ -494,9 +518,11 @@ async function buildRasterTicket(
 export function DirectPrintTicketButton({
   ticket,
   template,
+  label,
 }: {
   ticket: DirectReceiptPayload;
   template: DirectReceiptTemplate;
+  label?: string;
 }) {
   const router = useRouter();
   const [state, setState] = useState<"idle" | "printing" | "ok" | "error">(
@@ -561,7 +587,7 @@ export function DirectPrintTicketButton({
           ? "Impreso ✓"
           : state === "error"
             ? "Error · configurar"
-            : "Imprimir directo ESC/POS"}
+            : label ?? "Imprimir directo ESC/POS"}
     </button>
   );
 }
