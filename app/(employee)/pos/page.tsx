@@ -1,4 +1,5 @@
 import Link from "next/link";
+import {extraLabels} from "@/src/application/pos/extras";
 import { PosClient } from "./pos-client";
 import { AutoKitchenPrint } from "./orders/auto-kitchen-print";
 import { kitchenOrderIdentity } from "@/src/application/pos/kitchen-slip";
@@ -335,6 +336,7 @@ export default async function PosPage({
             isAdditionalRound:line.isAdditionalRound,
             roundId:typeof line.expectedConsumption?.roundId==="string"
               ? line.expectedConsumption.roundId:null,
+            extrasLabel:extraLabels(line.expectedConsumption,{showPrices:true}).join(" · ")||null,
           })),
         }:null}
       />
