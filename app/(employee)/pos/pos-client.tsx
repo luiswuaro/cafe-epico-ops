@@ -104,6 +104,9 @@ export function PosClient({
   const checkoutCustomerChange=useCallback((id:string,created?:CheckoutCustomer)=>{
     setCustomerId(id);
     setRedeemPoints("0");
+    // Una cuenta de cliente y una cuenta de personal son excluyentes.
+    // Al asociar un cliente, todos los renglones vuelven a venta normal.
+    if(id)setLineBenefits({});
     if(created)setCreatedCustomer(created);
   },[]);
   const [additionRequestId]=useState(()=>globalThis.crypto.randomUUID());
@@ -205,12 +208,12 @@ export function PosClient({
     serviceMode:line.serviceMode,
     staffBenefit:lineBenefits[line.key]?.kind??"NONE",
     employeeId:lineBenefits[line.key]?.employeeId||null,
-  })));
+  })),customerId||null);
   const staffSelected=staffTicket.perLine.some(line=>line.staffBenefit!=="NONE");
   const selectedCustomer =
     customers.find((customer) => customer.id === customerId) ??
     (createdCustomer?.id===customerId?createdCustomer:null);
-  // El cliente sólo puede usar puntos en SUS líneas, no en bebidas del personal.
+  // Cliente registrado y beneficios de personal no pueden coexistir en el ticket.
   const redemption=redeemAmount(redeemPoints,selectedCustomer?.pointsBalance??0,
     staffTicket.customerEligibleTotal);
   const mixedSettlement=staffTicket.valid&&redemption.valid
@@ -221,7 +224,19 @@ export function PosClient({
     (redemption.points>0&&!selectedCustomer);
   const assignBenefits=<section className="card stack" style={{padding:14,gap:12}}>
     <strong>Beneficios de personal · por bebida</strong>
-    <small className="muted">Cada producto puede ser del cliente o de un trabajador diferente.</small>
+    {selectedCustomer?<div className="stack" style={{gap:8}}>
+      <p className="status-warn" role="status">
+        Este ticket pertenece a {selectedCustomer.name}. Los beneficios de empleados
+        están deshabilitados para cuentas con cliente registrado.
+      </p>
+      <button className="button" type="button"
+        onClick={()=>checkoutCustomerChange("")}>
+        Quitar cliente y habilitar consumo de personal
+      </button>
+    </div>:<small className="muted">
+      Cuenta sin cliente: asigna bebidas a trabajadores para cortesía o descuento.
+      Si son bebidas de un cliente, registra al cliente como venta normal.
+    </small>}
     {cartLines.map((line,index)=>{
       const assigned=lineBenefits[line.key]??{kind:"NONE" as StaffBenefitKind,employeeId:""};
       const computed=staffTicket.perLine.find(x=>x.key===line.key);
@@ -232,11 +247,11 @@ export function PosClient({
           <span>{money.format(computed?.payable??unitPrice(line))}</span>
         </div>
         <label>Esta bebida es para
-          <select value={assigned.kind}
+          <select value={assigned.kind} disabled={Boolean(customerId)}
             onChange={e=>assignLineBenefit(line.key,{kind:e.target.value as StaffBenefitKind})}>
-            <option value="NONE">Cliente / venta normal</option>
-<option value="INCLUDED_DRINK" disabled={line.serviceMode!=="DINE_IN"}>Personal · bebida incluida (solo aquí)</option>
-            <option value="ADDITIONAL_10">Personal · bebida adicional −10%</option>
+            <option value="NONE">Venta normal</option>
+            <option value="INCLUDED_DRINK" disabled={Boolean(customerId)||line.serviceMode!=="DINE_IN"}>Personal · bebida incluida (solo aquí)</option>
+            <option value="ADDITIONAL_10" disabled={Boolean(customerId)}>Personal · bebida adicional −10%</option>
           </select>
         </label>
         {assigned.kind==="INCLUDED_DRINK"&&<small className="muted">Cortesía incluida: solo se permite consumir aquí. Si está para llevar, cambia la preparación en el carrito.</small>}
@@ -263,7 +278,7 @@ export function PosClient({
       <span>Beneficio de personal</span><strong>−{money.format(staffTicket.staffDiscount)}</strong>
     </div>}
     <div style={{display:"flex",justifyContent:"space-between"}}>
-      <span>Bebidas del cliente {selectedCustomer?"· "+selectedCustomer.name:""}</span>
+      <span>Venta normal {selectedCustomer?"· "+selectedCustomer.name:""}</span>
       <strong>{money.format(staffTicket.customerEligibleTotal)}</strong>
     </div>
     <div style={{display:"flex",justifyContent:"space-between"}}>
@@ -277,10 +292,9 @@ export function PosClient({
     </div>
     <p className="muted">Puntos nuevos del cliente: +{pointsEarned.toFixed(2)} pts.
       Los consumos de personal no acumulan puntos.</p>
-    {selectedCustomer&&staffTicket.customerEligibleTotal===0&&
-      <p className="muted">El cliente {selectedCustomer.name} permanece identificado en el pedido, pero todas las bebidas están asignadas al personal. No hay puntos canjeables ni puntos nuevos para el cliente.</p>}
-    {selectedCustomer&&staffTicket.customerEligibleTotal>0&&staffSelected&&
-      <p className="muted">Los puntos de {selectedCustomer.name} aplican exclusivamente a los productos marcados «Cliente / venta normal».</p>}
+    {staffSelected&&<p className="muted">
+      Ticket de consumo de personal: no se le puede asociar un cliente ni aplicar sus puntos.
+    </p>}
   </div>;
 
   const productCount = (id: string) =>
@@ -373,12 +387,20 @@ export function PosClient({
         <div className="pos-total"><strong>Consumo a precio vigente</strong>
           <strong>{money.format(total)}</strong></div>
         {assignBenefits}
-        <CheckoutLoyalty customers={createdCustomer
+        {staffSelected?<section className="card stack" style={{padding:14,gap:8}}>
+          <strong>Consumo de personal · sin cliente</strong>
+          <p className="muted">Los puntos y beneficios de clientes no corresponden
+            a esta cuenta.</p>
+          <button type="button" className="button"
+            onClick={()=>{setLineBenefits({});setRedeemPoints("0");}}>
+            Convertir a venta normal y seleccionar cliente
+          </button>
+        </section>:<CheckoutLoyalty customers={createdCustomer
           ?[...customers.filter(c=>c.id!==createdCustomer.id),createdCustomer]:customers}
           selectedId={customerId} onSelect={checkoutCustomerChange}
           redeemPoints={redeemPoints} onRedeemChange={setRedeemPoints}
           total={staffTicket.customerEligibleTotal} liveEnabled={liveEnabled}
-          identityOnly={staffTicket.customerEligibleTotal===0}/>
+          identityOnly={staffTicket.customerEligibleTotal===0}/>} 
         {breakdown}
         {previewDue>0?<label>Método de pago (simulado)
           <select value={paymentMethod}
@@ -423,12 +445,20 @@ export function PosClient({
         <div className="pos-total"><strong>Consumo a precio vigente</strong>
           <strong>{money.format(total)}</strong></div>
         {assignBenefits}
-        <CheckoutLoyalty customers={createdCustomer
+        {staffSelected?<section className="card stack" style={{padding:14,gap:8}}>
+          <strong>Consumo de personal · sin cliente</strong>
+          <p className="muted">Los puntos y beneficios de clientes no corresponden
+            a esta cuenta.</p>
+          <button type="button" className="button"
+            onClick={()=>{setLineBenefits({});setRedeemPoints("0");}}>
+            Convertir a venta normal y seleccionar cliente
+          </button>
+        </section>:<CheckoutLoyalty customers={createdCustomer
           ?[...customers.filter(c=>c.id!==createdCustomer.id),createdCustomer]:customers}
           selectedId={customerId} onSelect={checkoutCustomerChange}
           redeemPoints={redeemPoints} onRedeemChange={setRedeemPoints}
           total={staffTicket.customerEligibleTotal} liveEnabled={liveEnabled}
-          identityOnly={staffTicket.customerEligibleTotal===0}/>
+          identityOnly={staffTicket.customerEligibleTotal===0}/>} 
         {breakdown}
         {staffSelected&&<p className="status-warn" role="alert">
           Consumo de personal todavía en validación. El cobro LIVE de este
