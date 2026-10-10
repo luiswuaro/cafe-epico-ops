@@ -4,7 +4,6 @@ import { useActionState, useCallback, useEffect, useMemo, useRef, useState } fro
 import Link from "next/link";
 import { addProductsToLiveCommand } from "./orders/live-actions";
 import {
-  createPosCustomer,
   saveLiveCommand,
   submitShadowSale,
   submitShadowCommand,
