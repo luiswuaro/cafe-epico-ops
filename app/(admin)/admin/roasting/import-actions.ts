@@ -762,6 +762,7 @@ export async function confirmHiBeanRoastImport(formData: FormData) {
   });
 
   revalidatePath("/admin/roasting");
+  revalidatePath("/inventory/ops");
   revalidatePath("/admin/decision-center");
   redirect(
     "/admin/roasting?batch=" +
