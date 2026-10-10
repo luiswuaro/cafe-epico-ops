@@ -6,6 +6,8 @@ const modules = [
   ["Recetas Loyverse", "Recetas madre, componentes y consumo real expandido", "/admin/loyverse/recipes"],
   ["Recetas técnicas QC", "Parámetros de extracción y control técnico", "/admin/recipes"],
   ["Tueste", "Lotes, perfiles, batches, reposo, curvas, cata y producción", "/admin/roasting"],
+  ["Roast Engineer · laboratorio", "Analizar HiBean JSON, RoR, fases y costos por batch", "/admin/roasting/lab"],
+  ["Centro financiero · preview", "Utilidad estimada, costos y descuentos por tipo de servicio", "/admin/finance"],
   ["SOPs", "Crear, versionar y publicar procedimientos", "/admin/sops"],
   ["Inventario", "Existencias, cobertura y reposición desde Loyverse", "/inventory"],
   ["Compras", "Proveedores, costos, empaques, requisiciones y viajes", "/admin/purchases"],

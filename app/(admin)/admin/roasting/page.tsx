@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { RoastingSessionPlanner } from "./session-planner";
 import { startHiBeanRoastImport } from "./import-actions";
 import {
   assignRoastBatchToBar,
@@ -84,7 +85,7 @@ export default async function RoastingPage({
           guardar curvas.
         </p>
         <p>
-          <Link href="/admin/roasting/compare">
+          <Link href="/admin/roasting/lab">Laboratorio HiBean avanzado →</Link> · <Link href="/admin/roasting/compare">
             <button>Comparar batches en Roast Engineer</button>
           </Link>
         </p>
@@ -368,7 +369,18 @@ export default async function RoastingPage({
         </form>
       </section>
 
-      <section className="card" style={{ marginTop: "1rem" }}>
+      <section className="card" style={{marginTop:"1rem"}} id="plan-sesion">
+        <p className="eyebrow">PLAN OPERATIVO · 5 KG · SKYWALKER V1</p>
+        <h2>Planificar sesión de tueste</h2>
+        <p className="muted">Programa las cargas antes de encender el tostador, pesa la salida de cada batch y conserva el JSON original en HiBean. Los cálculos son locales y no alteran el inventario hasta confirmar una importación.</p>
+        <RoastingSessionPlanner lots={data.lots.filter(l=>l.isActive).map(l=>({
+          id:l.id,name:l.name,greenStockG:l.greenStockG,
+          greenStockSource:l.greenStockSource,targetUse:l.targetUse,
+        }))}/>
+        <p><a href="#importar-hibean">Después de cada batch → Importar JSON y confirmar</a></p>
+      </section>
+
+      <section className="card" style={{ marginTop: "1rem" }} id="importar-hibean">
         <p className="eyebrow">MÉTODO RECOMENDADO · HIBEAN</p>
         <h2>Importar tueste y confirmar inventario</h2>
         <p className="muted">

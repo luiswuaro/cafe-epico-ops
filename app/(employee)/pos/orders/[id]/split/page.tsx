@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { SplitAccountBuilder } from "./split-client";
+import {extraLabels} from "@/src/application/pos/extras";
+import { SplitPaymentFields } from "./split-payment-fields";
 import { payOrderSplit, resetUnpaidOrderSplit } from "./actions";
 import { getCashState } from "@/src/application/pos/cash";
 import { getPosCustomers } from "@/src/application/pos/customers";
@@ -104,6 +106,8 @@ export default async function SplitOrderPage({
                     <div key={assignment.id}>
                       {Number(assignment.quantity)}×{" "}
                       {line?.nameSnapshot ?? "Producto"}
+                      {extraLabels(line?.expectedConsumption,{showPrices:true}).map((x,i)=>
+                        <div className="command-line-note" key={i}>↳ {x}</div>)}
                       {line?.note ? (
                         <div className="command-line-note">↳ {line.note}</div>
                       ) : null}
@@ -135,19 +139,11 @@ export default async function SplitOrderPage({
                 <form action={payOrderSplit} className="stack">
                   <input type="hidden" name="splitId" value={split.id} />
                   <input type="hidden" name="orderId" value={state.order.id} />
-                  <label>
-                    Método de pago
-                    <select
-                      name="paymentMethod"
-                      defaultValue={cash.session ? "CASH" : "CARD"}
-                    >
-                      <option value="CASH" disabled={!cash.session}>
-                        Efectivo{cash.session ? "" : " · abre caja"}
-                      </option>
-                      <option value="CARD">Tarjeta</option>
-                      <option value="TRANSFER">Transferencia</option>
-                    </select>
-                  </label>
+                  <SplitPaymentFields
+                    total={Number(split.total)}
+                    cashOpen={Boolean(cash.session)}
+                    live={state.order.mode==="LIVE"}
+                  />
                   {state.order.mode==="LIVE" && <>
                     <label>Cliente que recibe los puntos (5%)
                       <select name="customerId" defaultValue={state.order.customerId??""}>
@@ -156,10 +152,6 @@ export default async function SplitOrderPage({
                           {customer.name} · {Number(customer.pointsBalance).toFixed(2)} pts
                         </option>)}
                       </select>
-                    </label>
-                    <label>Efectivo recibido (si paga en efectivo)
-                      <input type="number" name="tenderedAmount" step="0.01" min={0}
-                        defaultValue={Number(split.total).toFixed(2)}/>
                     </label>
                     {canOverrideStock&&<label>
                       <input type="checkbox" name="allowStockShortage"/>

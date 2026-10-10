@@ -1,5 +1,7 @@
 import { and, eq, sql } from "drizzle-orm";
 import { getPosCatalog, type PosServiceMode } from "@/src/application/pos/catalog";
+import {priceExtras, readExtraSnapshots, type ExtraRequest} from "@/src/application/pos/extras";
+import {getPosExtraCatalog} from "@/src/application/pos/extra-catalog";
 import { isCostOnlyComponent, costOnlyRecipeMeasure } from "@/src/application/pos/component-policy";
 import { getDb } from "@/src/infrastructure/db/client";
 import {
@@ -13,6 +15,7 @@ export type LiveCart = Array<{
   quantity: number;
   note: string | null;
   serviceMode?:PosServiceMode;
+  extras?:ExtraRequest[];
   // ID interno de la línea congelada de una comanda guardada; jamás se toma de una petición del navegador.
   sourceLineId?:string;
 }>;
@@ -61,6 +64,7 @@ export async function checkoutLiveOrder(input:{
     :[];
   const byStoredId=new Map(stored.map(line=>[line.id,line]));
   const catalog=await getPosCatalog(input.organizationId,{includeDisabled:Boolean(input.existingOrderId)});
+  const extrasCatalog=await getPosExtraCatalog(input.organizationId);
   const products=new Map(catalog.map(item=>[item.id,item]));
   const lines=input.cart.map(line=>{
     const item=products.get(line.externalId);
@@ -82,6 +86,9 @@ export async function checkoutLiveOrder(input:{
     const lineMode=line.serviceMode??input.serviceMode;
     if(snapshot && snapshot.expectedConsumption?.serviceMode!==lineMode)
       throw new Error("El servicio de la línea guardada no coincide.");
+    const resolvedExtras=snapshot
+      ?{unitPrice:0,extras:readExtraSnapshots(snapshot.expectedConsumption),components:[]}
+      :priceExtras(line.extras,item,extrasCatalog);
     const frozen= snapshot?.expectedConsumption?.components;
     const snapshotQuantity=snapshot?Number(snapshot.quantity):0;
     const recipeComponents=snapshot
@@ -96,7 +103,7 @@ export async function checkoutLiveOrder(input:{
             quantity:Number(comp.quantity)/snapshotQuantity,
           };
         }):[])
-      :item.serviceRecipes[lineMode].components;
+      :[...item.serviceRecipes[lineMode].components,...resolvedExtras.components];
     if(recipeComponents.length===0 || recipeComponents.some(c=>!c.name||
       !Number.isFinite(c.quantity)||c.quantity<=0)){
       throw new Error("La receta original de "+item.name+" no está disponible para cobro.");
@@ -116,11 +123,11 @@ export async function checkoutLiveOrder(input:{
         throw new Error("Receta fría de "+item.name+" para consumir aquí no incluye popote.");
       }
     }
-    const price=snapshot?Number(snapshot.unitPrice):item.price;
+    const price=snapshot?Number(snapshot.unitPrice):Number((item.price+resolvedExtras.unitPrice).toFixed(2));
     if(!Number.isFinite(price)||price<=0)
       throw new Error("Precio guardado no válido.");
     return {
-      ...line,item,lineMode,price,
+      ...line,item,lineMode,price,extraSnapshots:resolvedExtras.extras,
       total:Number((price*line.quantity).toFixed(2)),
       components:recipeComponents.map(c=>({
         ...c,quantity:Number((c.quantity*line.quantity).toFixed(6)),
@@ -340,7 +347,7 @@ export async function checkoutLiveOrder(input:{
       nameSnapshot:line.item.name,categorySnapshot:line.item.category,
       unitPrice:line.price.toFixed(2),quantity:String(line.quantity),lineTotal:line.total.toFixed(2),
       note:line.note,expectedConsumption:{
-        mode:"LIVE",serviceMode:line.lineMode,
+        mode:"LIVE",serviceMode:line.lineMode,extras:line.extraSnapshots,
         components:line.components.map(component => ({
           ...component,
           inventoryPolicy:isCostOnlyComponent(component) ? "COST_ONLY" : "TRACKED",

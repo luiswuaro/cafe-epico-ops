@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { and, eq } from "drizzle-orm";
 import { getOrderSplitState } from "@/src/application/pos/splits";
+import {extraLabels} from "@/src/application/pos/extras";
 import { getPosPrintSettings } from "@/src/application/pos/print-settings";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
 import { assertEmployeePermission } from "@/src/infrastructure/auth/permissions";
@@ -48,11 +49,13 @@ export default async function PrebillPage({params,searchParams}:{
       return {id:assignment.id,name:original.nameSnapshot,
         quantity:Number(assignment.quantity),
         total:Number(assignment.lineTotal),note:original.note,
+        extra:extraLabels(original.expectedConsumption,{showPrices:true}).join(" · ")||null,
         serviceMode:original.expectedConsumption?.serviceMode};
     })
     :state.lines.map(line=>({id:line.id,name:line.nameSnapshot,
       quantity:Number(line.quantity),total:Number(line.lineTotal),
-      note:line.note,serviceMode:line.expectedConsumption?.serviceMode}));
+      note:line.note,extra:extraLabels(line.expectedConsumption,{showPrices:true}).join(" · ")||null,
+      serviceMode:line.expectedConsumption?.serviceMode}));
   const total=split?Number(split.total):Number(state.order.total);
   const db=getDb();
   const [staff]=state.order.employeeId
@@ -78,6 +81,7 @@ export default async function PrebillPage({params,searchParams}:{
     splitLabel:split?.label??null,
     items:lines.map(line=>({
       quantity:line.quantity,name:line.name,
+      extra:line.extra,
       note:(line.serviceMode==="TAKEAWAY"?"Para llevar":"Aquí")+
         (line.note?" · "+line.note:""),
       total:money.format(line.total),
@@ -137,6 +141,7 @@ export default async function PrebillPage({params,searchParams}:{
             <span>{line.quantity}× {line.name}</span>
             <span>{money.format(line.total)}</span>
           </div>
+          {line.extra&&<div className="receipt-line-note">↳ {line.extra}</div>}
           {settings.showItemNotes&&line.note&&
             <div className="receipt-line-note">↳ {line.note}</div>}
         </div>)}

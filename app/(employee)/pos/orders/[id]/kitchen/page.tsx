@@ -4,6 +4,7 @@ import { getDb } from "@/src/infrastructure/db/client";
 import { posCustomers } from "@/src/infrastructure/db/schema";
 import { getOrderSplitState } from "@/src/application/pos/splits";
 import { selectedKitchenSlip, kitchenCategoryLabel, kitchenOrderIdentity } from "@/src/application/pos/kitchen-slip";
+import {preparationNote} from "@/src/application/pos/extras";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
 import { assertEmployeePermission } from "@/src/infrastructure/auth/permissions";
 import { KitchenPrintButton } from "../../kitchen-print-button";
@@ -39,7 +40,7 @@ export default async function KitchenSlipPage({params,searchParams}:{
     orderNote:state.order.note,
     lines:state.lines.map(row=>({
       id:row.id,name:row.nameSnapshot,category:row.categorySnapshot,
-      quantity:Number(row.quantity),note:row.note,
+      quantity:Number(row.quantity),note:preparationNote(row.note,row.expectedConsumption),
       serviceMode:typeof row.expectedConsumption?.serviceMode==="string"
         ?row.expectedConsumption.serviceMode:null,
       roundId:typeof row.expectedConsumption?.roundId==="string"

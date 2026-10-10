@@ -7,6 +7,7 @@ import { getCashState } from "@/src/application/pos/cash";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
 import { assertEmployeePermission, employeeHasPermission } from "@/src/infrastructure/auth/permissions";
 import { CheckoutPaymentForm } from "./payment-form";
+import {extraLabels} from "@/src/application/pos/extras";
 
 export const dynamic="force-dynamic";
 const money=new Intl.NumberFormat("es-MX",{style:"currency",currency:"MXN"});
@@ -76,7 +77,10 @@ export default async function PosCheckoutPage({searchParams}:{
         <div className="stack">
           {order.lines.map(line=><div key={line.id} className="receipt-line" style={{display:"flex",justifyContent:"space-between",gap:12}}>
             <span>{Number(line.quantity)}× {line.name}
-              <small style={{display:"block"}}>{line.expectedConsumption?.serviceMode==="TAKEAWAY"?"Para llevar":"Aquí"}{line.note?" · "+line.note:""}</small>
+              <small style={{display:"block"}}>{line.expectedConsumption?.serviceMode==="TAKEAWAY"?"Para llevar":"Aquí"}{line.note?" · "+line.note:""}
+                {extraLabels(line.expectedConsumption,{showPrices:true}).map((extra,i)=>
+                  <span key={i} style={{display:"block"}}>{extra}</span>)}
+              </small>
             </span>
             <strong>{money.format(Number(line.lineTotal))}</strong>
           </div>)}

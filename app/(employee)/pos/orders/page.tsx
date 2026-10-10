@@ -3,13 +3,14 @@ import { CommandBoardAutoRefresh } from "./auto-refresh";
 import { KitchenPrintButton } from "./kitchen-print-button";
 import { AutoKitchenPrint } from "./auto-kitchen-print";
 import { kitchenOrderIdentity } from "@/src/application/pos/kitchen-slip";
+import {extraLabels,preparationNote} from "@/src/application/pos/extras";
+import {getPosExtraCatalog} from "@/src/application/pos/extra-catalog";
 import { AddLiveProducts } from "./add-live-products";
 import { createLiveCommandCustomer, setLiveCommandCustomer } from "./live-actions";
 import { getPosCatalog } from "@/src/application/pos/catalog";
 import { getPosCustomers } from "@/src/application/pos/customers";
 import {
   cancelPosOrder,
-  payLiveCommand,
   payShadowCommand,
   updateCommandStatus,
 } from "../actions";
@@ -56,7 +57,7 @@ export default async function PosOrdersPage({
     employee.homeStoreId,
   );
 
-  const [orders, canCancel, cash, catalog, customers] = await Promise.all([
+  const [orders, canCancel, cash, catalog, customers, extrasOptions] = await Promise.all([
     getOpenPosOrders(employee.organizationId, employee.homeStoreId),
     employeeHasPermission(
       employee.id,
@@ -66,6 +67,7 @@ export default async function PosOrdersPage({
     getCashState(employee.organizationId, employee.homeStoreId),
     getPosCatalog(employee.organizationId),
     getPosCustomers(employee.organizationId),
+    getPosExtraCatalog(employee.organizationId),
   ]);
 
   // Sólo acciones de guardado confirmadas incluyen autoKitchen=saved.
@@ -93,7 +95,7 @@ export default async function PosOrdersPage({
           orderNote:autoOrder.note,
           lines:autoOrder.lines.map(line=>({
             id:line.id,name:line.name,category:line.category,
-            quantity:Number(line.quantity),note:line.note,
+            quantity:Number(line.quantity),note:preparationNote(line.note,line.expectedConsumption),
             serviceMode:typeof line.expectedConsumption?.serviceMode==="string"
               ?line.expectedConsumption.serviceMode:null,
             roundId:typeof line.expectedConsumption?.roundId==="string"
@@ -178,6 +180,8 @@ export default async function PosOrdersPage({
                             </span>
                           )}
                         </div>
+                        {extraLabels(line.expectedConsumption,{showPrices:true}).map((label,i)=>
+                          <div key={i} className="command-line-note">↳ {label}</div>)}
                         {line.note && <div className="command-line-note">↳ {line.note}</div>}
                       </div>
                     </div>
@@ -256,7 +260,7 @@ export default async function PosOrdersPage({
                         name:line.name,
                         category:line.category,
                         quantity:Number(line.quantity),
-                        note:line.note,
+                        note:preparationNote(line.note,line.expectedConsumption),
                         serviceMode:typeof line.expectedConsumption?.serviceMode==="string"
                           ?line.expectedConsumption.serviceMode:null,
                         roundId:typeof line.expectedConsumption?.roundId==="string"
@@ -286,7 +290,7 @@ export default async function PosOrdersPage({
 
                 {order.mode==="LIVE" && !partiallyPaid && (
                   <>
-                    <AddLiveProducts orderId={order.id}
+                    <AddLiveProducts orderId={order.id} extrasOptions={extrasOptions}
                       products={catalog.filter(item=>item.active).map(item=>({
                         id:item.id,name:item.name,category:item.category,price:item.price
                       }))}/>
@@ -320,48 +324,26 @@ export default async function PosOrdersPage({
                   </>
                 )}
 
-                {!partiallyPaid && (
-                  <details>
-                    <summary>Cobrar cuenta completa</summary>
-                    <form action={order.mode === "LIVE" ? payLiveCommand : payShadowCommand} className="stack">
-                      <input
-                        type="hidden"
-                        name="orderId"
-                        value={order.id}
-                      />
-                      <label>
-                        Método de pago
-                        <select
-                          name="paymentMethod"
-                          defaultValue={cash.session ? "CASH" : "CARD"}
-                        >
-                          <option value="CASH" disabled={!cash.session}>
-                            Efectivo
-                            {cash.session ? "" : " · abre caja"}
-                          </option>
-                          <option value="CARD">Tarjeta</option>
-                          <option value="TRANSFER">Transferencia</option>
-                        </select>
-                      </label>
-                      {order.mode === "LIVE" && (
-                        <>
-                          <p className="muted">
-                            Cobro LIVE: descontará inventario y registrará caja y puntos al pagar.
-                          </p>
-                          <label>
-                            Efectivo recibido (si es efectivo)
-                            <input name="tenderedAmount" type="number" min={0}
-                              step="0.01" defaultValue={Number(order.total).toFixed(2)}
-                              aria-label="Efectivo recibido para cobrar comanda" />
-                          </label>
-                        </>
-                      )}
-                      <button type="submit">
-                        {order.mode === "LIVE" ? "Cobrar LIVE" : "Marcar pagada"} ·{" "}
-                        {money.format(Number(order.total))}
-                      </button>
-                    </form>
-                  </details>
+                {!partiallyPaid && (order.mode==="LIVE"
+                  ? <Link href={"/pos/checkout?ticket="+order.id} className="button">
+                      Cobrar cuenta · {money.format(Number(order.total))}
+                    </Link>
+                  : <details>
+                      <summary>Cobrar cuenta completa · espejo</summary>
+                      <form action={payShadowCommand} className="stack">
+                        <input type="hidden" name="orderId" value={order.id}/>
+                        <label>Método de pago
+                          <select name="paymentMethod" defaultValue={cash.session?"CASH":"CARD"}>
+                            <option value="CASH" disabled={!cash.session}>
+                              Efectivo{cash.session?"":" · abre caja"}
+                            </option>
+                            <option value="CARD">Tarjeta</option>
+                            <option value="TRANSFER">Transferencia</option>
+                          </select>
+                        </label>
+                        <button type="submit">Marcar pagada · {money.format(Number(order.total))}</button>
+                      </form>
+                    </details>
                 )}
 
                 {canCancel && (

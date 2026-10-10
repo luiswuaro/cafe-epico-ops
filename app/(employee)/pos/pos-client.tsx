@@ -10,6 +10,7 @@ import {
   createShadowSale,
 } from "./actions";
 import { submitLiveSale } from "./live-actions";
+import type {ExtraOption} from "@/src/application/pos/extra-catalog";
 
 type CatalogItem = {
   id: string;
@@ -28,16 +29,17 @@ type Customer = {
 
 type ServiceMode="DINE_IN"|"TAKEAWAY";
 type CartLine = {
-  key:string;externalId:string;note:string;serviceMode:ServiceMode;
+  key:string;externalId:string;note:string;serviceMode:ServiceMode;extras:Array<{id:string;quantity:number}>;
 };
 type SavedTicket={
   id:string;folio:string;name:string;total:number;customerId:string|null;
   status:string;serviceMode:ServiceMode;
-  lines:Array<{id:string;name:string;quantity:number;note:string|null;unitPrice:number;serviceMode:ServiceMode;isAdditionalRound:boolean;roundId:string|null}>;
+  lines:Array<{id:string;name:string;quantity:number;note:string|null;unitPrice:number;serviceMode:ServiceMode;isAdditionalRound:boolean;roundId:string|null;extrasLabel:string|null}>;
 };
 
 type Props = {
   catalog: CatalogItem[];
+  extrasOptions:ExtraOption[];
   customers: Customer[];
   selectedCustomerId?: string | null;
   cashOpen: boolean;
@@ -59,6 +61,7 @@ const money = new Intl.NumberFormat("es-MX", {
 
 export function PosClient({
   catalog,
+  extrasOptions,
   customers,
   selectedCustomerId = null,
   cashOpen,
@@ -109,7 +112,11 @@ export function PosClient({
   });
 
   const historicalRoundIds=[...new Set((savedTicket?.lines??[]).map(line=>line.roundId??"INITIAL"))];
-  const newSubtotal=cartLines.reduce((sum,line)=>sum+line.item.price,0);
+  const extraById=new Map(extrasOptions.map(option=>[option.id,option]));
+  const extraCharge=(line:CartLine)=>line.extras.reduce((sum,e)=>
+    sum+(extraById.get(e.id)?.price??0)*e.quantity,0);
+  const unitPrice=(line:typeof cartLines[number])=>line.item.price+extraCharge(line);
+  const newSubtotal=cartLines.reduce((sum,line)=>sum+unitPrice(line),0);
   const total=(savedTicket?.total??0)+newSubtotal;
   const units=(savedTicket?.lines.reduce((sum,line)=>sum+line.quantity,0)??0)+cartLines.length;
 
@@ -164,7 +171,7 @@ export function PosClient({
         key: globalThis.crypto.randomUUID(),
         externalId,
         note: "",
-        serviceMode,
+        serviceMode,extras:[],
       },
     ]);
   }
@@ -180,13 +187,21 @@ export function PosClient({
         key: globalThis.crypto.randomUUID(),
         externalId: line.externalId,
         note: "",
-        serviceMode:line.serviceMode,
+        serviceMode:line.serviceMode,extras:line.extras.map(e=>({...e})),
       },
     ]);
   }
 
   function updateServiceMode(key:string,next:ServiceMode){
     setCart(current=>current.map(line=>line.key===key?{...line,serviceMode:next}:line));
+  }
+
+  function updateExtraQuantity(key:string,id:string,quantity:number){
+    setCart(current=>current.map(line=>{
+      if(line.key!==key)return line;
+      const without=line.extras.filter(extra=>extra.id!==id);
+      return {...line,extras:quantity>0?[...without,{id,quantity}]:without};
+    }));
   }
 
   function updateNote(key: string, note: string) {
@@ -210,7 +225,12 @@ export function PosClient({
               <strong>{index+1}. {line.item.name}</strong>
               <p className="muted">{line.serviceMode==="DINE_IN"?"Aquí":"Para llevar"}{line.note?" · "+line.note:""}</p>
             </div>
-            <strong>{money.format(line.item.price)}</strong>
+            <div style={{textAlign:"right"}}>
+              <strong>{money.format(unitPrice(line))}</strong>
+              {line.extras.length>0&&<small className="muted" style={{display:"block"}}>
+                Extras · +{money.format(extraCharge(line))}
+              </small>}
+            </div>
           </div>)}
         </div>
         <div className="pos-total"><strong>TOTAL</strong><strong>{money.format(total)}</strong></div>
@@ -218,7 +238,8 @@ export function PosClient({
           <input type="hidden" name="clientOrderId" value={liveClientOrderId}/>
           <input type="hidden" name="cart" value={JSON.stringify(cartLines.map(line=>({
             externalId:line.externalId,quantity:1,note:line.note.trim()||null,
-            serviceMode:line.serviceMode
+            serviceMode:line.serviceMode,
+            extras:line.extras
           })))}/>
           <input type="hidden" name="serviceMode" value={serviceMode}/>
           <input type="hidden" name="customerId" value={customerId}/>
@@ -409,6 +430,7 @@ export function PosClient({
                       <strong>{money.format(line.unitPrice*line.quantity)}</strong>
                     </div>
                     <span className="muted">{line.serviceMode==="DINE_IN"?"Aquí · sin empaque":"Para llevar · con empaque"}</span>
+                    {line.extrasLabel&&<p className="muted">{line.extrasLabel}</p>}
                     {line.note&&<p className="muted">{line.note}</p>}
                   </div>
                 </div>
@@ -433,7 +455,7 @@ export function PosClient({
                     <strong>
                       {index + 1}. {line.item.name}
                     </strong>
-                    <strong>{money.format(line.item.price)}</strong>
+                    <strong>{money.format(unitPrice(line))}</strong>
                   </div>
 
                   <label style={{display:"block",marginTop:8}}>
@@ -445,6 +467,28 @@ export function PosClient({
                       <option value="TAKEAWAY">Para llevar · con vaso y tapa</option>
                     </select>
                   </label>
+                  {line.item.category!=="ALIMENTOS"&&<details
+                    className="pos-cancel-panel" style={{marginTop:8,padding:"6px 10px"}}>
+                    <summary style={{cursor:"pointer",fontWeight:700}}>
+                      + Extras {line.extras.length>0?" · "+line.extras.reduce((n,e)=>n+e.quantity,0)+" seleccionado(s) · +"+money.format(extraCharge(line)):""}
+                    </summary>
+                    <div className="stack" style={{paddingTop:10,gap:8}}>
+                      {extrasOptions.length===0&&<small className="muted">Sin extras configurados.</small>}
+                      {extrasOptions.map(option=>{
+                        const qty=line.extras.find(e=>e.id===option.id)?.quantity??0;
+                        return <label key={option.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
+                          <span>{option.label} · <strong>+{money.format(option.price)}</strong>
+                            {!option.enabled&&<small className="muted" style={{display:"block"}}>{option.reason}</small>}
+                          </span>
+                          <select aria-label={option.label+" para "+line.item.name}
+                            disabled={!option.enabled} value={qty}
+                            onChange={event=>updateExtraQuantity(line.key,option.id,Number(event.target.value))}>
+                            {Array.from({length:option.maxQuantity+1},(_,n)=><option key={n} value={n}>{n}</option>)}
+                          </select>
+                        </label>;
+                      })}
+                    </div>
+                  </details>}
                   <input
                     className="pos-line-note"
                     value={line.note}
@@ -549,6 +593,7 @@ export function PosClient({
                 quantity: 1,
                 note: line.note.trim() || null,
                 serviceMode:line.serviceMode,
+                extras:line.extras,
               })),
             )}
           />

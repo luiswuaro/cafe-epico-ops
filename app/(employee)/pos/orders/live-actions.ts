@@ -4,6 +4,8 @@ import { and, eq, sql } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { getPosCatalog } from "@/src/application/pos/catalog";
+import {priceExtras} from "@/src/application/pos/extras";
+import {getPosExtraCatalog} from "@/src/application/pos/extra-catalog";
 import { getPosReadiness } from "@/src/application/pos/readiness";
 import { isPosLiveEnabled } from "@/src/application/pos/live";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
@@ -17,6 +19,7 @@ const additionSchema=z.array(z.object({
   quantity:z.number().int().min(1).max(20),
   serviceMode:z.enum(["DINE_IN","TAKEAWAY"]).optional(),
   note:z.string().max(180).nullable().optional(),
+  extras:z.array(z.object({id:z.string().min(1).max(90),quantity:z.number().int().min(1).max(2)})).max(1).optional(),
 })).min(1).max(30);
 
 function message(error:unknown) {
@@ -32,9 +35,10 @@ export async function addProductsToLiveCommand(data:FormData){
   const requestId=z.string().uuid().parse(data.get("requestId"));
   try{
     const cart=additionSchema.parse(JSON.parse(String(data.get("cart")??"[]")));
-    const [catalog,readiness]=await Promise.all([
+    const [catalog,readiness,extrasCatalog]=await Promise.all([
       getPosCatalog(employee.organizationId),
       getPosReadiness(employee.organizationId,employee.homeStoreId),
+      getPosExtraCatalog(employee.organizationId),
     ]);
     const catalogById=new Map(catalog.map(x=>[x.id,x]));
     const readyById=new Map(readiness.products.map(x=>[x.id,x]));
@@ -68,20 +72,24 @@ export async function addProductsToLiveCommand(data:FormData){
         const state=readyById.get(item.id)?.recipes.find(r=>r.mode===lineMode);
         if(!state?.ready)throw new Error(item.name+" ("+(lineMode==="DINE_IN"?"aquí":"para llevar")+"): "+(state?.errors.join("; ")||"Receta no confirmada"));
         const recipe=item.serviceRecipes[lineMode];
+        const extras=priceExtras(line.extras,item,extrasCatalog);
+        const unitPrice=Number((item.price+extras.unitPrice).toFixed(2));
         return {item,recipe,lineMode,quantity:line.quantity,note:line.note?.trim()||null,
-          lineTotal:Math.round(item.price*line.quantity*100)/100};
+          extras:extras.extras,components:[...recipe.components,...extras.components],
+          unitPrice,lineTotal:Math.round(unitPrice*line.quantity*100)/100};
       });
       if(splits.length)await tx.delete(posOrderSplits).where(eq(posOrderSplits.orderId,order.id));
       await tx.insert(posOrderLines).values(lines.map(line=>({
         organizationId:employee.organizationId,orderId:order.id,
         catalogExternalId:line.item.id,variantExternalId:line.item.variantExternalId,
         nameSnapshot:line.item.name,categorySnapshot:line.item.category,
-        unitPrice:line.item.price.toFixed(2),quantity:String(line.quantity),
+        unitPrice:line.unitPrice.toFixed(2),quantity:String(line.quantity),
         lineTotal:line.lineTotal.toFixed(2),note:line.note,
         expectedConsumption:{
           mode:"LIVE",additionalRound:true,roundId:requestId,serviceMode:line.lineMode,
+          extras:line.extras,
           sourceRecipeExternalId:line.recipe.externalId,
-          components:line.recipe.components.map(c=>({
+          components:line.components.map(c=>({
             variantExternalId:c.variantExternalId,itemExternalId:c.itemExternalId,
             name:c.name,quantity:c.quantity*line.quantity,unitLabel:c.unitLabel,
           })),
