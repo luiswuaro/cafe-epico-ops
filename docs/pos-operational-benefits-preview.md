@@ -43,16 +43,37 @@ en la pantalla de cobro habitual, sin reconstruir el ticket:
   sin navegación ni pérdida del carrito.
 - Al registrar desde POS se conserva el cliente elegido al entrar a cobrar.
 
-## Regla adicional confirmada: cliente registrado + consumo de personal (10/oct/2026)
+## Regla de prioridad confirmada: cliente registrado bloquea beneficio personal (10/oct/2026)
 
-- **No excluir al cliente** al marcar una línea como personal. El cliente
+**Esta regla sustituye explícitamente la opción anterior de mezclar un cliente
+registrado y una bebida con descuento de trabajador en el mismo ticket.**
+
+- Una venta identificada con cliente registrado permite **puntos de lealtad**
+  pero no **bebida incluida ni 10% de personal**, aunque la marca de personal
+  se intente aplicar a una sola línea.
+- Con cliente seleccionado, el dropdown de beneficios del personal permanece
+  deshabilitado; se muestra acción para **quitar cliente** y convertir el
+  pedido a consumo de personal.
+- Al asignar un cliente desde el POS se limpian los beneficios de personal
+  previamente elegidos y se reinicia el canje.
+- Si ya hay un beneficio del trabajador, el checkout no ofrece selector de
+  cliente hasta pasar a venta normal (botón para retirar beneficios).
+- El motor de cálculo recibe `customerId` como guardia, rechaza combinaciones
+  y no otorga descuentos en una cotización inválida. LIVE de personal sigue
+  deshabilitado hasta el ledger diario, inventario y reversas.
+- **Flujo operativo:** una venta de cliente y un consumo de Azucena se deben
+  crear en tickets separados, sin duplicar la receta ni puntos.
+- Azucena conserva su política: bebida incluida **solo aquí**; bebida
+  adicional 10% **aquí o para llevar**.
+
+## Histórico de regla sustituida: cliente + personal en el mismo ticket
+
+- **OBSOLETO — no aplicar:** mantener cliente cuando línea pasa a personal. El cliente
   puede permanecer registrado como titular/identificador del pedido.
 - Se aplica la política por renglón: líneas de cliente sí tienen elegibilidad
   de puntos, mientras las líneas de personal no se pueden pagar con
   puntos del cliente ni generan puntos para él.
-- Si TODAS las líneas se asignan al personal, mantener visible el nombre del
-  cliente registrado, pero indicar expresamente que los productos del
-  cliente suman $0, su canje aplicable es $0 y no genera puntos nuevos.
+- Si todas las líneas están asignadas al personal, el cliente debe quedar sin seleccionar y no se generan puntos nuevos.
 - Azucena: bebida incluida gratuita **solo para consumir aquí**. Si se marcó
   esa bebida como `TAKEAWAY`, la cotización invalida la cortesía
   y muestra cómo corregir la preparación. No alterar silenciosamente
@@ -65,7 +86,7 @@ en la pantalla de cobro habitual, sin reconstruir el ticket:
 - **Solo preview:** no habilitar hasta escritura transaccional del beneficio,
   inventario, autorización y regla por empleado/jornada.
 
-## Beneficios de personal por producto y por empleado (preview)
+## Beneficios por empleado en tickets SIN cliente identificado (preview)
 
 Cambio de arquitectura: el menú de **Azucena en toda la cuenta** fue sustituido
 por la asignación **por línea de carrito**. El POS obtiene trabajadores activos
