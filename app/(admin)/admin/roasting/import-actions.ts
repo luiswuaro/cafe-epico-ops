@@ -82,20 +82,20 @@ function summaryFromImport(
   };
 }
 
-export async function startHiBeanRoastImport(formData: FormData) {
+export async function stageHiBeanRoastImport(formData: FormData): Promise<string> {
   const file = formData.get("roastFile");
   if (!(file instanceof File) || file.size <= 0) {
-    redirect("/admin/roasting?error=hibean-file");
+    return "/admin/roasting?error=hibean-file";
   }
   if (file.size > MAX_HIBEAN_JSON_BYTES) {
-    redirect("/admin/roasting?error=hibean-file-large");
+    return "/admin/roasting?error=hibean-file-large";
   }
 
   let raw: string;
   try {
     raw = await file.text();
   } catch {
-    redirect("/admin/roasting?error=hibean-read");
+    return "/admin/roasting?error=hibean-read";
   }
   let parsed: RoastCurveImport;
   try {
@@ -105,14 +105,14 @@ export async function startHiBeanRoastImport(formData: FormData) {
       fileSize: file.size,
       error: error instanceof Error ? error.message.slice(0, 200) : "unexpected",
     });
-    redirect("/admin/roasting?error=hibean-parse");
+    return "/admin/roasting?error=hibean-parse";
   }
 
   if (
     parsed.format !== "JSON_HIBEAN" ||
     parsed.metadata?.provider !== "HIBEAN"
   ) {
-    redirect("/admin/roasting?error=hibean-format");
+    return "/admin/roasting?error=hibean-format";
   }
 
   let rawPayload: Record<string, unknown>;
@@ -123,8 +123,10 @@ export async function startHiBeanRoastImport(formData: FormData) {
     }
     rawPayload = decoded as Record<string, unknown>;
   } catch {
-    redirect("/admin/roasting?error=hibean-json");
+    return "/admin/roasting?error=hibean-json";
   }
+
+  if(parsed.points.length===0) return "/admin/roasting?error=hibean-no-data";
 
   const { user, employeeId, organizationId } =
     await requirePermission("roast.manage");
@@ -162,11 +164,9 @@ export async function startHiBeanRoastImport(formData: FormData) {
         })
         .where(eq(roastImportDrafts.id, existing.id));
     }
-    redirect(
-      "/admin/roasting/import/" +
-        existing.id +
-        (existing.status === "CONFIRMED" ? "?duplicate=1" : ""),
-    );
+    return "/admin/roasting/import/" +
+      existing.id +
+      (existing.status === "CONFIRMED" ? "?duplicate=1" : "");
   }
 
   const lots = await db
@@ -243,7 +243,7 @@ export async function startHiBeanRoastImport(formData: FormData) {
     },
   });
 
-  redirect("/admin/roasting/import/" + draft.id);
+  return "/admin/roasting/import/" + draft.id;
 }
 
 export async function confirmHiBeanRoastImport(formData: FormData) {
