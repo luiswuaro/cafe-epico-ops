@@ -123,3 +123,13 @@ La ejecución de GitHub Actions prueba estructura, tipos, lint y compilación, *
 - **Conciliación:** $65.00 de ventas/caja de esta prueba, 37.800 g de café usados. Caja QA abierta: efectivo esperado **$695.00** (base $500 + neto acumulado $195). Café QA restante **5,886.600 g**.
 - Verificación de aislamiento desde 00:00 UTC: producción `cafe-epico` registró 0 órdenes, 0 pagos y 0 movimientos de inventario nuevos; `cafe-epico-qa` registró 1 orden nueva, 2 pagos (uno del ticket guardado anterior) y 2 movimientos de inventario.
 - **Conclusión:** el cobro de un ticket guardado usa el snapshot de precio original; una venta creada después usa el precio vigente. Pendiente: comprobar dos rondas en la misma mesa con precios distintos, split posterior, stock insuficiente y cobro simultáneo.
+
+## QA-06 — DOS RONDAS CON PRECIOS DISTINTOS: guardado aprobado (2026-10-10 UTC)
+
+- Orden QA `c84c375c-ec5f-4b64-8b1d-b1d9469b0a24`, folio `SH-261009180655-29EF`, mesa 1, `LIVE / SENT`.
+- Primera línea: ID `e487f695-ed2c-45de-bf8c-7014e29ca843`, Americano QA caliente ×1, `unit_price=$35.00`, `line_total=$35.00`, 18.9 g de café, `DINE_IN`.
+- Segunda línea: ID `8cae8b49-8f78-44af-99f3-0155a7cda1de`, Americano QA caliente ×1, `unit_price=$40.00`, `line_total=$40.00`, 18.9 g café, `DINE_IN`, `additionalRound=true`, `roundId=36ed0706-4a9d-47fa-aa55-7cc9ac9559d5`.
+- Total **persistido en PostgreSQL = $75.00**; catálogo vigente $40.00, sin mutar la primera línea de $35.
+- `audit_events`: `POS_LIVE_ORDER_ITEMS_ADDED` con `added=40`, `total=75`, `status=SENT`, `divisionReset=false`.
+- En la revisión: **0 pagos, 0 consumos de inventario** y 0 efectos de cobro anticipado. Producción conserva sus 19 órdenes; QA tiene 7 órdenes.
+- **Pendiente:** dividir el ticket de $75 con una línea de $35 en Cuenta 1 y una de $40 en Cuenta 2. Cobrar por separado y verificar 2 pagos ($35+$40) y 37.8 g de café total, sin recomputar ambos al precio actual de $40.
