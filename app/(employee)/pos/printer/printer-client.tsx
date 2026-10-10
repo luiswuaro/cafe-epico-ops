@@ -387,8 +387,8 @@ export function AutoKitchenPrintSettings(){
     <label className="kitchen-printer-route">
       <input type="checkbox" checked={takeaway}
         onChange={event=>update(AUTO_KITCHEN_TAKEAWAY_KEY,event.target.checked)}/>
-      <span><strong>Para llevar · al confirmar cobro</strong>
-        <small className="muted">Imprime los productos para llevar una sola vez, sólo después de registrar el pago.</small>
+      <span><strong>Para llevar · al guardar o al cobrar directo</strong>
+        <small className="muted">Si se guarda el pedido, imprime la ronda al enviarla a barra. Si se cobra directamente, imprime al cobrar. Pagar después un pedido guardado no imprime otra comanda.</small>
       </span>
     </label>
     <label className="kitchen-printer-route">

@@ -384,7 +384,8 @@ async function payOrderSplitUnsafe(formData: FormData) {
     });
   });
 
-  return "/pos/receipt/" + order.id + "?split=" + split.id + "&autoKitchen=paid";
+  // Liquidar una sección tampoco debe volver a imprimir la comanda guardada.
+  return "/pos/receipt/" + order.id + "?split=" + split.id;
 }
 
 export async function payOrderSplit(formData:FormData){

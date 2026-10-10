@@ -11,6 +11,7 @@ const CONTENT_WIDTH = PAPER_WIDTH - SIDE_MARGIN * 2;
 export type DirectReceiptPayload = {
   folio: string;
   kind?: "PREBILL" | "RECEIPT";
+  simulation?: boolean;
   paidAmount?: string;
   outstanding?: string;
   status: string;
@@ -346,7 +347,8 @@ async function buildRasterTicket(
   y += 4;
   y = drawCentered(
     context,
-    ticket.kind === "PREBILL" ? "PRECUENTA · SIN LIQUIDAR" : "TICKET DE VENTA",
+    ticket.kind === "PREBILL" ? "PRECUENTA · SIN LIQUIDAR" :
+      ticket.simulation ? "COMPROBANTE DE PRUEBA" : "TICKET DE VENTA",
     y,
     "900 26px Arial, Helvetica, sans-serif",
     30,

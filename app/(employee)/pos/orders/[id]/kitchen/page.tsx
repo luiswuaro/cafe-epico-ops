@@ -23,7 +23,9 @@ export default async function KitchenSlipPage({params,searchParams}:{
   if(!employee.homeStoreId)throw new Error("Sin sucursal asignada");
   await assertEmployeePermission(employee.id,"pos.sell",employee.homeStoreId);
   const state=await getOrderSplitState(employee.organizationId,employee.homeStoreId,id);
-  if(!state||state.order.mode!=="LIVE")throw new Error("Comanda no encontrada");
+  if(!state||(state.order.mode!=="LIVE"&&
+    !(process.env.VERCEL_ENV==="preview"&&state.order.mode==="SHADOW")))
+    throw new Error("Comanda no encontrada");
   if(state.order.status==="CANCELLED")throw new Error("No se imprimen comandas canceladas");
   const client=state.order.customerId
     ?(await getDb().select({name:posCustomers.name}).from(posCustomers)
@@ -59,6 +61,9 @@ export default async function KitchenSlipPage({params,searchParams}:{
     <section className="card no-print" style={{marginBottom:12}}>
       <h2>Comanda de preparación</h2>
       <p className="muted">Sin importes ni datos de cobro. Imprimir no descuenta inventario.</p>
+      {state.order.mode==="SHADOW"&&<p className="status-warn">
+        IMPRESIÓN DE PRUEBA: esta comanda es espejo; sólo se envía papel a la impresora local.
+      </p>}
       <KitchenPrintButton slip={slip}
         viewUrl={"/pos/orders/"+id+"/kitchen?round="+(selection==="latest"?"all":"latest")}/>
       <div className="pos-context-links" style={{marginTop:12}}>

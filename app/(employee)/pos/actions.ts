@@ -13,7 +13,7 @@ import {dailyTakeawayTicketLabel,effectiveOrderServiceMode,validateTicketLabel} 
 import { cancelLiveOrder } from "@/src/application/pos/live-cancellation";
 import { checkoutLiveOrder, isPosLiveEnabled } from "@/src/application/pos/live";
 import { getPosReadiness } from "@/src/application/pos/readiness";
-import { getOpenCashSession } from "@/src/application/pos/cash";
+import {shadowPaymentFields} from "@/src/domain/pos/shadow-payment";
 import { syncLoyverseReceipts } from "@/src/application/loyverse/sync";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
 import { assertEmployeePermission, employeeHasPermission } from "@/src/infrastructure/auth/permissions";
@@ -225,17 +225,9 @@ async function createShadowOrder(
 
   if (existing) return existing.id;
 
-  const cashSession =
-    status === "PAID" && paymentMethod === "CASH"
-      ? await getOpenCashSession(
-          employee.organizationId,
-          employee.homeStoreId,
-        )
-      : null;
-
-  if (status === "PAID" && paymentMethod === "CASH" && !cashSession) {
-    throw new Error("Abre la caja antes de cobrar en efectivo");
-  }
+  // SHADOW no debe depender de una caja LIVE ni modificar su efectivo.
+  if(status==="PAID"&&orderMode!=="SHADOW")
+    throw new Error("Los cobros de producción sólo se realizan mediante checkout LIVE.");
 
   const order = await db.transaction(async (tx) => {
     // La numeración de los tickets para llevar se asigna dentro de la transacción
@@ -306,25 +298,17 @@ async function createShadowOrder(
     );
 
     if (status === "PAID" && paymentMethod) {
+      // Pago SOLO SIMULADO: se guarda con la forma exigida por PostgreSQL,
+      // pero se excluye de la caja LIVE, inventario y puntos.
+      const cash=shadowPaymentFields(paymentMethod,input.total,
+        String(formData.get("tenderedAmount")??""));
       await tx.insert(posPayments).values({
         organizationId: employee.organizationId,
         orderId: created.id,
         method: paymentMethod,
         amount: input.total.toFixed(2),
+        ...cash,
       });
-
-      if (paymentMethod === "CASH" && cashSession) {
-        await tx.insert(posCashMovements).values({
-          organizationId: employee.organizationId,
-          storeId: employee.homeStoreId!,
-          sessionId: cashSession.id,
-          orderId: created.id,
-          employeeId: employee.id,
-          movementType: "SALE",
-          amount: input.total.toFixed(2),
-          note: created.folio,
-        });
-      }
     }
 
     await tx.insert(auditEvents).values({
@@ -385,7 +369,7 @@ export async function submitShadowSale(
   }catch(error){
     return {error:safeShadowError(error)};
   }
-  redirect("/pos?saved="+orderId);
+  redirect("/pos/receipt/"+orderId);
 }
 
 export async function submitShadowCommand(
@@ -397,7 +381,8 @@ export async function submitShadowCommand(
   }catch(error){
     return {error:safeShadowError(error)};
   }
-  redirect("/pos/orders?created="+orderId);
+  redirect("/pos/orders?created="+orderId+
+    (process.env.VERCEL_ENV==="preview"?"&autoKitchen=saved":""));
 }
 
 export async function createShadowSale(formData: FormData) {
@@ -409,12 +394,13 @@ export async function createShadowSale(formData: FormData) {
     "PAID",
     paymentMethod,
   );
-  redirect("/pos?saved=" + orderId);
+  redirect("/pos/receipt/" + orderId);
 }
 
 export async function createShadowCommand(formData: FormData) {
   const orderId = await createShadowOrder(formData, "SENT");
-  redirect("/pos/orders?created=" + orderId);
+  redirect("/pos/orders?created=" + orderId +
+    (process.env.VERCEL_ENV==="preview"?"&autoKitchen=saved":""));
 }
 
 export async function saveLiveCommand(_previous:{error:string|null},formData:FormData):Promise<{error:string|null}> {
@@ -492,7 +478,8 @@ export async function payLiveCommand(formData:FormData) {
     const message=error instanceof Error?error.message:"No se pudo cobrar la comanda.";
     redirect("/pos/checkout?ticket="+orderId+"&error="+encodeURIComponent(message.slice(0,330)));
   }
-  redirect("/pos/receipt/"+result.id+(result.alreadyRecorded?"":"?autoKitchen=paid"));
+  // La comanda guardada ya se envió al registrar la orden. Cobrar no reimprime.
+  redirect("/pos/receipt/"+result.id);
 }
 
 export async function updateCommandStatus(formData: FormData) {
@@ -582,7 +569,7 @@ export async function payShadowCommand(formData: FormData) {
   if (!order) throw new Error("Comanda no encontrada");
   if(order.mode!=="SHADOW")throw new Error("Usa Cobrar LIVE para esta comanda.");
   if (!["SENT", "PREPARING", "READY"].includes(order.status)) {
-    redirect("/pos?saved=" + order.id);
+    redirect("/pos/receipt/" + order.id);
   }
 
   const [existingSplit] = await db
@@ -595,49 +582,33 @@ export async function payShadowCommand(formData: FormData) {
     redirect("/pos/orders/" + order.id + "/split");
   }
 
-  const cashSession =
-    paymentMethod === "CASH"
-      ? await getOpenCashSession(
-          employee.organizationId,
-          employee.homeStoreId,
-        )
-      : null;
-
-  if (paymentMethod === "CASH" && !cashSession) {
-    throw new Error("Abre la caja antes de cobrar en efectivo");
-  }
-
+  // El cobro espejo simula un pago; no requiere caja abierta.
+  const cash=shadowPaymentFields(paymentMethod,Number(order.total),
+    String(formData.get("tenderedAmount")??""));
   const now = new Date();
+  let failed=false;
+  try{
+    await db.transaction(async (tx) => {
+      // Bloqueo por transición de estado: dos cajeros no pueden pagar dos veces
+      // esta misma comanda espejo aunque hagan clic simultáneamente.
+      const [updated]=await tx.update(posOrders)
+        .set({status:"PAID",paidAt:now,updatedAt:now})
+        .where(and(
+          eq(posOrders.id,order.id),
+          eq(posOrders.organizationId,employee.organizationId),
+          eq(posOrders.storeId,employee.homeStoreId!),
+          eq(posOrders.mode,"SHADOW"),
+          sql`${posOrders.status} IN ('SENT','PREPARING','READY')`,
+        )).returning({id:posOrders.id});
+      if(!updated)throw new Error("La comanda ya fue cobrada o cambió de estado. Revisa Comandas.");
 
-  await db.transaction(async (tx) => {
-    await tx
-      .update(posOrders)
-      .set({
-        status: "PAID",
-        paidAt: now,
-        updatedAt: now,
-      })
-      .where(eq(posOrders.id, order.id));
-
-    await tx.insert(posPayments).values({
-      organizationId: employee.organizationId,
-      orderId: order.id,
-      method: paymentMethod,
-      amount: order.total,
-    });
-
-    if (paymentMethod === "CASH" && cashSession) {
-      await tx.insert(posCashMovements).values({
-        organizationId: employee.organizationId,
-        storeId: employee.homeStoreId!,
-        sessionId: cashSession.id,
-        orderId: order.id,
-        employeeId: employee.id,
-        movementType: "SALE",
-        amount: order.total,
-        note: order.folio,
+      await tx.insert(posPayments).values({
+        organizationId:employee.organizationId,
+        orderId:order.id,
+        method:paymentMethod,
+        amount:order.total,
+        ...cash,
       });
-    }
 
     await tx.insert(auditEvents).values({
       organizationId: employee.organizationId,
@@ -655,9 +626,16 @@ export async function payShadowCommand(formData: FormData) {
         loyaltyEffectApplied: false,
       },
     });
-  });
-
-  redirect("/pos?saved=" + order.id);
+    });
+  }catch(error){
+    failed=true;
+    console.error("POS_SHADOW_COMMAND_PAYMENT_FAILED",order.id,error);
+  }
+  if(failed){
+    redirect("/pos/orders?error="+encodeURIComponent(
+      "El pago simulado no se confirmó. La comanda conserva su estado; revisa antes de reintentar."));
+  }
+  redirect("/pos/receipt/" + order.id);
 }
 
 export async function createPosCustomer(formData: FormData) {
