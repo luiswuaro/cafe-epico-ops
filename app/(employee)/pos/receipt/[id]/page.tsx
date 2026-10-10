@@ -246,7 +246,7 @@ export default async function ReceiptPage({
         order.order.mode==="LIVE"&&
         order.order.status!=="CANCELLED"&&
         (split?split.status==="PAID":order.order.status==="PAID")&&
-        <AutoKitchenPrint event={query.autoKitchen==="paid-direct"?"paid-direct":"paid"}
+        <AutoKitchenPrint event="paid-direct"
           eventId={order.order.id+(split?"-"+split.id:"")}
           slip={{
             folio:order.order.folio,
