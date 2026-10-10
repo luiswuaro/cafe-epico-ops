@@ -23,6 +23,7 @@ export type DirectReceiptPayload = {
     quantity: number;
     name: string;
     note?: string | null;
+    extra?: string | null;
     total: string;
   }>;
   total: string;
@@ -387,6 +388,10 @@ async function buildRasterTicket(
       lineHeight: 27,
     });
 
+    if (item.extra) {
+      y = drawWrappedLeft(context, "↳ " + item.extra, y,
+        "900 20px Arial, Helvetica, sans-serif", 25, 10);
+    }
     if (template.showItemNotes && item.note) {
       y = drawWrappedLeft(
         context,
