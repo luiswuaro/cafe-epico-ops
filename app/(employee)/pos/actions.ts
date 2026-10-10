@@ -492,7 +492,8 @@ export async function payLiveCommand(formData:FormData) {
     const message=error instanceof Error?error.message:"No se pudo cobrar la comanda.";
     redirect("/pos/checkout?ticket="+orderId+"&error="+encodeURIComponent(message.slice(0,330)));
   }
-  redirect("/pos/receipt/"+result.id+(result.alreadyRecorded?"":"?autoKitchen=paid"));
+  // La comanda guardada ya se envió al registrar la orden. Cobrar no reimprime.
+  redirect("/pos/receipt/"+result.id);
 }
 
 export async function updateCommandStatus(formData: FormData) {
