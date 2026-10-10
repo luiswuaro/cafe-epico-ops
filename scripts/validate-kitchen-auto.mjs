@@ -47,6 +47,14 @@ try{
   assert.match(auto,/event==="saved"\?"latest":"all"/);
   assert.match(auto,/AUTO_KITCHEN_ATTEMPT_PREFIX/);
   assert.match(printer,/Para llevar · al guardar o al cobrar directo/);
+  // Las pruebas en espejo sólo imprimen papel en Vercel preview.
+  assert.match(actions,/process\.env\.VERCEL_ENV==="preview"\?"&autoKitchen=saved":""/);
+  assert.match(orders,/const previewShadowPrint=process\.env\.VERCEL_ENV==="preview"/);
+  assert.match(orders,/previewShadowPrint&&order\.mode==="SHADOW"/);
+  const printablePreview=read("app/(employee)/pos/orders/[id]/kitchen/page.tsx");
+  assert.match(printablePreview,/process\.env\.VERCEL_ENV==="preview"/);
+  assert.match(orders,/Prueba de impresión en preview/);
+  assert.match(orders,/Imprimir comanda/);
   console.log("POS kitchen print: PASS (guardado, cobro directo, sin segunda impresión en pago posterior)");
 }finally{
   fs.rmSync(dir,{recursive:true,force:true});
