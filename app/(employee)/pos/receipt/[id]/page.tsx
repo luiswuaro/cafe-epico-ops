@@ -7,6 +7,7 @@ import { and, eq } from "drizzle-orm";
 import { DirectPrintTicketButton } from "./direct-print-button";
 import { PrintTicketButton } from "./print-button";
 import { AutoKitchenPrint } from "../../orders/auto-kitchen-print";
+import { kitchenOrderIdentity } from "@/src/application/pos/kitchen-slip";
 import { getPosPrintSettings } from "@/src/application/pos/print-settings";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
 import {
@@ -222,8 +223,7 @@ export default async function ReceiptPage({
           eventId={order.order.id+(split?"-"+split.id:"")}
           slip={{
             folio:order.order.folio,
-            table:order.order.tableLabel||
-              (order.order.serviceMode==="TAKEAWAY"?"Para llevar":"Aquí"),
+            ...kitchenOrderIdentity({ticketLabel:order.order.tableLabel,customerName:order.customerName,folio:order.order.folio}),
             orderNote:order.order.note,
             lines:lines.map(line=>({
               id:line.id,name:line.nameSnapshot,category:line.categorySnapshot,
