@@ -347,7 +347,8 @@ async function buildRasterTicket(
   y += 4;
   y = drawCentered(
     context,
-    ticket.kind === "PREBILL" ? "PRECUENTA · SIN LIQUIDAR" : "TICKET DE VENTA",
+    ticket.kind === "PREBILL" ? "PRECUENTA · SIN LIQUIDAR" :
+      ticket.simulation ? "COMPROBANTE DE PRUEBA" : "TICKET DE VENTA",
     y,
     "900 26px Arial, Helvetica, sans-serif",
     30,
