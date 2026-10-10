@@ -1,5 +1,5 @@
 import type { getContractReportData } from "./contracts";
-import { inspectDefects,mass,round2 } from "./contracts";
+import { inspectDefects,mass,round2 } from "./contract-utils";
 
 type Report=NonNullable<Awaited<ReturnType<typeof getContractReportData>>>;
 type PDFPage={content:string[];y:number;number:number};
@@ -28,6 +28,7 @@ export function createContractPdf(report:Report) {
     dateStyle:"short",timeStyle:"short",timeZone:"America/Mexico_City",
   }).format(d);
   const pages:PDFPage[]=[];
+  const footered=new Set<PDFPage>();
   let current:PDFPage={content:[],y:paper.height-45,number:1};
   pages.push(current);
   const safe=(s:unknown)=>String(s??"").normalize("NFC")
@@ -63,6 +64,8 @@ export function createContractPdf(report:Report) {
     return lines.length?lines:["-"];
   }
   function footer(){
+    if(footered.has(current))return;
+    footered.add(current);
     line(paper.left,45,paper.right,45);
     label(paper.left,30,"CAFÉ ÉPICO · INGENIERÍA DEL CAFÉ · TEPEXI DE RODRÍGUEZ, PUE.",7,false,muted);
     label(492,30,`PÁG. ${current.number}`,8,true,muted);
@@ -80,11 +83,13 @@ export function createContractPdf(report:Report) {
     if(current.y-height<66)nextPage("Continuación · control de calidad");
   }
   function heading(value:string){
-    need(42);label(paper.left,current.y,value,14,true,ink);current.y-=15;
+    const pieces=wrap(value,51);
+    need(29+pieces.length*17);
+    for(const piece of pieces){label(paper.left,current.y,piece,14,true,ink);current.y-=17;}
     line(paper.left,current.y,paper.right,current.y);current.y-=20;
   }
   function row(left:unknown,right:unknown){
-    const lines=wrap(right,39);
+    const lines=wrap(right,33);
     need(Math.max(24,lines.length*15+10));
     label(paper.left,current.y,left,9,false,muted);
     for(const value of lines){
@@ -107,7 +112,9 @@ export function createContractPdf(report:Report) {
   label(paper.left,741,"CONTROL DE TUESTE · TRAZABILIDAD · DEFECTOS",10,false,[194,221,205]);
   current.y=699;
   label(paper.left,current.y,"CLIENTE / PROPIETARIO DEL CAFÉ",9,true,greenColor);current.y-=21;
-  label(paper.left,current.y,report.client.name,18,true,ink);current.y-=23;
+  for(const nameLine of wrap(report.client.name,41)){
+    need(26);label(paper.left,current.y,nameLine,18,true,ink);current.y-=23;
+  }
   if(report.client.contact) {label(paper.left,current.y,"Contacto: "+report.client.contact,10);current.y-=18;}
   if(report.client.email) {label(paper.left,current.y,"Correo: "+report.client.email,9,false,muted);current.y-=18;}
   current.y-=10;
