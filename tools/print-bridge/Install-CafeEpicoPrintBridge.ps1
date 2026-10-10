@@ -1,10 +1,14 @@
 param(
   [string]$PrinterName = "POS-58 (copy 1)",
-  [int]$Port = 9137,
+  [int]$Port = 0,
+  [ValidateSet("Tickets", "Barra")][string]$Instance = "Tickets",
   [switch]$ResetToken
 )
 
 $ErrorActionPreference = "Stop"
+
+if ($Port -eq 0) { $Port = if ($Instance -eq "Barra") { 9138 } else { 9137 } }
+if ($Port -lt 1024 -or $Port -gt 65535) { throw "Puerto TCP invalido." }
 
 $bridgePath = Join-Path $PSScriptRoot "CafeEpicoPrintBridge.ps1"
 if (-not (Test-Path $bridgePath)) {
@@ -12,8 +16,9 @@ if (-not (Test-Path $bridgePath)) {
 }
 
 $configDir = Join-Path $env:LOCALAPPDATA "CafeEpicoOps"
-$configPath = Join-Path $configDir "print-bridge.json"
-$taskName = "CafeEpicoOps-PrintBridge"
+$configFile = if ($Instance -eq "Barra") { "print-bridge-barra.json" } else { "print-bridge.json" }
+$configPath = Join-Path $configDir $configFile
+$taskName = if ($Instance -eq "Barra") { "CafeEpicoOps-PrintBridge-Barra" } else { "CafeEpicoOps-PrintBridge" }
 New-Item -ItemType Directory -Path $configDir -Force | Out-Null
 
 $existingConfig = $null
@@ -26,6 +31,13 @@ if (Test-Path $configPath) {
   }
 }
 
+if ($Instance -eq "Barra" -and -not $PSBoundParameters.ContainsKey("PrinterName")) {
+  if ($null -ne $existingConfig -and $existingConfig.printerName) {
+    $PrinterName = [string]$existingConfig.printerName
+  } else {
+    throw "Para instalar Barra, especifica -PrinterName con el nombre exacto de la segunda impresora en Windows."
+  }
+}
 if (
   -not $ResetToken -and
   $null -ne $existingConfig -and
@@ -66,7 +78,7 @@ Start-ScheduledTask -TaskName $taskName
 Start-Sleep -Milliseconds 800
 
 Write-Host ""
-Write-Host "Cafe Epico Print Bridge instalado." -ForegroundColor Green
+Write-Host "Cafe Epico Print Bridge [$Instance] instalado." -ForegroundColor Green
 Write-Host "Impresora : $PrinterName"
 Write-Host "URL       : http://127.0.0.1:$Port"
 Write-Host "Token     : $token" -ForegroundColor Yellow

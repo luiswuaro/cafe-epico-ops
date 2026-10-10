@@ -384,7 +384,7 @@ async function payOrderSplitUnsafe(formData: FormData) {
     });
   });
 
-  return "/pos/receipt/" + order.id + "?split=" + split.id;
+  return "/pos/receipt/" + order.id + "?split=" + split.id + "&autoKitchen=paid";
 }
 
 export async function payOrderSplit(formData:FormData){

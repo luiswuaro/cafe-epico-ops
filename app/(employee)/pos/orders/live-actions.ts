@@ -107,8 +107,8 @@ export async function addProductsToLiveCommand(data:FormData){
     redirect("/pos/orders?error="+encodeURIComponent(message(error)));
   }
   redirect(String(data.get("returnToPos")??"")==="1"
-    ? "/pos?ticket="+orderId+"&updated=1&savedRound="+requestId
-    : "/pos/orders?added="+orderId);
+    ? "/pos?ticket="+orderId+"&updated=1&savedRound="+requestId+"&autoKitchen=saved"
+    : "/pos/orders?added="+orderId+"&round="+requestId+"&autoKitchen=saved");
 }
 
 export async function setLiveCommandCustomer(data:FormData){
