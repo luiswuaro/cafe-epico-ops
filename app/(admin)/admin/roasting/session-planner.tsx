@@ -2,7 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-type Lot={id:string;name:string;greenStockG:number|null;greenStockSource:string;targetUse:string};
+type Lot={
+  id:string;name:string;greenStockG:number|null;greenStockSource:string;
+  targetUse:string;hibeanGreenStockG:number|null;internalGreenStockG:number|null;
+};
 
 function fmt(v:number,d=0){return new Intl.NumberFormat("es-MX",{maximumFractionDigits:d}).format(v);}
 const MIN_CHARGE=100;
@@ -75,6 +78,9 @@ export function RoastingSessionPlanner({lots}:{lots:Lot[]}){
   const outOfStock=selected?.greenStockG!==null&&selected?.greenStockG!==undefined&&valid
     &&selected.greenStockG<grams;
   const displayStock=selected?.greenStockG==null?"Sin confirmar":fmt(selected.greenStockG)+" g";
+  const historicalHiBeanMismatch=selected?.greenStockSource==="INTERNAL"&&
+    selected.hibeanGreenStockG!=null&&selected.greenStockG!=null&&
+    Math.abs(selected.greenStockG-selected.hibeanGreenStockG)>1;
 
   function clearPlan(){
     setRealWeights({});
@@ -118,8 +124,14 @@ export function RoastingSessionPlanner({lots}:{lots:Lot[]}){
             ?"Inventario interno OPS":"Confirma primero el lote e inventario en OPS"}</small>
       </div>
     </div>
+    {historicalHiBeanMismatch&&selected&&<p className="muted" role="status">
+      Inventario operativo: <strong>{fmt(selected.greenStockG!)} g en OPS</strong>.
+      HiBean reportó previamente {fmt(selected.hibeanGreenStockG!)} g.
+      La diferencia está pendiente de conciliación; no se suman los saldos
+      ni se registra ningún movimiento automático.
+    </p>}
     {!valid&&<p className="alert">Verifica el peso verde, la carga (100 a 500 g) y la merma estimada.</p>}
-    {outOfStock&&<p className="alert">El plan supera el inventario verde registrado. Revisa el stock de HiBean y confirma cualquier corrección en OPS antes de registrar batches.</p>}
+    {outOfStock&&<p className="alert">El plan supera las existencias operativas registradas. Realiza un conteo físico en Inventario OPS y registra cualquier corrección antes del tueste.</p>}
     {valid&&<div className="grid">
       <div className="card"><p className="eyebrow">PLAN DE PRODUCCIÓN</p><div className="metric">{plan.length} batches</div><p>{fmt(grams)} g verdes</p></div>
       <div className="card"><p className="eyebrow">TOSTADO ESTIMADO</p><div className="metric">{fmt(estimatedRoasted/1000,3)} kg</div><p>Merma prevista {fmt(lossPct,1)}%</p></div>
