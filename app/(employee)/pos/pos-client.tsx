@@ -10,7 +10,7 @@ import {
 } from "./actions";
 import { submitLiveSale } from "./live-actions";
 import {CheckoutLoyalty,redeemAmount,type CheckoutCustomer} from "./checkout/checkout-loyalty";
-import {calculateStaffDrinkBenefit,type StaffBenefitKind} from "@/src/domain/pos/staff-drink-policy";
+import {calculateStaffTicket,calculateMixedTicketSettlement,type StaffBenefitKind} from "@/src/domain/pos/staff-ticket";
 import type {ExtraOption} from "@/src/application/pos/extra-catalog";
 import {OWN_CONTAINER_DISCOUNT_MXN,canUseOwnContainer,ownContainerUnitPrice} from "@/src/domain/pos/own-container";
 import {
@@ -47,6 +47,7 @@ type Props = {
   catalog: CatalogItem[];
   extrasOptions:ExtraOption[];
   customers: Customer[];
+  staffEmployees:Array<{id:string;name:string}>;
   selectedCustomerId?: string | null;
   cashOpen: boolean;
   liveEnabled: boolean;
@@ -69,6 +70,7 @@ export function PosClient({
   catalog,
   extrasOptions,
   customers,
+  staffEmployees,
   selectedCustomerId = null,
   cashOpen,
   liveEnabled,
@@ -85,7 +87,17 @@ export function PosClient({
   const [customerId, setCustomerId] = useState(savedTicket?.customerId??selectedCustomerId??"");
   const [createdCustomer,setCreatedCustomer]=useState<CheckoutCustomer|null>(null);
   const [redeemPoints,setRedeemPoints]=useState("0");
-  const [staffBenefit,setStaffBenefit]=useState<StaffBenefitKind>("NONE");
+  const [lineBenefits,setLineBenefits]=useState<Record<string,{
+    kind:StaffBenefitKind;employeeId:string;
+  }>>({});
+  function assignLineBenefit(key:string,update:{kind?:StaffBenefitKind;employeeId?:string}){
+    setLineBenefits(old=>({
+      ...old,[key]:{
+        kind:update.kind??old[key]?.kind??"NONE",
+        employeeId:update.employeeId??old[key]?.employeeId??"",
+      }
+    }));
+  }
   const checkoutCustomerChange=useCallback((id:string,created?:CheckoutCustomer)=>{
     setCustomerId(id);
     setRedeemPoints("0");
@@ -183,25 +195,87 @@ export function PosClient({
     };
   },[mobileCartOpen,checkoutOpen]);
 
-  const staffQuote=calculateStaffDrinkBenefit(
-    cartLines.map(line=>({
-      category:line.item.category,basePrice:line.item.price,
-      extrasPrice:extraCharge(line),ownThermos:line.customerContainer,
-    })),staffBenefit);
-  const staffSelected=staffBenefit!=="NONE";
-  const staffPreviewDue=staffSelected
-    ?Math.max(0,Math.round((total-staffQuote.discount)*100)/100):total;
+  const staffTicket=calculateStaffTicket(cartLines.map(line=>({
+    key:line.key,name:line.item.name,
+    category:line.item.category,basePrice:line.item.price,
+    extrasPrice:extraCharge(line),ownThermos:line.customerContainer,
+    staffBenefit:lineBenefits[line.key]?.kind??"NONE",
+    employeeId:lineBenefits[line.key]?.employeeId||null,
+  })));
+  const staffSelected=staffTicket.perLine.some(line=>line.staffBenefit!=="NONE");
   const selectedCustomer =
     customers.find((customer) => customer.id === customerId) ??
     (createdCustomer?.id===customerId?createdCustomer:null);
-  const redemption=redeemAmount(redeemPoints,selectedCustomer?.pointsBalance??0,total);
-  const monetaryDue=redemption.remaining;
-  const pointCheckout=!redemption.valid || (redemption.points>0&&!selectedCustomer);
+  // El cliente sólo puede usar puntos en SUS líneas, no en bebidas del personal.
+  const redemption=redeemAmount(redeemPoints,selectedCustomer?.pointsBalance??0,
+    staffTicket.customerEligibleTotal);
+  const mixedSettlement=staffTicket.valid&&redemption.valid
+    ?calculateMixedTicketSettlement(staffTicket,redemption.points):null;
+  const monetaryDue=mixedSettlement?.totalDue??staffTicket.totalBeforePoints;
+  const pointsEarned=mixedSettlement?.earnedPoints??0;
+  const pointCheckout=!staffTicket.valid || !redemption.valid ||
+    (redemption.points>0&&!selectedCustomer);
   const loyaltyControl=<CheckoutLoyalty customers={createdCustomer
     ?[...customers.filter(c=>c.id!==createdCustomer.id),createdCustomer]:customers}
     selectedId={customerId} onSelect={checkoutCustomerChange}
     redeemPoints={redeemPoints} onRedeemChange={setRedeemPoints}
-    total={total} liveEnabled={liveEnabled}/>;
+    total={staffTicket.customerEligibleTotal} liveEnabled={liveEnabled}/>;
+  const assignBenefits=<section className="card stack" style={{padding:14,gap:12}}>
+    <strong>Beneficios de personal · por bebida</strong>
+    <small className="muted">Cada producto puede ser del cliente o de un trabajador diferente.</small>
+    {cartLines.map((line,index)=>{
+      const assigned=lineBenefits[line.key]??{kind:"NONE" as StaffBenefitKind,employeeId:""};
+      const computed=staffTicket.perLine.find(x=>x.key===line.key);
+      return <div className="stack" key={line.key} style={{gap:7,
+        paddingBottom:10,borderBottom:"1px solid var(--border, #444)"}}>
+        <div style={{display:"flex",justifyContent:"space-between",gap:8}}>
+          <strong>{index+1}. {line.item.name}</strong>
+          <span>{money.format(computed?.payable??unitPrice(line))}</span>
+        </div>
+        <label>Esta bebida es para
+          <select value={assigned.kind}
+            onChange={e=>assignLineBenefit(line.key,{kind:e.target.value as StaffBenefitKind})}>
+            <option value="NONE">Cliente / venta normal</option>
+            <option value="INCLUDED_DRINK">Personal · bebida incluida</option>
+            <option value="ADDITIONAL_10">Personal · bebida adicional −10%</option>
+          </select>
+        </label>
+        {assigned.kind!=="NONE"&&<label>¿Qué trabajador la consume?
+          <select value={assigned.employeeId}
+            onChange={e=>assignLineBenefit(line.key,{employeeId:e.target.value})}>
+            <option value="">Selecciona empleado…</option>
+            {staffEmployees.map(worker=><option key={worker.id} value={worker.id}>
+              {worker.name}
+            </option>)}
+          </select>
+        </label>}
+      </div>;
+    })}
+    {staffTicket.warnings.map((warning,i)=><p key={i} className="status-warn" role="alert">{warning}</p>)}
+    {staffSelected&&<p className="status-warn">
+      Beneficios de empleados: solo simulación. Falta el control diario y el
+      registro de inventario para habilitarlos en cobros LIVE.
+    </p>}
+  </section>;
+  const breakdown=<div className="stack" style={{gap:7}}>
+    {staffTicket.staffDiscount>0&&<div style={{display:"flex",justifyContent:"space-between"}}>
+      <span>Beneficio de personal</span><strong>−{money.format(staffTicket.staffDiscount)}</strong>
+    </div>}
+    <div style={{display:"flex",justifyContent:"space-between"}}>
+      <span>Productos de cliente</span><strong>{money.format(staffTicket.customerEligibleTotal)}</strong>
+    </div>
+    <div style={{display:"flex",justifyContent:"space-between"}}>
+      <span>Consumo de personal por pagar</span><strong>{money.format(staffTicket.staffPayable)}</strong>
+    </div>
+    {redemption.points>0&&<div style={{display:"flex",justifyContent:"space-between"}}>
+      <span>Puntos del cliente canjeados</span><strong>−{money.format(redemption.points)}</strong>
+    </div>}
+    <div className="pos-total" style={{display:"flex",justifyContent:"space-between"}}>
+      <strong>Total monetario</strong><strong>{money.format(monetaryDue)}</strong>
+    </div>
+    <p className="muted">Puntos nuevos del cliente: +{pointsEarned.toFixed(2)} pts.
+      Los consumos de personal no acumulan puntos.</p>
+  </div>;
 
   const productCount = (id: string) =>
     cart.reduce(
