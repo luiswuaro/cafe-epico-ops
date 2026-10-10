@@ -38,7 +38,7 @@ export default async function PosCheckoutPage({searchParams}:{
       eq(posOrders.storeId,employee.homeStoreId),
     )).limit(1)
     :[undefined];
-  const alreadyPaid=!order&&current?.mode==="LIVE"&&current.status==="PAID";
+  const paidOrder=!order && current?.mode==="LIVE" && current.status==="PAID" ? current : null;
   const error=typeof params.error==="string"?params.error.slice(0,340):null;
   return <main className="shell pos-shell">
     <section className="hero pos-hero">
@@ -49,12 +49,12 @@ export default async function PosCheckoutPage({searchParams}:{
       </div>
       <Link href={order?"/pos?ticket="+order.id:"/pos"} className="button">Volver al POS</Link>
     </section>
-    {alreadyPaid?<section className="card stack" role="status">
+    {paidOrder?<section className="card stack" role="status">
       <p className="status-ok">Esta comanda ya fue cobrada desde otro dispositivo.</p>
-      <h2>Pago registrado · {current.folio}</h2>
+      <h2>Pago registrado · {paidOrder.folio}</h2>
       <p>No se generó un segundo cobro. Puedes consultar o imprimir el ticket original.</p>
       <div className="row" style={{display:"flex",gap:12,flexWrap:"wrap"}}>
-        <Link className="button" href={"/pos/receipt/"+current.id}>Ver ticket cobrado</Link>
+        <Link className="button" href={"/pos/receipt/"+paidOrder.id}>Ver ticket cobrado</Link>
         <Link className="button" href="/pos">Volver al POS</Link>
       </div>
     </section>:<>
