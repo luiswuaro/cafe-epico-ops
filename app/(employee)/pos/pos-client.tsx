@@ -349,7 +349,7 @@ export function PosClient({
 
   if(checkoutOpen&&!liveEnabled&&!savedTicket){
     const cashPaid=tendered.trim()!==""?Number(tendered):NaN;
-    const previewDue=staffSelected?staffPreviewDue:monetaryDue;
+    const previewDue=monetaryDue;
     const cashSufficient=Number.isFinite(cashPaid)&&cashPaid>=previewDue;
     const cashChange=cashSufficient
       ?Math.round((cashPaid-previewDue+Number.EPSILON)*100)/100:0;
@@ -364,49 +364,11 @@ export function PosClient({
         <p className="muted">Pedido: <strong>{ticketNamePreview}</strong>
           {" · "}{ticketServiceMode==="TAKEAWAY"?"Para llevar":"Aquí"}
         </p>
-        <div className="stack">
-          {cartLines.map((line,index)=><div key={line.key} className="pos-cart-line"
-            style={{display:"flex",justifyContent:"space-between",gap:12}}>
-            <div>
-              <strong>{index+1}. {line.item.name}</strong>
-              <p className="muted" style={{margin:0}}>
-                {line.customerContainer
-                  ?"Termo propio · descuento de "+money.format(OWN_CONTAINER_DISCOUNT_MXN)+" · sin desechables"
-                  :line.serviceMode==="TAKEAWAY"?"Para llevar · con empaque":"Aquí"}
-              </p>
-              {line.extras.length>0&&<small className="muted">
-                Extras · +{money.format(extraCharge(line))}
-              </small>}
-            </div>
-            <strong>{money.format(unitPrice(line))}</strong>
-          </div>)}
-        </div>
-        <div className="pos-total"><strong>Consumo</strong>
+        <div className="pos-total"><strong>Consumo a precio vigente</strong>
           <strong>{money.format(total)}</strong></div>
-        <section className="card stack" style={{padding:14,gap:10}}>
-          <strong>¿Es consumo de Azucena?</strong>
-          <select aria-label="Beneficio de Azucena" value={staffBenefit}
-            onChange={e=>{
-              setStaffBenefit(e.target.value as StaffBenefitKind);
-              if(e.target.value!=="NONE"){checkoutCustomerChange("");setRedeemPoints("0");}
-            }}>
-            <option value="NONE">No · venta normal</option>
-            <option value="INCLUDED_DRINK">Bebida incluida por jornada</option>
-            <option value="ADDITIONAL_10">Bebida adicional · 10% de descuento</option>
-          </select>
-          {staffSelected&&<>
-            <p className="muted">Beneficiaria: Azucena · {staffQuote.benefitLabel}</p>
-            <p>Descuento simulado: <strong>{money.format(staffQuote.discount)}</strong></p>
-            <div className="pos-total">
-              <strong>Saldo por cobrar</strong><strong>{money.format(staffPreviewDue)}</strong>
-            </div>
-            {staffQuote.warnings.map(w=><p key={w} className="status-warn">{w}</p>)}
-            <p className="status-warn">Solo preview: el uso diario, autorización e inventario
-              se validarán en servidor al habilitar el consumo de personal LIVE.
-              No se registrará consumo ni se descontará inventario aquí.</p>
-          </>}
-        </section>
-        {!staffSelected&&loyaltyControl}
+        {assignBenefits}
+        {staffTicket.customerEligibleTotal>0&&loyaltyControl}
+        {breakdown}
         {previewDue>0?<label>Método de pago (simulado)
           <select value={paymentMethod}
             onChange={e=>setPaymentMethod(e.target.value as "CASH"|"CARD"|"TRANSFER")}>
@@ -414,7 +376,7 @@ export function PosClient({
             <option value="CARD">Tarjeta</option>
             <option value="TRANSFER">Transferencia</option>
           </select>
-        </label>:<p className="status-ok">{staffSelected?"Bebida incluida de Azucena: cortesía simulada, sin pago monetario.":"Cuenta cubierta con puntos. Sin pago en efectivo, tarjeta o transferencia."}</p>}
+        </label>:<p className="status-ok">Saldo cubierto con cortesías y/o puntos, sin dinero a cobrar.</p>}
         {previewDue>0&&paymentMethod==="CASH"&&<div className="stack">
           <label>Importe recibido (simulado)
             <input type="number" min="0" step=".01" inputMode="decimal"
@@ -424,7 +386,7 @@ export function PosClient({
           <p className={cashSufficient?"status-ok":"status-warn"} role="status">
             {cashSufficient
               ?"Cambio a entregar: "+money.format(cashChange)
-              :"Ingresa una cantidad al menos igual al total para calcular el cambio."}
+              :"Ingresa una cantidad al menos igual al saldo monetario para calcular el cambio."}
           </p>
         </div>}
         <p className="muted">El descuento y la receta se calculan en el servidor cuando
@@ -447,22 +409,15 @@ export function PosClient({
         {checkoutState.error&&<div className="status-bad" role="alert">
           No se cobró. {checkoutState.error}
         </div>}
-        <div className="stack">
-          {cartLines.map((line,index)=><div key={line.key} style={{display:"flex",justifyContent:"space-between",gap:12}}>
-            <div>
-              <strong>{index+1}. {line.item.name}</strong>
-              <p className="muted">{line.serviceMode==="DINE_IN"?"Aquí":line.customerContainer?"Para llevar · termo propio (-$5)":"Para llevar"}{line.note?" · "+line.note:""}</p>
-            </div>
-            <div style={{textAlign:"right"}}>
-              <strong>{money.format(unitPrice(line))}</strong>
-              {line.extras.length>0&&<small className="muted" style={{display:"block"}}>
-                Extras · +{money.format(extraCharge(line))}
-              </small>}
-            </div>
-          </div>)}
-        </div>
-        <div className="pos-total"><strong>Consumo</strong><strong>{money.format(total)}</strong></div>
-        {loyaltyControl}
+        <div className="pos-total"><strong>Consumo a precio vigente</strong>
+          <strong>{money.format(total)}</strong></div>
+        {assignBenefits}
+        {staffTicket.customerEligibleTotal>0&&loyaltyControl}
+        {breakdown}
+        {staffSelected&&<p className="status-warn" role="alert">
+          Consumo de personal todavía en validación. El cobro LIVE de este
+          pedido está bloqueado hasta habilitar el registro diario y de inventario.
+        </p>}
         <form action={checkoutAction} className="stack">
           <input type="hidden" name="clientOrderId" value={liveClientOrderId}/>
           <input type="hidden" name="cart" value={JSON.stringify(cartLines.map(line=>({
@@ -504,7 +459,7 @@ export function PosClient({
             <small className="muted">Registra inventario negativo y auditoría; exige reconteo posterior. No crea existencias ficticias.</small>
           </label>}
           <button className="pos-pay-button" type="submit" disabled={checkoutPending ||
-            missingTable || pointCheckout ||
+            missingTable || pointCheckout || staffSelected ||
             (monetaryDue>0&&paymentMethod==="CASH"&&(!tendered.trim()||Number(tendered)<monetaryDue))}>
             {checkoutPending?"Procesando...":"Confirmar cobro · "+money.format(monetaryDue)}
           </button>
