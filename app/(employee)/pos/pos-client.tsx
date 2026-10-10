@@ -846,19 +846,14 @@ export function PosClient({
               <button type="submit" form="pos-order-command-form" formNoValidate
                 formAction={liveEnabled?saveAction:shadowSaveAction}
                 className="pos-command-button"
-                disabled={cartLines.length===0||savePending||missingTable}>
+                disabled={cartLines.length===0||savePending||shadowSavePending||missingTable}>
                 {savePending?"Guardando…":"Guardar ticket"}
               </button>
-              {liveEnabled
-                ?<button type="button" className="pos-pay-button"
-                  disabled={cartLines.length===0||missingTable}
-                  onClick={()=>{setMobileCartOpen(false);setCheckoutOpen(true);}}>
-                  Cobrar · {money.format(total)}
-                </button>
-                :<button type="submit" form="pos-order-command-form" className="pos-pay-button"
-                   disabled={cartLines.length===0||missingTable}>
-                   Registrar espejo
-                 </button>}
+              <button type="button" className="pos-pay-button"
+                disabled={cartLines.length===0||missingTable}
+                onClick={()=>{setMobileCartOpen(false);setCheckoutOpen(true);}}>
+                {liveEnabled?"Cobrar":"Simular cobro"} · {money.format(total)}
+              </button>
             </>}
         </div>
       </aside>
