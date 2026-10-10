@@ -2,20 +2,44 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { getFinancialPreview } from "@/src/application/finance/preview";
+import {afterTaxRevenueRatio, estimateTaxesOnGrossSales, IVA_RATE_PERCENT, ISR_RESICO_ASSUMED_RATE_PERCENT} from "@/src/domain/finance/taxes";
 
 type Data = Awaited<ReturnType<typeof getFinancialPreview>>;
 const money = new Intl.NumberFormat("es-MX", {style:"currency",currency:"MXN",maximumFractionDigits:2});
 const number = (x:number) => Number.isFinite(x) ? x : 0;
 const round = (x:number) => Math.round(x*100)/100;
-const defaultFixed = [
-  {key:"nomina",name:"Nómina estructural",amount:8000},
-  {key:"renta",name:"Renta del local",amount:4000},
-  {key:"electricidad",name:"Electricidad",amount:700},
-  {key:"internet",name:"Internet",amount:500},
-  {key:"contadora",name:"Contadora",amount:1000},
-  {key:"mantenimiento",name:"Mantenimiento y reparaciones",amount:0},
-  {key:"otros",name:"Otros gastos corrientes",amount:0},
+type Expense = {
+  id:string;
+  name:string;
+  amount:number;
+  recurrence:"MONTHLY"|"ONE_OFF";
+  classification:"FIXED"|"VARIABLE";
+  month:string;
+  status:"ESTIMATED"|"PAID";
+};
+const expenseDefaults:Expense[] = [
+  {id:"nomina",name:"Nómina estructural",amount:8000,recurrence:"MONTHLY",classification:"FIXED",month:"",status:"ESTIMATED"},
+  {id:"renta",name:"Renta del local",amount:4000,recurrence:"MONTHLY",classification:"FIXED",month:"",status:"ESTIMATED"},
+  {id:"electricidad",name:"Electricidad",amount:700,recurrence:"MONTHLY",classification:"FIXED",month:"",status:"ESTIMATED"},
+  {id:"internet",name:"Internet",amount:500,recurrence:"MONTHLY",classification:"FIXED",month:"",status:"ESTIMATED"},
+  {id:"contadora",name:"Honorarios contables",amount:1000,recurrence:"MONTHLY",classification:"FIXED",month:"",status:"ESTIMATED"},
 ];
+const validMoney=(amount:unknown)=>Number.isFinite(Number(amount))
+  ?Math.max(0,Math.min(100000000,Math.round(Number(amount)*100)/100)):0;
+function restoreExpenses(raw:unknown):Expense[]|null{
+  if(!Array.isArray(raw))return null;
+  return raw.filter((value):value is Record<string,unknown>=>
+    Boolean(value)&&typeof value==="object"&&!Array.isArray(value))
+    .slice(0,120).map((e,index)=>({
+      id:typeof e.id==="string"&&e.id.length>0?e.id:"restored-"+index,
+      name:typeof e.name==="string"?e.name.slice(0,100):"Sin concepto",
+      amount:validMoney(e.amount),
+      recurrence:e.recurrence==="ONE_OFF"?"ONE_OFF":"MONTHLY",
+      classification:e.classification==="VARIABLE"?"VARIABLE":"FIXED",
+      month:typeof e.month==="string"&&/^\d{4}-\d{2}$/.test(e.month)?e.month:"",
+      status:e.status==="PAID"?"PAID":"ESTIMATED",
+    }));
+}
 const monthDays = (period: string) => {
   const [y,m]=period.split("-").map(Number);
   return new Date(y,m,0).getDate();
@@ -27,37 +51,67 @@ function verdict(cost:{known:number;unpriced:string[]}) {
 }
 
 export function FinancialWorkbench({data}:{data:Data}){
-  const [fixed,setFixed]=useState<Record<string,number>>(
-    Object.fromEntries(defaultFixed.map(e=>[e.key,e.amount])));
+  const [expenses,setExpenses]=useState<Expense[]>(expenseDefaults);
   const [variableRatio,setVariableRatio]=useState(30);
   const [cardRate,setCardRate]=useState(3.5);
-  const [taxReserve,setTaxReserve]=useState(0);
-  const [extraCost,setExtraCost]=useState(0);
+  const [legacyTaxWarning,setLegacyTaxWarning]=useState(false);
   const [productId,setProductId]=useState(data.menu[0]?.id??"");
   const [service,setService]=useState<Mode>("DINE_IN");
   const [promo,setPromo]=useState<Promo>("NONE");
   const [filter,setFilter]=useState("");
   const [hydrated,setHydrated]=useState(false);
+  // Preview: datos privados del escenario en el navegador. No escribe en Supabase,
+  // ni registra movimientos contables ni modifica la caja de producción.
   useEffect(()=>{
     const timeout=window.setTimeout(()=>{
-      try {
-        const saved=JSON.parse(window.localStorage.getItem("epico-finance-sandbox-v1")||"{}");
-        if(saved.fixed && typeof saved.fixed==="object") setFixed((v)=>({...v,...saved.fixed}));
-        if(typeof saved.variableRatio==="number")setVariableRatio(saved.variableRatio);
-        if(typeof saved.cardRate==="number")setCardRate(saved.cardRate);
-        if(typeof saved.taxReserve==="number")setTaxReserve(saved.taxReserve);
-        if(typeof saved.extraCost==="number")setExtraCost(saved.extraCost);
-      }catch{/* Local storage opcional. */}
+      try{
+        const savedV2=JSON.parse(window.localStorage.getItem("epico-finance-sandbox-v2")||"null");
+        const restored=restoreExpenses(savedV2?.expenses);
+        if(restored){
+          setExpenses(restored);
+          if(typeof savedV2.variableRatio==="number")setVariableRatio(savedV2.variableRatio);
+          if(typeof savedV2.cardRate==="number")setCardRate(savedV2.cardRate);
+        }else{
+          // Migrar el presupuesto previo para no perder gastos escritos por el propietario.
+          const old=JSON.parse(window.localStorage.getItem("epico-finance-sandbox-v1")||"{}");
+          const priorFixed=old.fixed&&typeof old.fixed==="object"?old.fixed:{};
+          const migrated=expenseDefaults.map(e=>({...e,amount:validMoney(priorFixed[e.id]??e.amount)}));
+          const historicExtra=validMoney(old.extraCost);
+          if(historicExtra>0)migrated.push({
+            id:"gasto-previo-adicional",name:"Extraordinarios anteriores",amount:historicExtra,
+            recurrence:"ONE_OFF",classification:"VARIABLE",month:data.month,status:"ESTIMATED"
+          });
+          for(const key of ["mantenimiento","otros"]){
+            if(validMoney(priorFixed[key])>0)migrated.push({
+              id:key,name:key==="mantenimiento"?"Mantenimiento y reparaciones":"Otros gastos corrientes",
+              amount:validMoney(priorFixed[key]),recurrence:"MONTHLY",
+              classification:"FIXED",month:"",status:"ESTIMATED"
+            });
+          }
+          setExpenses(migrated);
+          if(typeof old.variableRatio==="number")setVariableRatio(old.variableRatio);
+          if(typeof old.cardRate==="number")setCardRate(old.cardRate);
+          // Reserva fiscal antigua no se migra: ahora IVA + ISR son automáticos.
+          if(validMoney(old.taxReserve)>0)setLegacyTaxWarning(true);
+        }
+      }catch{/* Sin almacenamiento local disponible: usar presupuesto inicial. */}
       setHydrated(true);
     },0);
     return ()=>window.clearTimeout(timeout);
-  },[]);
+  },[data.month]);
   useEffect(()=>{
     if(!hydrated)return;
-    try{window.localStorage.setItem("epico-finance-sandbox-v1",JSON.stringify(
-      {fixed,variableRatio,cardRate,taxReserve,extraCost}
-    ));}catch{/* Vista de simulación operativa. */}
-  },[fixed,variableRatio,cardRate,taxReserve,extraCost,hydrated]);
+    try{window.localStorage.setItem("epico-finance-sandbox-v2",JSON.stringify(
+      {expenses,variableRatio,cardRate}
+    ));}catch{/* El preview funciona sin almacenamiento. */}
+  },[expenses,variableRatio,cardRate,hydrated]);
+
+  const updateExpense=(id:string,patch:Partial<Expense>)=>
+    setExpenses(rows=>rows.map(e=>e.id===id?{...e,...patch}:e));
+  const addExpense=()=>setExpenses(rows=>[...rows,{
+    id:crypto.randomUUID(),name:"Nuevo gasto",amount:0,
+    recurrence:"ONE_OFF",classification:"VARIABLE",month:data.month,status:"ESTIMATED"
+  }]);
 
   const knownCogs=data.lines.reduce((s,l)=>s+l.cost.known,0);
   const counted=data.lines.reduce((s,l)=>s+l.cost.components,0);
@@ -66,19 +120,34 @@ export function FinancialWorkbench({data}:{data:Data}){
   const packaging=data.lines.reduce((s,l)=>s+l.cost.packaging,0);
   const dine=data.lines.filter(x=>x.service==="DINE_IN");
   const takeaway=data.lines.filter(x=>x.service==="TAKEAWAY");
-  const fixedMonthly=Object.values(fixed).reduce((a,b)=>a+number(b),0);
+  const currentExpenses=expenses.filter(e=>e.recurrence==="MONTHLY"||e.month===data.month);
+  const recurring=currentExpenses.filter(e=>e.recurrence==="MONTHLY");
+  const oneTime=currentExpenses.filter(e=>e.recurrence==="ONE_OFF");
+  const fixedMonthly=round(recurring.filter(e=>e.classification==="FIXED")
+    .reduce((sum,e)=>sum+e.amount,0));
+  const variableMonthly=round(recurring.filter(e=>e.classification==="VARIABLE")
+    .reduce((sum,e)=>sum+e.amount,0));
+  const totalMonthly=round(fixedMonthly+variableMonthly);
+  const oneTimeExpense=round(oneTime.reduce((sum,e)=>sum+e.amount,0));
   const totalDays=monthDays(data.month);
   const currentDay=Math.min(totalDays,Number(new Intl.DateTimeFormat("en-US",{
     timeZone:"America/Mexico_City",day:"numeric"
   }).format(new Date())));
-  const proratedFixed=round(fixedMonthly*currentDay/totalDays);
+  const proratedMonthly=round(totalMonthly*currentDay/totalDays);
+  const expenseCharge=round(proratedMonthly+oneTimeExpense);
+  const confirmedExpenses=round(currentExpenses.filter(e=>e.status==="PAID")
+    .reduce((sum,e)=>sum+e.amount,0));
   const cardSales=data.payments.CARD??0;
   const cardCost=round(cardSales*cardRate/100);
-  const contribution=round(data.sales-knownCogs-cardCost);
-  const upperNet=round(contribution-proratedFixed-taxReserve-extraCost);
+  // En OPS el precio de venta es público, por tanto IVA está contenido en el cobro.
+  const taxes=estimateTaxesOnGrossSales(data.sales);
+  const contribution=round(taxes.afterTaxes-knownCogs-cardCost);
+  const upperNet=round(contribution-expenseCharge);
   const unitAverage=data.orders?data.sales/data.orders:0;
-  const variableRate=variableRatio/100 + (data.sales>0?cardCost/data.sales:0);
-  const breakEven=variableRate<1?fixedMonthly/(1-variableRate):null;
+  const cardShare=data.sales>0?cardSales/data.sales:0;
+  const availableRatio=afterTaxRevenueRatio-variableRatio/100-cardShare*cardRate/100;
+  // Gastos puntuales del mes elevan la meta excepcionalmente este mes.
+  const breakEven=availableRatio>0?(totalMonthly+oneTimeExpense)/availableRatio:null;
   const breakEvenTickets=breakEven!==null&&unitAverage>0?Math.ceil(breakEven/unitAverage):null;
 
   const chosen=data.menu.find(x=>x.id===productId);
@@ -91,8 +160,10 @@ export function FinancialWorkbench({data}:{data:Data}){
   const discount=chosen&&(actualPromo==="THERMOS_10"||actualPromo==="STAFF_10")?round(chosen.price*.1)
     : actualPromo==="STAFF_FREE"&&chosen?chosen.price:0;
   const finalPrice=chosen?round(chosen.price-discount):0;
-  const baseMargin=chosen&&baseCost?round(chosen.price-baseCost.known):0;
-  const effectiveMargin=modeCost?round(finalPrice-modeCost.known):0;
+  const baseMargin=chosen&&baseCost
+    ?round(estimateTaxesOnGrossSales(chosen.price).afterTaxes-baseCost.known):0;
+  const effectiveMargin=modeCost
+    ?round(estimateTaxesOnGrossSales(finalPrice).afterTaxes-modeCost.known):0;
   const discountBlocked=promo==="THERMOS_10"&&!canThermos ||
     promo==="STAFF_10"&&canThermos;
   const desc=discountBlocked
