@@ -39,3 +39,9 @@ export function isOwnContainerSnapshot(expected:unknown):boolean {
   return !!expected && typeof expected==="object" && !Array.isArray(expected) &&
     (expected as Record<string,unknown>).customerContainer===true;
 }
+
+/** A normal takeaway recipe may be marked not-ready due solely to its packaging
+ *  stock. The thermo customer does not need those packaging units. */
+export function ownContainerReadinessErrors(errors:string[],enabled:boolean):string[]{
+  return enabled?errors.filter(error=>!isOwnContainerDisposable({name:error})):errors;
+}
