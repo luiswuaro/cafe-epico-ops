@@ -82,6 +82,9 @@ export default async function PosCheckoutPage({searchParams}:{
           </div>)}
         </div>
         <div className="pos-total"><span>Total</span><strong>{money.format(Number(order.total))}</strong></div>
+        <Link href={"/pos/orders/"+order.id+"/prebill"} className="button pos-prebill-link">
+          Ver o imprimir precuenta de mesa
+        </Link>
         <Link href={"/pos/orders/"+order.id+"/split"} className="button">
           Dividir cuenta · asignar productos y cobrar por separado
         </Link>
