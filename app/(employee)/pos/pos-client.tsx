@@ -10,6 +10,7 @@ import {
 } from "./actions";
 import { submitLiveSale } from "./live-actions";
 import {CheckoutLoyalty,redeemAmount,type CheckoutCustomer} from "./checkout/checkout-loyalty";
+import {calculateStaffDrinkBenefit,type StaffBenefitKind} from "@/src/domain/pos/staff-drink-policy";
 import type {ExtraOption} from "@/src/application/pos/extra-catalog";
 import {OWN_CONTAINER_DISCOUNT_MXN,canUseOwnContainer,ownContainerUnitPrice} from "@/src/domain/pos/own-container";
 import {
@@ -84,6 +85,7 @@ export function PosClient({
   const [customerId, setCustomerId] = useState(savedTicket?.customerId??selectedCustomerId??"");
   const [createdCustomer,setCreatedCustomer]=useState<CheckoutCustomer|null>(null);
   const [redeemPoints,setRedeemPoints]=useState("0");
+  const [staffBenefit,setStaffBenefit]=useState<StaffBenefitKind>("NONE");
   const checkoutCustomerChange=useCallback((id:string,created?:CheckoutCustomer)=>{
     setCustomerId(id);
     setRedeemPoints("0");
@@ -181,6 +183,15 @@ export function PosClient({
     };
   },[mobileCartOpen,checkoutOpen]);
 
+  const staffQuote=calculateStaffDrinkBenefit(
+    cartLines.map(line=>({
+      category:line.item.category,basePrice:line.item.price,
+      extrasPrice:extraCharge(line),ownThermos:line.customerContainer,
+    })),staffBenefit);
+  const staffSelected=staffBenefit!=="NONE";
+  const staffPreviewDue=staffSelected
+    ?Math.max(0,Math.round((total-staffQuote.discount)*100)/100):total;
+  const staffQuoteValid=staffQuote.warnings.length===0;
   const selectedCustomer =
     customers.find((customer) => customer.id === customerId) ??
     (createdCustomer?.id===customerId?createdCustomer:null);
@@ -265,9 +276,10 @@ export function PosClient({
 
   if(checkoutOpen&&!liveEnabled&&!savedTicket){
     const cashPaid=tendered.trim()!==""?Number(tendered):NaN;
-    const cashSufficient=Number.isFinite(cashPaid)&&cashPaid>=monetaryDue;
+    const previewDue=staffSelected?staffPreviewDue:monetaryDue;
+    const cashSufficient=Number.isFinite(cashPaid)&&cashPaid>=previewDue;
     const cashChange=cashSufficient
-      ?Math.round((cashPaid-monetaryDue+Number.EPSILON)*100)/100:0;
+      ?Math.round((cashPaid-previewDue+Number.EPSILON)*100)/100:0;
     return <div className="pos-layout" style={{gridTemplateColumns:"minmax(0,1fr)"}}>
       <section className="card stack" style={{maxWidth:780,margin:"0 auto",width:"100%"}}>
         <p className="eyebrow">POS · PREVIEW · SIMULACIÓN SEGURA</p>
@@ -298,8 +310,31 @@ export function PosClient({
         </div>
         <div className="pos-total"><strong>Consumo</strong>
           <strong>{money.format(total)}</strong></div>
-        {loyaltyControl}
-        {monetaryDue>0?<label>Método de pago (simulado)
+        <section className="card stack" style={{padding:14,gap:10}}>
+          <strong>¿Es consumo de Azucena?</strong>
+          <select aria-label="Beneficio de Azucena" value={staffBenefit}
+            onChange={e=>{
+              setStaffBenefit(e.target.value as StaffBenefitKind);
+              if(e.target.value!=="NONE"){checkoutCustomerChange("");setRedeemPoints("0");}
+            }}>
+            <option value="NONE">No · venta normal</option>
+            <option value="INCLUDED_DRINK">Bebida incluida por jornada</option>
+            <option value="ADDITIONAL_10">Bebida adicional · 10% de descuento</option>
+          </select>
+          {staffSelected&&<>
+            <p className="muted">Beneficiaria: Azucena · {staffQuote.benefitLabel}</p>
+            <p>Descuento simulado: <strong>{money.format(staffQuote.discount)}</strong></p>
+            <div className="pos-total">
+              <strong>Saldo por cobrar</strong><strong>{money.format(staffPreviewDue)}</strong>
+            </div>
+            {staffQuote.warnings.map(w=><p key={w} className="status-warn">{w}</p>)}
+            <p className="status-warn">Solo preview: el uso diario, autorización e inventario
+              se validarán en servidor al habilitar el consumo de personal LIVE.
+              No se registrará consumo ni se descontará inventario aquí.</p>
+          </>}
+        </section>
+        {!staffSelected&&loyaltyControl}
+        {previewDue>0?<label>Método de pago (simulado)
           <select value={paymentMethod}
             onChange={e=>setPaymentMethod(e.target.value as "CASH"|"CARD"|"TRANSFER")}>
             <option value="CASH">Efectivo</option>
@@ -307,7 +342,7 @@ export function PosClient({
             <option value="TRANSFER">Transferencia</option>
           </select>
         </label>:<p className="status-ok">Cuenta cubierta con puntos. Sin pago en efectivo, tarjeta o transferencia.</p>}
-        {monetaryDue>0&&paymentMethod==="CASH"&&<div className="stack">
+        {previewDue>0&&paymentMethod==="CASH"&&<div className="stack">
           <label>Importe recibido (simulado)
             <input type="number" min="0" step=".01" inputMode="decimal"
               value={tendered} onChange={e=>setTendered(e.target.value)}
