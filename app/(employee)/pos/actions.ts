@@ -342,7 +342,7 @@ export async function saveLiveCommand(_previous:{error:string|null},formData:For
     const message=error instanceof Error?error.message:"No se pudo guardar la comanda.";
     return {error:message.slice(0,330)};
   }
-  redirect("/pos/orders?created="+orderId);
+  redirect("/pos/orders?created="+orderId+"&autoKitchen=saved");
 }
 
 export async function createLiveCommand(formData:FormData) {
@@ -353,7 +353,7 @@ export async function createLiveCommand(formData:FormData) {
     const message=error instanceof Error?error.message:"No se pudo registrar la comanda.";
     redirect("/pos?error="+encodeURIComponent(message.slice(0,260)));
   }
-  redirect("/pos/orders?created="+orderId);
+  redirect("/pos/orders?created="+orderId+"&autoKitchen=saved");
 }
 
 export async function payLiveCommand(formData:FormData) {
@@ -403,7 +403,7 @@ export async function payLiveCommand(formData:FormData) {
     const message=error instanceof Error?error.message:"No se pudo cobrar la comanda.";
     redirect("/pos/checkout?ticket="+orderId+"&error="+encodeURIComponent(message.slice(0,330)));
   }
-  redirect("/pos/receipt/"+result.id);
+  redirect("/pos/receipt/"+result.id+(result.alreadyRecorded?"":"?autoKitchen=paid"));
 }
 
 export async function updateCommandStatus(formData: FormData) {
