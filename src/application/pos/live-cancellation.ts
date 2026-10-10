@@ -1,5 +1,5 @@
 import {planInventoryReversals} from "./reversal-plan";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "@/src/infrastructure/db/client";
 import {
   auditEvents, inventoryBalances, inventoryMovements,
@@ -35,13 +35,13 @@ export async function cancelLiveOrder(input:{
         eq(inventoryMovements.sourceId,order.id),
       )),
       tx.select().from(posLoyaltyEntries).where(and(
-        eq(posLoyaltyEntries.orderId,order.id),eq(posLoyaltyEntries.entryType,"EARN"),
+        eq(posLoyaltyEntries.orderId,order.id),inArray(posLoyaltyEntries.entryType,["EARN","REDEEM"]),
       )),
       tx.select().from(posPayments).where(eq(posPayments.orderId,order.id)),
     ]);
     // Una comanda dividida se revierte completa: todos los movimientos de inventario,
     // efectivo y puntos vinculados al folio, nunca sólo el último cobro.
-    if(payments.some(payment=>payment.method!=="CASH")) {
+    if(payments.some(payment=>payment.method!=="CASH" && payment.method!=="POINTS")) {
       throw new Error("Los pagos por tarjeta o transferencia requieren confirmar el reembolso externo con administración.");
     }
     if(order.inventoryEffectApplied && inventoryMovementsApplied.length===0){
@@ -86,15 +86,32 @@ export async function cancelLiveOrder(input:{
         eq(inventoryBalances.inventoryItemId,movement.inventoryItemId),
       ));
     }
+    // Revertir por cliente en un solo saldo neto (EARN y REDEEM),
+    // evitando saldos transitorios negativos y canjes duplicados.
+    const reversalTotals=new Map<string,number>();
+    for(const entry of points){
+      const delta=-Number(entry.points);
+      reversalTotals.set(entry.customerId,
+        Math.round(((reversalTotals.get(entry.customerId)??0)+delta)*100)/100);
+    }
+    for(const [customerId,delta] of reversalTotals){
+      const [updatedCustomer]=await tx.update(posCustomers).set({
+        pointsBalance:sql`${posCustomers.pointsBalance} + ${delta}`,updatedAt:now,
+      }).where(and(
+        eq(posCustomers.id,customerId),
+        eq(posCustomers.organizationId,input.organizationId),
+        sql`${posCustomers.pointsBalance} + ${delta} >= 0`,
+      )).returning({id:posCustomers.id});
+      if(!updatedCustomer)throw new Error(
+        "No se puede cancelar automáticamente: parte de los puntos ganados ya se utilizó. Requiere revisión administrativa."
+      );
+    }
     for(const entry of points){
       const refund=-Number(entry.points);
       await tx.insert(posLoyaltyEntries).values({
         organizationId:input.organizationId,customerId:entry.customerId,orderId:order.id,
-        entryType:"REVERSAL",points:refund.toFixed(2),note:"Cancelación "+order.folio,
+        entryType:"REVERSAL",points:refund.toFixed(2),note:"Cancelación "+order.folio+" · "+entry.entryType,
       });
-      await tx.update(posCustomers).set({
-        pointsBalance:sql`${posCustomers.pointsBalance} + ${refund}`,updatedAt:now,
-      }).where(and(eq(posCustomers.id,entry.customerId),eq(posCustomers.organizationId,input.organizationId)));
     }
     if(cashMovements.length){
       await tx.insert(posCashMovements).values(cashMovements.map(m=>({

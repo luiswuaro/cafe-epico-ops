@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getPosCatalog, type PosServiceMode } from "@/src/application/pos/catalog";
 import {priceExtras} from "@/src/application/pos/extras";
+import {OWN_CONTAINER_DISCOUNT_MXN,canUseOwnContainer,ownContainerUnitPrice,preparedOwnContainerComponents,ownContainerReadinessErrors} from "@/src/domain/pos/own-container";
 import {getPosExtraCatalog} from "@/src/application/pos/extra-catalog";
 import {dailyTakeawayTicketLabel,effectiveOrderServiceMode,validateTicketLabel} from "@/src/application/pos/ticket-names";
 import { cancelLiveOrder } from "@/src/application/pos/live-cancellation";
@@ -35,6 +36,7 @@ const cartSchema = z
       quantity: z.number().int().min(1).max(20),
       note: z.string().trim().max(180).nullable().optional(),
       serviceMode: z.enum(["DINE_IN","TAKEAWAY"]).optional(),
+      customerContainer:z.boolean().optional(),
       extras: z.array(z.object({id:z.string().min(1).max(90),quantity:z.number().int().min(1).max(2)})).max(1).optional(),
     }),
   )
@@ -94,9 +96,14 @@ async function buildOrderInput(
     if (!item) throw new Error("Producto no disponible en el catálogo POS");
 
     const extras=priceExtras(line.extras,item,extrasCatalog);
-    const unitPrice=Number((item.price+extras.unitPrice).toFixed(2));
-    const lineTotal = Number((unitPrice * line.quantity).toFixed(2));
     const lineMode = line.serviceMode ?? serviceMode;
+    const customerContainer=line.customerContainer===true;
+    if(customerContainer&&!canUseOwnContainer(item,lineMode))
+      throw new Error("Termo propio sólo aplica a bebidas para llevar.");
+    const unitPrice=ownContainerUnitPrice(item.price,extras.unitPrice,customerContainer);
+    if(!Number.isFinite(unitPrice)||unitPrice<=0)
+      throw new Error("Precio no válido para termo propio.");
+    const lineTotal = Number((unitPrice * line.quantity).toFixed(2));
     const serviceRecipe = item.serviceRecipes[lineMode as PosServiceMode];
 
     return {
@@ -109,9 +116,16 @@ async function buildOrderInput(
       expectedConsumption: {
         mode,
         serviceMode: lineMode,extras:extras.extras,
+        customerContainer,
+        discount:customerContainer?{
+          code:"OWN_THERMOS",amountPerUnit:OWN_CONTAINER_DISCOUNT_MXN,
+          total:Number((OWN_CONTAINER_DISCOUNT_MXN*line.quantity).toFixed(2)),
+        }:null,
         sourceRecipeExternalId: serviceRecipe.externalId,
         sourceCategory: serviceRecipe.sourceCategory,
-        components: [...serviceRecipe.components,...extras.components].map((component) => ({
+        components: preparedOwnContainerComponents(
+          [...serviceRecipe.components,...extras.components],customerContainer,
+        ).map((component) => ({
           variantExternalId: component.variantExternalId,
           itemExternalId: component.itemExternalId,
           name: component.name,
@@ -186,8 +200,11 @@ async function createShadowOrder(
     const byId=new Map(readiness.products.map(p=>[p.id,p]));
     for(const line of input.lines){
       const state=byId.get(line.item.id)?.recipes.find(r=>r.mode===line.lineMode);
-      if(!state?.ready) throw new Error("Comanda bloqueada: "+line.item.name+" — "+
-        (state?.errors.join("; ")||"receta incompleta"));
+      const errors=state?ownContainerReadinessErrors(
+        state.errors,line.expectedConsumption.customerContainer===true,
+      ):["receta incompleta"];
+      if(errors.length)throw new Error("Comanda bloqueada: "+line.item.name+" — "+
+        errors.join("; "));
     }
   }
   const rawClientOrderId = String(formData.get("clientOrderId") ?? "").trim();
@@ -339,6 +356,50 @@ async function createShadowOrder(
   return order.id;
 }
 
+/** Inline error response for preview/shadow operations; never show a generic page crash. */
+function safeShadowError(error:unknown):string {
+  const known=error instanceof Error?error.message:"";
+  if(known==="Abre la caja antes de cobrar en efectivo" ||
+    known==="Cliente no válido" ||
+    known==="Producto no disponible en el catálogo POS" ||
+    known==="Termo propio sólo aplica a bebidas para llevar." ||
+    known==="Precio no válido para termo propio." ||
+    known.startsWith("Para consumo aquí, selecciona una mesa") ||
+    known.startsWith("El nombre del ticket debe"))
+    return known.slice(0,260);
+  if(error instanceof z.ZodError)
+    return "Revisa los datos del pedido y la forma de pago.";
+  // Avoid leaking SQL statements, personal information or connection metadata.
+  const trace=randomUUID().slice(0,8).toUpperCase();
+  console.error("POS_SHADOW_FORM_FAILED",trace,error);
+  return "No se pudo registrar el espejo. El pedido sigue en el carrito. Referencia: "+trace;
+}
+
+export async function submitShadowSale(
+  _previous:{error:string|null},formData:FormData,
+):Promise<{error:string|null}>{
+  let orderId:string;
+  try{
+    const method=paymentSchema.parse(String(formData.get("paymentMethod")??""));
+    orderId=await createShadowOrder(formData,"PAID",method);
+  }catch(error){
+    return {error:safeShadowError(error)};
+  }
+  redirect("/pos?saved="+orderId);
+}
+
+export async function submitShadowCommand(
+  _previous:{error:string|null},formData:FormData,
+):Promise<{error:string|null}>{
+  let orderId:string;
+  try{
+    orderId=await createShadowOrder(formData,"SENT");
+  }catch(error){
+    return {error:safeShadowError(error)};
+  }
+  redirect("/pos/orders?created="+orderId);
+}
+
 export async function createShadowSale(formData: FormData) {
   const paymentMethod = paymentSchema.parse(
     String(formData.get("paymentMethod") ?? ""),
@@ -384,7 +445,12 @@ export async function payLiveCommand(formData:FormData) {
   await assertEmployeePermission(employee.id,"pos.sell",employee.homeStoreId);
   if(!isPosLiveEnabled())throw new Error("POS LIVE deshabilitado.");
   const orderId=z.string().uuid().parse(String(formData.get("orderId")??""));
-  const paymentMethod=paymentSchema.parse(String(formData.get("paymentMethod")??""));
+  const paymentMethod=z.enum(["CASH","CARD","TRANSFER","POINTS"])
+    .parse(String(formData.get("paymentMethod")??""));
+  const customerId=z.union([z.string().uuid(),z.literal("")])
+    .parse(String(formData.get("customerId")??""));
+  const redeemPoints=z.coerce.number().min(0)
+    .parse(String(formData.get("redeemPoints")??"0"));
   const tenderedRaw=String(formData.get("tenderedAmount")??"").trim();
   const tenderedAmount=paymentMethod==="CASH" && tenderedRaw!==""?Number(tenderedRaw):null;
   const db=getDb();
@@ -415,7 +481,8 @@ export async function payLiveCommand(formData:FormData) {
       quantity:Number(line.quantity),note:line.note,
       serviceMode:line.expectedConsumption?.serviceMode==="TAKEAWAY"?"TAKEAWAY":"DINE_IN",
     })),
-    customerId:order.customerId,
+    customerId:customerId||null,
+    redeemPoints,
     serviceMode:order.serviceMode as PosServiceMode,
     paymentMethod,tenderedAmount,
     tableLabel:order.tableLabel,note:order.note,

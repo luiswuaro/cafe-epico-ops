@@ -1,4 +1,7 @@
 import Link from "next/link";
+import {and,eq,or,isNull,asc} from "drizzle-orm";
+import {getDb} from "@/src/infrastructure/db/client";
+import {employees} from "@/src/infrastructure/db/schema";
 import {extraLabels,preparationNote} from "@/src/application/pos/extras";
 import {getPosExtraCatalog} from "@/src/application/pos/extra-catalog";
 import { PosClient } from "./pos-client";
@@ -52,7 +55,7 @@ export default async function PosPage({
   const selectedCustomerId =
     typeof params.customer === "string" ? params.customer : null;
 
-  const [catalog, customers, saved, canCancel, cash, openOrders, canOverrideStock, extrasOptions] = await Promise.all([
+  const [catalog, customers, saved, canCancel, cash, openOrders, canOverrideStock, extrasOptions,activeWorkers] = await Promise.all([
     getPosCatalog(employee.organizationId),
     getPosCustomers(employee.organizationId),
     savedId
@@ -67,6 +70,11 @@ export default async function PosPage({
     getOpenPosOrders(employee.organizationId,employee.homeStoreId),
     employeeHasPermission(employee.id,"inventory.adjust",employee.homeStoreId),
     getPosExtraCatalog(employee.organizationId),
+    getDb().select({id:employees.id,name:employees.name}).from(employees)
+      .where(and(eq(employees.organizationId,employee.organizationId),
+        eq(employees.isActive,true),
+        or(eq(employees.homeStoreId,employee.homeStoreId),isNull(employees.homeStoreId),eq(employees.id,employee.id))))
+      .orderBy(asc(employees.name)),
   ]);
   const liveTickets=openOrders.filter(order=>order.mode==="LIVE");
   const selectedTicket=liveEnabled&&selectedTicketId
@@ -313,6 +321,7 @@ export default async function PosPage({
           category: item.category,
           price: item.price,
         }))}
+        staffEmployees={activeWorkers}
         customers={customers.map((customer) => ({
           id: customer.id,
           name: customer.name,

@@ -1,16 +1,18 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useRef, useState } from "react";
+import { useActionState, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { addProductsToLiveCommand } from "./orders/live-actions";
 import {
-  createPosCustomer,
   saveLiveCommand,
-  createShadowCommand,
-  createShadowSale,
+  submitShadowSale,
+  submitShadowCommand,
 } from "./actions";
 import { submitLiveSale } from "./live-actions";
+import {CheckoutLoyalty,redeemAmount,type CheckoutCustomer} from "./checkout/checkout-loyalty";
+import {calculateStaffTicket,calculateMixedTicketSettlement,type StaffBenefitKind} from "@/src/domain/pos/staff-ticket";
 import type {ExtraOption} from "@/src/application/pos/extra-catalog";
+import {OWN_CONTAINER_DISCOUNT_MXN,canUseOwnContainer,ownContainerUnitPrice} from "@/src/domain/pos/own-container";
 import {
   DINE_IN_TICKET_PRESETS,TAKEAWAY_TICKET_PRESETS,
   effectiveOrderServiceMode,
@@ -33,7 +35,7 @@ type Customer = {
 
 type ServiceMode="DINE_IN"|"TAKEAWAY";
 type CartLine = {
-  key:string;externalId:string;note:string;serviceMode:ServiceMode;extras:Array<{id:string;quantity:number}>;
+  key:string;externalId:string;note:string;serviceMode:ServiceMode;customerContainer:boolean;extras:Array<{id:string;quantity:number}>;
 };
 type SavedTicket={
   id:string;folio:string;name:string;total:number;customerId:string|null;
@@ -45,6 +47,7 @@ type Props = {
   catalog: CatalogItem[];
   extrasOptions:ExtraOption[];
   customers: Customer[];
+  staffEmployees:Array<{id:string;name:string}>;
   selectedCustomerId?: string | null;
   cashOpen: boolean;
   liveEnabled: boolean;
@@ -67,6 +70,7 @@ export function PosClient({
   catalog,
   extrasOptions,
   customers,
+  staffEmployees,
   selectedCustomerId = null,
   cashOpen,
   liveEnabled,
@@ -81,6 +85,30 @@ export function PosClient({
   const [serviceMode, setServiceMode] =
     useState<ServiceMode>(savedTicket?.serviceMode??"DINE_IN");
   const [customerId, setCustomerId] = useState(savedTicket?.customerId??selectedCustomerId??"");
+  const [createdCustomer,setCreatedCustomer]=useState<CheckoutCustomer|null>(null);
+  const [redeemPoints,setRedeemPoints]=useState("0");
+  const [lineBenefits,setLineBenefits]=useState<Record<string,{
+    kind:StaffBenefitKind;employeeId:string;
+  }>>({});
+  function assignLineBenefit(key:string,update:{kind?:StaffBenefitKind;employeeId?:string}){
+    // Una reasignación cambia la base elegible para redención.
+    // Reiniciar el canje evita arrastrar puntos de una línea que pasó a personal.
+    setRedeemPoints("0");
+    setLineBenefits(old=>({
+      ...old,[key]:{
+        kind:update.kind??old[key]?.kind??"NONE",
+        employeeId:update.employeeId??old[key]?.employeeId??"",
+      }
+    }));
+  }
+  const checkoutCustomerChange=useCallback((id:string,created?:CheckoutCustomer)=>{
+    setCustomerId(id);
+    setRedeemPoints("0");
+    // Una cuenta de cliente y una cuenta de personal son excluyentes.
+    // Al asociar un cliente, todos los renglones vuelven a venta normal.
+    if(id)setLineBenefits({});
+    if(created)setCreatedCustomer(created);
+  },[]);
   const [additionRequestId]=useState(()=>globalThis.crypto.randomUUID());
   const [liveClientOrderId] = useState(() => globalThis.crypto.randomUUID());
   const [paymentMethod, setPaymentMethod] = useState<"CASH"|"CARD"|"TRANSFER">(cashOpen ? "CASH" : "CARD");
@@ -96,6 +124,8 @@ export function PosClient({
   const [orderNote,setOrderNote]=useState("");
   const [checkoutState,checkoutAction,checkoutPending]=useActionState(submitLiveSale,{error:null});
   const [saveState,saveAction,savePending]=useActionState(saveLiveCommand,{error:null});
+  const [shadowState,shadowAction]=useActionState(submitShadowSale,{error:null});
+  const [shadowSaveState,shadowSaveAction,shadowSavePending]=useActionState(submitShadowCommand,{error:null});
 
   const catalogById = useMemo(
     () => new Map(catalog.map((item) => [item.id, item])),
@@ -120,7 +150,7 @@ export function PosClient({
   const extraById=new Map(extrasOptions.map(option=>[option.id,option]));
   const extraCharge=(line:CartLine)=>line.extras.reduce((sum,e)=>
     sum+(extraById.get(e.id)?.price??0)*e.quantity,0);
-  const unitPrice=(line:typeof cartLines[number])=>line.item.price+extraCharge(line);
+  const unitPrice=(line:typeof cartLines[number])=>ownContainerUnitPrice(line.item.price,extraCharge(line),line.customerContainer);
   const newSubtotal=cartLines.reduce((sum,line)=>sum+unitPrice(line),0);
   const total=(savedTicket?.total??0)+newSubtotal;
   const units=(savedTicket?.lines.reduce((sum,line)=>sum+line.quantity,0)??0)+cartLines.length;
@@ -171,11 +201,101 @@ export function PosClient({
     };
   },[mobileCartOpen,checkoutOpen]);
 
+  const staffTicket=calculateStaffTicket(cartLines.map(line=>({
+    key:line.key,name:line.item.name,
+    category:line.item.category,basePrice:line.item.price,
+    extrasPrice:extraCharge(line),ownThermos:line.customerContainer,
+    serviceMode:line.serviceMode,
+    staffBenefit:lineBenefits[line.key]?.kind??"NONE",
+    employeeId:lineBenefits[line.key]?.employeeId||null,
+  })),customerId||null);
+  const staffSelected=staffTicket.perLine.some(line=>line.staffBenefit!=="NONE");
   const selectedCustomer =
-    customers.find((customer) => customer.id === customerId) ?? null;
-  const pointsPreview = selectedCustomer
-    ? Math.round(total * 0.05 * 100) / 100
-    : 0;
+    customers.find((customer) => customer.id === customerId) ??
+    (createdCustomer?.id===customerId?createdCustomer:null);
+  // Cliente registrado y beneficios de personal no pueden coexistir en el ticket.
+  const redemption=redeemAmount(redeemPoints,selectedCustomer?.pointsBalance??0,
+    staffTicket.customerEligibleTotal);
+  const mixedSettlement=staffTicket.valid&&redemption.valid
+    ?calculateMixedTicketSettlement(staffTicket,redemption.points):null;
+  const monetaryDue=mixedSettlement?.totalDue??staffTicket.totalBeforePoints;
+  const pointsEarned=selectedCustomer?(mixedSettlement?.earnedPoints??0):0;
+  const pointCheckout=!staffTicket.valid || !redemption.valid ||
+    (redemption.points>0&&!selectedCustomer);
+  const assignBenefits=<section className="card stack" style={{padding:14,gap:12}}>
+    <strong>Beneficios de personal · por bebida</strong>
+    {selectedCustomer?<div className="stack" style={{gap:8}}>
+      <p className="status-warn" role="status">
+        Este ticket pertenece a {selectedCustomer.name}. Los beneficios de empleados
+        están deshabilitados para cuentas con cliente registrado.
+      </p>
+      <button className="button" type="button"
+        onClick={()=>checkoutCustomerChange("")}>
+        Quitar cliente y habilitar consumo de personal
+      </button>
+    </div>:<small className="muted">
+      Cuenta sin cliente: asigna bebidas a trabajadores para cortesía o descuento.
+      Si son bebidas de un cliente, registra al cliente como venta normal.
+    </small>}
+    {cartLines.map((line,index)=>{
+      const assigned=lineBenefits[line.key]??{kind:"NONE" as StaffBenefitKind,employeeId:""};
+      const computed=staffTicket.perLine.find(x=>x.key===line.key);
+      return <div className="stack" key={line.key} style={{gap:7,
+        paddingBottom:10,borderBottom:"1px solid var(--border, #444)"}}>
+        <div style={{display:"flex",justifyContent:"space-between",gap:8}}>
+          <strong>{index+1}. {line.item.name}</strong>
+          <span>{money.format(computed?.payable??unitPrice(line))}</span>
+        </div>
+        <label>Esta bebida es para
+          <select value={assigned.kind} disabled={Boolean(customerId)}
+            onChange={e=>assignLineBenefit(line.key,{kind:e.target.value as StaffBenefitKind})}>
+            <option value="NONE">Venta normal</option>
+            <option value="INCLUDED_DRINK" disabled={Boolean(customerId)||line.serviceMode!=="DINE_IN"}>Personal · bebida incluida (solo aquí)</option>
+            <option value="ADDITIONAL_10" disabled={Boolean(customerId)}>Personal · bebida adicional −10%</option>
+          </select>
+        </label>
+        {assigned.kind==="INCLUDED_DRINK"&&<small className="muted">Cortesía incluida: solo se permite consumir aquí. Si está para llevar, cambia la preparación en el carrito.</small>}
+        {assigned.kind==="ADDITIONAL_10"&&<small className="muted">10% adicional: permitido aquí y para llevar. No se acumula con descuento de termo propio en la misma bebida.</small>}
+        {assigned.kind!=="NONE"&&<label>¿Qué trabajador la consume?
+          <select value={assigned.employeeId}
+            onChange={e=>assignLineBenefit(line.key,{employeeId:e.target.value})}>
+            <option value="">Selecciona empleado…</option>
+            {staffEmployees.map(worker=><option key={worker.id} value={worker.id}>
+              {worker.name}
+            </option>)}
+          </select>
+        </label>}
+      </div>;
+    })}
+    {staffTicket.warnings.map((warning,i)=><p key={i} className="status-warn" role="alert">{warning}</p>)}
+    {staffSelected&&<p className="status-warn">
+      Beneficios de empleados: solo simulación. Falta el control diario y el
+      registro de inventario para habilitarlos en cobros LIVE.
+    </p>}
+  </section>;
+  const breakdown=<div className="stack" style={{gap:7}}>
+    {staffTicket.staffDiscount>0&&<div style={{display:"flex",justifyContent:"space-between"}}>
+      <span>Beneficio de personal</span><strong>−{money.format(staffTicket.staffDiscount)}</strong>
+    </div>}
+    <div style={{display:"flex",justifyContent:"space-between"}}>
+      <span>Venta normal {selectedCustomer?"· "+selectedCustomer.name:""}</span>
+      <strong>{money.format(staffTicket.customerEligibleTotal)}</strong>
+    </div>
+    <div style={{display:"flex",justifyContent:"space-between"}}>
+      <span>Consumo de personal por pagar</span><strong>{money.format(staffTicket.staffPayable)}</strong>
+    </div>
+    {redemption.points>0&&<div style={{display:"flex",justifyContent:"space-between"}}>
+      <span>Puntos del cliente canjeados</span><strong>−{money.format(redemption.points)}</strong>
+    </div>}
+    <div className="pos-total" style={{display:"flex",justifyContent:"space-between"}}>
+      <strong>Total monetario</strong><strong>{money.format(monetaryDue)}</strong>
+    </div>
+    <p className="muted">Puntos nuevos del cliente: +{pointsEarned.toFixed(2)} pts.
+      Los consumos de personal no acumulan puntos.</p>
+    {staffSelected&&<p className="muted">
+      Ticket de consumo de personal: no se le puede asociar un cliente ni aplicar sus puntos.
+    </p>}
+  </div>;
 
   const productCount = (id: string) =>
     cart.reduce(
@@ -190,7 +310,7 @@ export function PosClient({
         key: globalThis.crypto.randomUUID(),
         externalId,
         note: "",
-        serviceMode,extras:[],
+        serviceMode,customerContainer:false,extras:[],
       },
     ]);
   }
@@ -206,13 +326,13 @@ export function PosClient({
         key: globalThis.crypto.randomUUID(),
         externalId: line.externalId,
         note: "",
-        serviceMode:line.serviceMode,extras:line.extras.map(e=>({...e})),
+        serviceMode:line.serviceMode,customerContainer:line.customerContainer,extras:line.extras.map(e=>({...e})),
       },
     ]);
   }
 
   function updateServiceMode(key:string,next:ServiceMode){
-    setCart(current=>current.map(line=>line.key===key?{...line,serviceMode:next}:line));
+    setCart(current=>current.map(line=>line.key===key?{...line,serviceMode:next,customerContainer:next==="TAKEAWAY"&&line.customerContainer}:line));
     // Ante un cambio a modo mixto, el selector se recalcula automáticamente.
   }
 
@@ -220,9 +340,17 @@ export function PosClient({
     setServiceMode(next);
     // El botón Aquí/Para llevar es para toda la cuenta; las líneas
     // pueden corregirse por separado después.
-    setCart(current=>current.map(line=>({...line,serviceMode:next})));
+    setCart(current=>current.map(line=>({...line,serviceMode:next,customerContainer:next==="TAKEAWAY"&&line.customerContainer})));
     setTicketNameOption(next==="TAKEAWAY"?"AUTO":"");
     setCustomTicketName("");
+  }
+
+  function updateOwnContainer(key:string,enabled:boolean){
+    setCart(current=>current.map(line=>{
+      if(line.key!==key)return line;
+      const item=catalogById.get(line.externalId);
+      return {...line,customerContainer:Boolean(enabled&&item&&canUseOwnContainer(item,line.serviceMode))};
+    }));
   }
 
   function updateExtraQuantity(key:string,id:string,quantity:number){
@@ -239,6 +367,71 @@ export function PosClient({
     );
   }
 
+  if(checkoutOpen&&!liveEnabled&&!savedTicket){
+    const cashPaid=tendered.trim()!==""?Number(tendered):NaN;
+    const previewDue=monetaryDue;
+    const cashSufficient=Number.isFinite(cashPaid)&&cashPaid>=previewDue;
+    const cashChange=cashSufficient
+      ?Math.round((cashPaid-previewDue+Number.EPSILON)*100)/100:0;
+    return <div className="pos-layout" style={{gridTemplateColumns:"minmax(0,1fr)"}}>
+      <section className="card stack" style={{maxWidth:780,margin:"0 auto",width:"100%"}}>
+        <p className="eyebrow">POS · PREVIEW · SIMULACIÓN SEGURA</p>
+        <h2>Probar cobro sin registrar venta</h2>
+        <p className="status-warn" role="status">
+          Este preview está en modo espejo. El simulador NO cobra, no crea tickets,
+          no registra ventas, no modifica caja ni descuenta inventario.
+        </p>
+        <p className="muted">Pedido: <strong>{ticketNamePreview}</strong>
+          {" · "}{ticketServiceMode==="TAKEAWAY"?"Para llevar":"Aquí"}
+        </p>
+        <div className="pos-total"><strong>Consumo a precio vigente</strong>
+          <strong>{money.format(total)}</strong></div>
+        {assignBenefits}
+        {staffSelected?<section className="card stack" style={{padding:14,gap:8}}>
+          <strong>Consumo de personal · sin cliente</strong>
+          <p className="muted">Los puntos y beneficios de clientes no corresponden
+            a esta cuenta.</p>
+          <button type="button" className="button"
+            onClick={()=>{setLineBenefits({});setRedeemPoints("0");}}>
+            Convertir a venta normal y seleccionar cliente
+          </button>
+        </section>:<CheckoutLoyalty customers={createdCustomer
+          ?[...customers.filter(c=>c.id!==createdCustomer.id),createdCustomer]:customers}
+          selectedId={customerId} onSelect={checkoutCustomerChange}
+          redeemPoints={redeemPoints} onRedeemChange={setRedeemPoints}
+          total={staffTicket.customerEligibleTotal} liveEnabled={liveEnabled}
+          identityOnly={staffTicket.customerEligibleTotal===0}/>} 
+        {breakdown}
+        {previewDue>0?<label>Método de pago (simulado)
+          <select value={paymentMethod}
+            onChange={e=>setPaymentMethod(e.target.value as "CASH"|"CARD"|"TRANSFER")}>
+            <option value="CASH">Efectivo</option>
+            <option value="CARD">Tarjeta</option>
+            <option value="TRANSFER">Transferencia</option>
+          </select>
+        </label>:<p className="status-ok">Saldo cubierto con cortesías y/o puntos, sin dinero a cobrar.</p>}
+        {previewDue>0&&paymentMethod==="CASH"&&<div className="stack">
+          <label>Importe recibido (simulado)
+            <input type="number" min="0" step=".01" inputMode="decimal"
+              value={tendered} onChange={e=>setTendered(e.target.value)}
+              placeholder="Ej. 100"/>
+          </label>
+          <p className={cashSufficient?"status-ok":"status-warn"} role="status">
+            {cashSufficient
+              ?"Cambio a entregar: "+money.format(cashChange)
+              :"Ingresa una cantidad al menos igual al saldo monetario para calcular el cambio."}
+          </p>
+        </div>}
+        <p className="muted">El descuento y la receta se calculan en el servidor cuando
+          el cobro LIVE está habilitado. Esta pantalla es una prueba visual;
+          no confirma una transacción real.</p>
+        <button type="button" className="button" onClick={()=>setCheckoutOpen(false)}>
+          ← Volver a editar el pedido
+        </button>
+      </section>
+    </div>;
+  }
+
   if(checkoutOpen&&liveEnabled&&!savedTicket){
     return <div className="pos-layout" style={{gridTemplateColumns:"minmax(0,1fr)"}}>
       <section className="card stack" style={{maxWidth:780,margin:"0 auto",width:"100%"}}>
@@ -249,47 +442,57 @@ export function PosClient({
         {checkoutState.error&&<div className="status-bad" role="alert">
           No se cobró. {checkoutState.error}
         </div>}
-        <div className="stack">
-          {cartLines.map((line,index)=><div key={line.key} style={{display:"flex",justifyContent:"space-between",gap:12}}>
-            <div>
-              <strong>{index+1}. {line.item.name}</strong>
-              <p className="muted">{line.serviceMode==="DINE_IN"?"Aquí":"Para llevar"}{line.note?" · "+line.note:""}</p>
-            </div>
-            <div style={{textAlign:"right"}}>
-              <strong>{money.format(unitPrice(line))}</strong>
-              {line.extras.length>0&&<small className="muted" style={{display:"block"}}>
-                Extras · +{money.format(extraCharge(line))}
-              </small>}
-            </div>
-          </div>)}
-        </div>
-        <div className="pos-total"><strong>TOTAL</strong><strong>{money.format(total)}</strong></div>
+        <div className="pos-total"><strong>Consumo a precio vigente</strong>
+          <strong>{money.format(total)}</strong></div>
+        {assignBenefits}
+        {staffSelected?<section className="card stack" style={{padding:14,gap:8}}>
+          <strong>Consumo de personal · sin cliente</strong>
+          <p className="muted">Los puntos y beneficios de clientes no corresponden
+            a esta cuenta.</p>
+          <button type="button" className="button"
+            onClick={()=>{setLineBenefits({});setRedeemPoints("0");}}>
+            Convertir a venta normal y seleccionar cliente
+          </button>
+        </section>:<CheckoutLoyalty customers={createdCustomer
+          ?[...customers.filter(c=>c.id!==createdCustomer.id),createdCustomer]:customers}
+          selectedId={customerId} onSelect={checkoutCustomerChange}
+          redeemPoints={redeemPoints} onRedeemChange={setRedeemPoints}
+          total={staffTicket.customerEligibleTotal} liveEnabled={liveEnabled}
+          identityOnly={staffTicket.customerEligibleTotal===0}/>} 
+        {breakdown}
+        {staffSelected&&<p className="status-warn" role="alert">
+          Consumo de personal todavía en validación. El cobro LIVE de este
+          pedido está bloqueado hasta habilitar el registro diario y de inventario.
+        </p>}
         <form action={checkoutAction} className="stack">
           <input type="hidden" name="clientOrderId" value={liveClientOrderId}/>
           <input type="hidden" name="cart" value={JSON.stringify(cartLines.map(line=>({
             externalId:line.externalId,quantity:1,note:line.note.trim()||null,
-            serviceMode:line.serviceMode,
+            serviceMode:line.serviceMode,customerContainer:line.customerContainer,
             extras:line.extras
           })))}/>
           <input type="hidden" name="serviceMode" value={ticketServiceMode}/>
           <input type="hidden" name="customerId" value={customerId}/>
+          <input type="hidden" name="redeemPoints" value={redemption.points.toFixed(2)}/>
           <input type="hidden" name="tableLabel" value={tableLabel}/>
           <input type="hidden" name="note" value={orderNote}/>
-          <label>Forma de pago
-            <select name="paymentMethod" value={paymentMethod}
+          {monetaryDue>0?<label>Forma de pago
+            <select value={paymentMethod}
               onChange={e=>setPaymentMethod(e.target.value as "CASH"|"CARD"|"TRANSFER")}>
               <option value="CASH" disabled={!cashOpen}>Efectivo{cashOpen?"":" · abre caja"}</option>
               <option value="CARD">Tarjeta · cobrar primero en la terminal</option>
               <option value="TRANSFER">Transferencia · confirmar depósito</option>
             </select>
-          </label>
-          {paymentMethod==="CASH"?<div className="stack">
+          </label>:<div className="status-ok">Cubierta al 100% con puntos. No se realiza cargo monetario.</div>}
+          <input type="hidden" name="paymentMethod"
+            value={monetaryDue===0?"POINTS":paymentMethod}/>
+          {monetaryDue>0&&paymentMethod==="CASH"?<div className="stack">
             <label>Efectivo recibido
-              <input name="tenderedAmount" inputMode="decimal" type="number" min={total}
+              <input name="tenderedAmount" inputMode="decimal" type="number" min={monetaryDue}
                 step="0.01" value={tendered} onChange={e=>setTendered(e.target.value)} required/>
             </label>
-            <p className="muted">Cambio: <strong>{tendered.trim()!==""&&Number(tendered)>=total
-              ?money.format(Number(tendered)-total):"Ingresa el importe recibido"}</strong></p>
+            <p className="muted">Cambio: <strong>{tendered.trim()!==""&&Number(tendered)>=monetaryDue
+              ?money.format(Number(tendered)-monetaryDue):"Ingresa el importe recibido"}</strong></p>
           </div>:<>
             <input type="hidden" name="tenderedAmount" value=""/>
             <p className="muted">OPS registra el pago; confirma el dinero en tu banco o terminal externa.</p>
@@ -302,8 +505,9 @@ export function PosClient({
             <small className="muted">Registra inventario negativo y auditoría; exige reconteo posterior. No crea existencias ficticias.</small>
           </label>}
           <button className="pos-pay-button" type="submit" disabled={checkoutPending ||
-            missingTable || (paymentMethod==="CASH"&&(!tendered.trim()||Number(tendered)<total))}>
-            {checkoutPending?"Procesando...":"Confirmar cobro · "+money.format(total)}
+            missingTable || pointCheckout || staffSelected ||
+            (monetaryDue>0&&paymentMethod==="CASH"&&(!tendered.trim()||Number(tendered)<monetaryDue))}>
+            {checkoutPending?"Procesando...":"Confirmar cobro · "+money.format(monetaryDue)}
           </button>
         </form>
         <button type="button" className="button" onClick={()=>setCheckoutOpen(false)}>
@@ -471,8 +675,9 @@ export function PosClient({
             </div>
           </section>
         )}
-        {saveState.error&&<p className="status-bad" role="alert">
-          Comanda no guardada: {saveState.error}. Los productos y notas siguen en el carrito.
+        {(saveState.error||shadowSaveState.error||shadowState.error)&&<p className="status-bad" role="alert">
+          {saveState.error||shadowSaveState.error||shadowState.error}
+          {" "}Los productos y notas siguen en el carrito.
         </p>}
         <div className="pos-cart-lines">
           {cartLines.length === 0 ? (
@@ -497,6 +702,15 @@ export function PosClient({
                       <option value="TAKEAWAY">Para llevar · con vaso y tapa</option>
                     </select>
                   </label>
+                  {canUseOwnContainer(line.item,line.serviceMode)&&<label className="pos-own-thermos-control">
+                    <input type="checkbox" checked={line.customerContainer}
+                      onChange={event=>updateOwnContainer(line.key,event.target.checked)}
+                      aria-label={"Termo propio, descuento de 5 pesos para "+line.item.name}/>
+                    <span>
+                      <strong>Termo propio · −{money.format(OWN_CONTAINER_DISCOUNT_MXN)}</strong>
+                      <small>Para llevar sin vaso, tapa, popote ni desechables</small>
+                    </span>
+                  </label>}
                   {line.item.category!=="ALIMENTOS"&&<details
                     className="pos-cancel-panel" style={{marginTop:8,padding:"6px 10px"}}>
                     <summary style={{cursor:"pointer",fontWeight:700}}>
@@ -557,57 +771,15 @@ export function PosClient({
           <strong>{money.format(total)}</strong>
         </div>
 
-        {!savedTicket&&<section className="pos-customer-box" aria-labelledby="pos-customer-heading">
-          <div className="pos-customer-heading">
-            <span className="pos-customer-icon" aria-hidden="true">◎</span>
-            <div>
-              <h3 id="pos-customer-heading">Cliente y puntos</h3>
-              <p>Programa de lealtad · 5% de cada compra</p>
-            </div>
-          </div>
-          <label className="pos-customer-selector">
-            Identificar cliente
-            <select
-              value={customerId}
-              onChange={(event) => setCustomerId(event.target.value)}
-            >
-              <option value="">Sin cliente · venta normal</option>
-              {customers.map((customer) => (
-                <option key={customer.id} value={customer.id}>
-                  {customer.name} · {customer.pointsBalance.toFixed(2)} pts
-                </option>
-              ))}
-            </select>
-          </label>
-          {selectedCustomer ? (
-            <div className="pos-customer-points" aria-live="polite">
-              <div><span>Saldo disponible</span><strong>{selectedCustomer.pointsBalance.toFixed(2)} pts</strong></div>
-              <div><span>Ganará con esta compra</span><strong>+{pointsPreview.toFixed(2)} pts</strong></div>
-            </div>
-          ) : (
-            <p className="pos-customer-help">Opcional. Puedes continuar sin cliente o registrarlo aquí.</p>
-          )}
-          <details className="pos-customer-registration">
-            <summary><span aria-hidden="true">＋</span> Registrar cliente nuevo</summary>
-            <form action={createPosCustomer} className="stack">
-              <label>
-                Nombre
-                <input name="name" required minLength={2} />
-              </label>
-              <label>
-                Teléfono
-                <input name="phone" inputMode="tel" />
-              </label>
-              <label>
-                Correo
-                <input name="email" type="email" />
-              </label>
-              <button type="submit">Guardar cliente</button>
-            </form>
-          </details>
-        </section>}
+        {!savedTicket&&<CheckoutLoyalty
+          identityOnly
+          customers={createdCustomer
+            ?[...customers.filter(c=>c.id!==createdCustomer.id),createdCustomer]:customers}
+          selectedId={customerId} onSelect={checkoutCustomerChange}
+          redeemPoints={redeemPoints} onRedeemChange={setRedeemPoints}
+          total={total} liveEnabled={liveEnabled}/>}
 
-        <form id="pos-order-command-form" action={savedTicket?addProductsToLiveCommand:liveEnabled?saveAction:createShadowSale} className="stack pos-checkout">
+        <form id="pos-order-command-form" action={savedTicket?addProductsToLiveCommand:liveEnabled?saveAction:shadowAction} className="stack pos-checkout">
           {savedTicket&&<>
             <input type="hidden" name="orderId" value={savedTicket.id}/>
             <input type="hidden" name="requestId" value={additionRequestId}/>
@@ -622,13 +794,13 @@ export function PosClient({
                 externalId: line.externalId,
                 quantity: 1,
                 note: line.note.trim() || null,
-                serviceMode:line.serviceMode,
+                serviceMode:line.serviceMode,customerContainer:line.customerContainer,
                 extras:line.extras,
               })),
             )}
           />
           <input type="hidden" name="serviceMode" value={ticketServiceMode} />
-          <input type="hidden" name="customerId" value={customerId} />
+          <input type="hidden" name="customerId" value={!liveEnabled&&createdCustomer?.id===customerId?"":customerId} />
 
           {!savedTicket && (
             <details className="pos-cancel-panel" style={{padding:"8px 12px"}}>
@@ -718,7 +890,7 @@ export function PosClient({
             </>:<>
             <button
               type="submit"
-              formAction={liveEnabled ? saveAction : createShadowCommand}
+              formAction={liveEnabled ? saveAction : shadowSaveAction}
               formNoValidate
               className="pos-command-button"
               disabled={cartLines.length === 0 || savePending || missingTable}
@@ -726,12 +898,12 @@ export function PosClient({
               Enviar comanda · cobrar después
             </button>
             <button
-              type={liveEnabled?"button":"submit"}
+              type="button"
               className="pos-pay-button"
-              onClick={liveEnabled?()=>{setMobileCartOpen(false);setCheckoutOpen(true);}:undefined}
+              onClick={()=>{setMobileCartOpen(false);setCheckoutOpen(true);}}
               disabled={cartLines.length===0||missingTable}
             >
-              {liveEnabled?"Ir a cobrar":"Registrar espejo"} · {money.format(total)}
+              {liveEnabled?"Ir a cobrar":"Simular cobro"} · {money.format(total)}
             </button>
             </>}
           </div>
@@ -758,21 +930,16 @@ export function PosClient({
               </>
             :<>
               <button type="submit" form="pos-order-command-form" formNoValidate
-                formAction={liveEnabled?saveAction:createShadowCommand}
+                formAction={liveEnabled?saveAction:shadowSaveAction}
                 className="pos-command-button"
-                disabled={cartLines.length===0||savePending||missingTable}>
+                disabled={cartLines.length===0||savePending||shadowSavePending||missingTable}>
                 {savePending?"Guardando…":"Guardar ticket"}
               </button>
-              {liveEnabled
-                ?<button type="button" className="pos-pay-button"
-                  disabled={cartLines.length===0||missingTable}
-                  onClick={()=>{setMobileCartOpen(false);setCheckoutOpen(true);}}>
-                  Cobrar · {money.format(total)}
-                </button>
-                :<button type="submit" form="pos-order-command-form" className="pos-pay-button"
-                   disabled={cartLines.length===0||missingTable}>
-                   Registrar espejo
-                 </button>}
+              <button type="button" className="pos-pay-button"
+                disabled={cartLines.length===0||missingTable}
+                onClick={()=>{setMobileCartOpen(false);setCheckoutOpen(true);}}>
+                {liveEnabled?"Cobrar":"Simular cobro"} · {money.format(total)}
+              </button>
             </>}
         </div>
       </aside>

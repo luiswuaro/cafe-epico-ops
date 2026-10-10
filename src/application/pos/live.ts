@@ -2,9 +2,12 @@ import { and, eq, sql } from "drizzle-orm";
 import { getPosCatalog, type PosServiceMode } from "@/src/application/pos/catalog";
 import {priceExtras, readExtraSnapshots, type ExtraRequest} from "@/src/application/pos/extras";
 import {getPosExtraCatalog} from "@/src/application/pos/extra-catalog";
+import {OWN_CONTAINER_DISCOUNT_MXN,canUseOwnContainer,isOwnContainerDisposable,
+  isOwnContainerSnapshot,ownContainerUnitPrice,preparedOwnContainerComponents} from "@/src/domain/pos/own-container";
 import {dailyTakeawayTicketLabel,effectiveOrderServiceMode,validateTicketLabel} from "@/src/application/pos/ticket-names";
 import { isCostOnlyComponent, costOnlyRecipeMeasure } from "@/src/application/pos/component-policy";
 import { getDb } from "@/src/infrastructure/db/client";
+import {calculateEarnedPointsFromRealMoney} from "@/src/domain/pos/benefits-preview";
 import {
   auditEvents, inventoryBalances, inventoryItems, inventoryMovements,
   loyverseInventoryMappings, posCashMovements, posCashSessions, posCustomers,
@@ -16,6 +19,7 @@ export type LiveCart = Array<{
   quantity: number;
   note: string | null;
   serviceMode?:PosServiceMode;
+  customerContainer?:boolean;
   extras?:ExtraRequest[];
   // ID interno de la línea congelada de una comanda guardada; jamás se toma de una petición del navegador.
   sourceLineId?:string;
@@ -45,7 +49,8 @@ export async function checkoutLiveOrder(input:{
   cart:LiveCart;
   customerId:string|null;
   serviceMode:PosServiceMode;
-  paymentMethod:"CASH"|"CARD"|"TRANSFER";
+  paymentMethod:"CASH"|"CARD"|"TRANSFER"|"POINTS";
+  redeemPoints?:number;
   tenderedAmount:number|null;
   tableLabel:string|null;
   note:string|null;
@@ -85,6 +90,14 @@ export async function checkoutLiveOrder(input:{
       throw new Error("Piloto LIVE limitado a "+pilotProduct+". No se cobró otro producto.");
     }
     const lineMode=line.serviceMode??input.serviceMode;
+    const customerContainer=snapshot
+      ?isOwnContainerSnapshot(snapshot.expectedConsumption)
+      :line.customerContainer===true;
+    if(customerContainer&&!canUseOwnContainer(item,lineMode))
+      throw new Error("Termo propio sólo aplica a bebidas para llevar.");
+    if(snapshot && line.customerContainer!==undefined &&
+      line.customerContainer!==customerContainer)
+      throw new Error("El estado de termo propio de la comanda cambió.");
     if(snapshot && snapshot.expectedConsumption?.serviceMode!==lineMode)
       throw new Error("El servicio de la línea guardada no coincide.");
     const resolvedExtras=snapshot
@@ -104,7 +117,10 @@ export async function checkoutLiveOrder(input:{
             quantity:Number(comp.quantity)/snapshotQuantity,
           };
         }):[])
-      :[...item.serviceRecipes[lineMode].components,...resolvedExtras.components];
+      :preparedOwnContainerComponents(
+        [...item.serviceRecipes[lineMode].components,...resolvedExtras.components],
+        customerContainer,
+      );
     if(recipeComponents.length===0 || recipeComponents.some(c=>!c.name||
       !Number.isFinite(c.quantity)||c.quantity<=0)){
       throw new Error("La receta original de "+item.name+" no está disponible para cobro.");
@@ -114,7 +130,10 @@ export async function checkoutLiveOrder(input:{
       const hasCup=names.some(name=>/VASO/.test(name));
       const hasLid=names.some(name=>/TAPA/.test(name));
       const hasStraw=names.some(name=>/POPOTE|PAJILLA/.test(name));
-      if(lineMode==="TAKEAWAY" && (!hasCup || !hasLid)){
+      if(customerContainer && recipeComponents.some(isOwnContainerDisposable)){
+         throw new Error("Termo propio no debe descontar vasos, tapas ni desechables.");
+       }
+       if(lineMode==="TAKEAWAY" && !customerContainer && (!hasCup || !hasLid)){
         throw new Error("Receta de "+item.name+" para llevar incompleta: falta vaso o tapa.");
       }
       if(lineMode==="DINE_IN" && names.some(name=>/VASO|TAPA|MANGA|FAJILLA|SERVILLETA/.test(name))){
@@ -124,11 +143,12 @@ export async function checkoutLiveOrder(input:{
         throw new Error("Receta fría de "+item.name+" para consumir aquí no incluye popote.");
       }
     }
-    const price=snapshot?Number(snapshot.unitPrice):Number((item.price+resolvedExtras.unitPrice).toFixed(2));
+    const price=snapshot?Number(snapshot.unitPrice):
+      ownContainerUnitPrice(item.price,resolvedExtras.unitPrice,customerContainer);
     if(!Number.isFinite(price)||price<=0)
       throw new Error("Precio guardado no válido.");
     return {
-      ...line,item,lineMode,price,extraSnapshots:resolvedExtras.extras,
+      ...line,item,lineMode,customerContainer,price,extraSnapshots:resolvedExtras.extras,
       total:Number((price*line.quantity).toFixed(2)),
       components:recipeComponents.map(c=>({
         ...c,quantity:Number((c.quantity*line.quantity).toFixed(6)),
@@ -141,10 +161,20 @@ export async function checkoutLiveOrder(input:{
   if(!input.existingOrderId)validateTicketLabel(actualMode,input.tableLabel);
   const total=Number(lines.reduce((sum,line)=>sum+line.total,0).toFixed(2));
   if(total<=0) throw new Error("El total de la venta es inválido.");
+  const requestedPoints=input.redeemPoints??0;
+  if(!Number.isFinite(requestedPoints)||requestedPoints<0 ||
+    !Number.isInteger(Math.round(requestedPoints*100)) ||
+    Math.abs(requestedPoints*100-Math.round(requestedPoints*100))>0.000001 ||
+    requestedPoints>total)throw new Error("Cantidad de puntos inválida para esta cuenta.");
+  const redeemedAmount=Math.round(requestedPoints*100)/100; // 1 punto = $1 MXN
+  if(redeemedAmount>0&&!input.customerId)throw new Error("Selecciona al cliente antes de canjear.");
+  const monetaryDue=Math.round((total-redeemedAmount)*100)/100;
+  if((monetaryDue===0)!==(input.paymentMethod==="POINTS"))
+    throw new Error("Selecciona la forma de pago correspondiente al saldo restante.");
   if(input.paymentMethod==="CASH" &&
     (input.tenderedAmount===null || !Number.isFinite(input.tenderedAmount) ||
-      input.tenderedAmount < total || input.tenderedAmount > 1000000)) {
-    throw new Error("El efectivo entregado debe ser mayor o igual al total.");
+      input.tenderedAmount < monetaryDue || input.tenderedAmount > 1000000)) {
+    throw new Error("El efectivo entregado debe cubrir el importe restante tras el canje.");
   }
   const now=new Date();
   const result=await db.transaction(async tx=>{
@@ -257,13 +287,18 @@ export async function checkoutLiveOrder(input:{
     )).for("update").limit(1);
     if(!session) throw new Error("Abre una caja operativa antes de cobrar.");
     
+    if(split && pending && pending.customerId!==input.customerId)
+      throw new Error("Para dividir la cuenta, usa el cliente registrado en la mesa.");
     if(input.customerId){
-      const [customer]=await tx.select({id:posCustomers.id}).from(posCustomers).where(and(
-        eq(posCustomers.id,input.customerId),
-        eq(posCustomers.organizationId,input.organizationId),
-        eq(posCustomers.isActive,true),
-      )).limit(1);
+      const [customer]=await tx.select({id:posCustomers.id,pointsBalance:posCustomers.pointsBalance})
+        .from(posCustomers).where(and(
+          eq(posCustomers.id,input.customerId),
+          eq(posCustomers.organizationId,input.organizationId),
+          eq(posCustomers.isActive,true),
+        )).for("update").limit(1);
       if(!customer) throw new Error("Cliente no válido.");
+      if(redeemedAmount>Number(customer.pointsBalance))
+        throw new Error("Saldo de puntos insuficiente; actualiza la cuenta.");
     }
 
     const mappings=await tx.select({
@@ -340,6 +375,8 @@ export async function checkoutLiveOrder(input:{
           status:split&&!finalSplitPayment?"PARTIALLY_PAID":"PAID",
           paidAt:split&&!finalSplitPayment?null:now,updatedAt:now,
           inventoryEffectApplied:true,
+          customerId:input.customerId,
+          loyaltyPointsPreview:(input.customerId?calculateEarnedPointsFromRealMoney(monetaryDue):0).toFixed(2),
           loyaltyEffectApplied:Boolean(input.customerId)||pending.loyaltyEffectApplied,
         }).where(and(eq(posOrders.id,pending.id),eq(posOrders.status,pending.status)))
           .returning({id:posOrders.id,folio:posOrders.folio})
@@ -352,7 +389,7 @@ export async function checkoutLiveOrder(input:{
           tableLabel:assignedLabel,
           customerId:input.customerId,businessDate:businessDate(now),
           subtotal:total.toFixed(2),total:total.toFixed(2),note:input.note,
-          loyaltyPointsPreview:(input.customerId?total*0.05:0).toFixed(2),
+          loyaltyPointsPreview:(input.customerId?calculateEarnedPointsFromRealMoney(monetaryDue):0).toFixed(2),
           loyaltyEffectApplied:Boolean(input.customerId),inventoryEffectApplied:true,paidAt:now,
         }).returning({id:posOrders.id,folio:posOrders.folio});
     if(!order) throw new Error("Comanda modificada durante el cobro.");
@@ -363,6 +400,11 @@ export async function checkoutLiveOrder(input:{
       unitPrice:line.price.toFixed(2),quantity:String(line.quantity),lineTotal:line.total.toFixed(2),
       note:line.note,expectedConsumption:{
         mode:"LIVE",serviceMode:line.lineMode,extras:line.extraSnapshots,
+        customerContainer:line.customerContainer,
+        discount:line.customerContainer?{
+          code:"OWN_THERMOS",amountPerUnit:OWN_CONTAINER_DISCOUNT_MXN,
+          total:Number((OWN_CONTAINER_DISCOUNT_MXN*line.quantity).toFixed(2)),
+        }:null,
         components:line.components.map(component => ({
           ...component,
           inventoryPolicy:isCostOnlyComponent(component) ? "COST_ONLY" : "TRACKED",
@@ -377,18 +419,39 @@ export async function checkoutLiveOrder(input:{
         .returning({id:posOrderSplits.id});
       if(!changed)throw new Error("Esta cuenta fue cobrada por otro dispositivo.");
     }
-    await tx.insert(posPayments).values({
-      organizationId:input.organizationId,orderId:order.id,
-      splitId:split?.id??null,method:input.paymentMethod,
-      amount:total.toFixed(2),
-      tenderedAmount:input.paymentMethod==="CASH" ? input.tenderedAmount!.toFixed(2) : null,
-      changeAmount:input.paymentMethod==="CASH" ? (input.tenderedAmount!-total).toFixed(2) : null,
-    });
-    if(input.paymentMethod==="CASH"){
-      await tx.insert(posCashMovements).values({
+    // La cuenta conserva su valor total. Puntos son una forma de liquidación
+    // no monetaria: no ingresan a caja y no generan puntos nuevos.
+    if(redeemedAmount>0){
+      await tx.insert(posPayments).values({
+        organizationId:input.organizationId,orderId:order.id,
+        splitId:split?.id??null,method:"POINTS",amount:redeemedAmount.toFixed(2),
+        reference:"CANJE_1_PUNTO_1_MXN",
+      });
+      const [debited]=await tx.update(posCustomers).set({
+        pointsBalance:sql`${posCustomers.pointsBalance} - ${redeemedAmount}`,updatedAt:now,
+      }).where(and(eq(posCustomers.id,input.customerId!),
+        eq(posCustomers.organizationId,input.organizationId),
+        sql`${posCustomers.pointsBalance} >= ${redeemedAmount}`
+      )).returning({id:posCustomers.id});
+      if(!debited)throw new Error("El cliente ya no tiene suficientes puntos.");
+      await tx.insert(posLoyaltyEntries).values({
+        organizationId:input.organizationId,customerId:input.customerId!,
+        orderId:order.id,entryType:"REDEEM",points:(-redeemedAmount).toFixed(2),
+        note:(split?.label??"Cuenta")+" · Canje 1pt=$1 · "+order.folio,
+      });
+    }
+    if(monetaryDue>0){
+      await tx.insert(posPayments).values({
+        organizationId:input.organizationId,orderId:order.id,
+        splitId:split?.id??null,method:input.paymentMethod,
+        amount:monetaryDue.toFixed(2),
+        tenderedAmount:input.paymentMethod==="CASH" ? input.tenderedAmount!.toFixed(2) : null,
+        changeAmount:input.paymentMethod==="CASH" ? (input.tenderedAmount!-monetaryDue).toFixed(2) : null,
+      });
+      if(input.paymentMethod==="CASH")await tx.insert(posCashMovements).values({
         organizationId:input.organizationId,storeId:input.storeId,
         sessionId:session.id,orderId:order.id,splitId:split?.id??null,employeeId:input.employeeId,
-        movementType:"SALE",amount:total.toFixed(2),note:order.folio,
+        movementType:"SALE",amount:monetaryDue.toFixed(2),note:order.folio,
       });
     }
 
@@ -412,7 +475,7 @@ export async function checkoutLiveOrder(input:{
     }
 
     if(input.customerId){
-      const earned=Math.round(total*5)/100;
+      const earned=calculateEarnedPointsFromRealMoney(monetaryDue);
       if(earned>0){
         await tx.update(posCustomers).set({
           pointsBalance:sql`${posCustomers.pointsBalance} + ${earned}`,
@@ -439,7 +502,9 @@ export async function checkoutLiveOrder(input:{
       organizationId:input.organizationId,storeId:input.storeId,
       actorUserId:input.actorUserId,actorEmployeeId:input.employeeId,
       action:split?"POS_LIVE_SPLIT_PAID":pending?"POS_LIVE_COMMAND_PAID":"POS_LIVE_SALE_PAID",entityType:"pos_order",entityId:order.id,
-      afterData:{folio:order.folio,total,payment:input.paymentMethod,fromOpenCommand:Boolean(pending),
+      afterData:{folio:order.folio,total,redeemedPoints:redeemedAmount,monetaryPaid:monetaryDue,
+        pointsEarned:input.customerId?calculateEarnedPointsFromRealMoney(monetaryDue):0,
+        payment:input.paymentMethod,fromOpenCommand:Boolean(pending),
         splitId:split?.id??null,finalPayment:!split||finalSplitPayment,consumptionCount:consume.size,costOnlyComponents,
         customerId:input.customerId,inventoryEffectApplied:true,loyaltyEffectApplied:Boolean(input.customerId),
         stockShortageOverride:stockShortages.length>0},

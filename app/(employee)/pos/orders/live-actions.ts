@@ -6,6 +6,7 @@ import { z } from "zod";
 import { getPosCatalog } from "@/src/application/pos/catalog";
 import {priceExtras} from "@/src/application/pos/extras";
 import {getPosExtraCatalog} from "@/src/application/pos/extra-catalog";
+import {OWN_CONTAINER_DISCOUNT_MXN,canUseOwnContainer,ownContainerUnitPrice,preparedOwnContainerComponents,ownContainerReadinessErrors} from "@/src/domain/pos/own-container";
 import { getPosReadiness } from "@/src/application/pos/readiness";
 import { isPosLiveEnabled } from "@/src/application/pos/live";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
@@ -18,6 +19,7 @@ const additionSchema=z.array(z.object({
   externalId:z.string().min(1),
   quantity:z.number().int().min(1).max(20),
   serviceMode:z.enum(["DINE_IN","TAKEAWAY"]).optional(),
+  customerContainer:z.boolean().optional(),
   note:z.string().max(180).nullable().optional(),
   extras:z.array(z.object({id:z.string().min(1).max(90),quantity:z.number().int().min(1).max(2)})).max(1).optional(),
 })).min(1).max(30);
@@ -69,13 +71,19 @@ export async function addProductsToLiveCommand(data:FormData){
         const rawMode=line.serviceMode??order.serviceMode;
         if(rawMode!=="DINE_IN"&&rawMode!=="TAKEAWAY")throw new Error("Servicio inválido.");
         const lineMode: "DINE_IN"|"TAKEAWAY"=rawMode;
+        const customerContainer=line.customerContainer===true;
+        if(customerContainer&&!canUseOwnContainer(item,lineMode))
+          throw new Error("Termo propio sólo aplica a bebidas para llevar.");
         const state=readyById.get(item.id)?.recipes.find(r=>r.mode===lineMode);
-        if(!state?.ready)throw new Error(item.name+" ("+(lineMode==="DINE_IN"?"aquí":"para llevar")+"): "+(state?.errors.join("; ")||"Receta no confirmada"));
+        const errors=state?ownContainerReadinessErrors(state.errors,customerContainer):["Receta no confirmada"];
+        if(errors.length)throw new Error(item.name+" ("+(lineMode==="DINE_IN"?"aquí":"para llevar")+"): "+errors.join("; "));
         const recipe=item.serviceRecipes[lineMode];
         const extras=priceExtras(line.extras,item,extrasCatalog);
-        const unitPrice=Number((item.price+extras.unitPrice).toFixed(2));
-        return {item,recipe,lineMode,quantity:line.quantity,note:line.note?.trim()||null,
-          extras:extras.extras,components:[...recipe.components,...extras.components],
+        const unitPrice=ownContainerUnitPrice(item.price,extras.unitPrice,customerContainer);
+        if(unitPrice<=0||!Number.isFinite(unitPrice))throw new Error("Precio inválido para termo propio.");
+        return {item,recipe,lineMode,customerContainer,quantity:line.quantity,note:line.note?.trim()||null,
+          extras:extras.extras,components:preparedOwnContainerComponents(
+            [...recipe.components,...extras.components],customerContainer),
           unitPrice,lineTotal:Math.round(unitPrice*line.quantity*100)/100};
       });
       if(splits.length)await tx.delete(posOrderSplits).where(eq(posOrderSplits.orderId,order.id));
@@ -87,7 +95,11 @@ export async function addProductsToLiveCommand(data:FormData){
         lineTotal:line.lineTotal.toFixed(2),note:line.note,
         expectedConsumption:{
           mode:"LIVE",additionalRound:true,roundId:requestId,serviceMode:line.lineMode,
-          extras:line.extras,
+          extras:line.extras,customerContainer:line.customerContainer,
+          discount:line.customerContainer?{
+            code:"OWN_THERMOS",amountPerUnit:OWN_CONTAINER_DISCOUNT_MXN,
+            total:Number((OWN_CONTAINER_DISCOUNT_MXN*line.quantity).toFixed(2)),
+          }:null,
           sourceRecipeExternalId:line.recipe.externalId,
           components:line.components.map(c=>({
             variantExternalId:c.variantExternalId,itemExternalId:c.itemExternalId,

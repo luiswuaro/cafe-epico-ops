@@ -175,7 +175,16 @@ export default async function ReceiptPage({
   });
 
   const total = split ? Number(split.total) : Number(order.order.total);
-  const paymentMethod = [...new Set(payments.map((payment) => payment.method))].join(" + ");
+  const pointPayment=payments.filter(payment=>payment.method==="POINTS")
+    .reduce((sum,payment)=>sum+Number(payment.amount),0);
+  const moneyPayment=payments.filter(payment=>payment.method!=="POINTS")
+    .reduce((sum,payment)=>sum+Number(payment.amount),0);
+  const paymentMethod=payments.map(payment=>{
+    const label=payment.method==="POINTS"?"Puntos":
+      payment.method==="CASH"?"Efectivo":
+      payment.method==="CARD"?"Tarjeta":"Transferencia";
+    return label+" "+money.format(Number(payment.amount));
+  }).join(" + ");
   const paidAmount=payments.reduce((sum,payment)=>sum+Number(payment.amount),0);
   // Sólo mostrar importes entregados realmente registrados. No inferirlos en tickets antiguos.
   // Si una orden tiene varias cuentas pagadas en efectivo, acumular recibido y cambio;
@@ -213,8 +222,10 @@ export default async function ReceiptPage({
     : recipients.size>1?"Varios clientes":split?null:order.customerName;
   const pointsEarned=order.order.status!=="CANCELLED"&&applicable.length
     ? applicable.reduce((sum,row)=>sum+Number(row.points),0).toFixed(2):null;
-  const pointsBalance=order.order.status!=="CANCELLED"&&recipients.size===1
-    ? Number(applicable[0].balance).toFixed(2):null;
+  const pointsBalance=order.order.status!=="CANCELLED"
+    ?(recipients.size===1?Number(applicable[0].balance).toFixed(2):
+       order.customerPoints!=null?Number(order.customerPoints).toFixed(2):null)
+    :null;
 
   const extraEvents=order.order.mode==="LIVE"&&order.order.status==="PAID"&&!split
     ?await db.select({data:auditEvents.afterData}).from(auditEvents).where(and(
@@ -446,6 +457,12 @@ export default async function ReceiptPage({
         <div className="receipt-meta">
           <span>{order.order.status === "CANCELLED" ? "Pago original" : "Pago"}</span>
           <span>{paymentMethod || "—"}</span>
+          {pointPayment>0&&<>
+            <span>Puntos canjeados (1 punto = $1)</span>
+            <strong>−{pointPayment.toFixed(2)} pts</strong>
+            <span>Pagado con dinero real</span>
+            <strong>{money.format(moneyPayment)}</strong>
+          </>}
           {cashReceived!==null&&cashChange!==null&&<>
             <span>{order.order.status==="CANCELLED"?"Efectivo recibido (original)":"Efectivo recibido"}</span>
             <strong>{cashReceived}</strong>
@@ -460,10 +477,10 @@ export default async function ReceiptPage({
             </>
           )}
 
-          {printSettings.showPoints && pointsBalance && pointsEarned && (
+          {printSettings.showPoints && pointsBalance && (pointsEarned || pointPayment>0) && (
             <>
               <span>Puntos ganados</span>
-              <span>+{pointsEarned}</span>
+              <span>+{pointsEarned??"0.00"}</span>
               <span>Saldo puntos</span>
               <span>{pointsBalance}</span>
             </>

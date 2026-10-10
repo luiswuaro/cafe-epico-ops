@@ -12,6 +12,7 @@ const cartSchema = z.array(z.object({
   quantity:z.number().int().min(1).max(20),
   note:z.string().max(180).nullable().optional(),
   serviceMode:z.enum(["DINE_IN","TAKEAWAY"]).optional(),
+  customerContainer:z.boolean().optional(),
   extras:z.array(z.object({id:z.string().min(1).max(90),quantity:z.number().int().min(1).max(2)})).max(1).optional(),
 })).min(1).max(30);
 
@@ -27,7 +28,8 @@ export async function submitLiveSale(_previous:{error:string|null},formData:Form
     clientOrderId:z.string().uuid(),
     cart:cartSchema,
     serviceMode:z.enum(["DINE_IN","TAKEAWAY"]),
-    paymentMethod:z.enum(["CASH","CARD","TRANSFER"]),
+    paymentMethod:z.enum(["CASH","CARD","TRANSFER","POINTS"]),
+    redeemPoints:z.coerce.number().min(0),
     tenderedAmount:z.string(),
     customerId:z.union([z.string().uuid(),z.literal("")]),
     tableLabel:z.string().max(100),
@@ -38,6 +40,7 @@ export async function submitLiveSale(_previous:{error:string|null},formData:Form
     cart:JSON.parse(String(formData.get("cart")??"[]")),
     serviceMode:String(formData.get("serviceMode")??""),
     paymentMethod:String(formData.get("paymentMethod")??""),
+    redeemPoints:String(formData.get("redeemPoints")??"0"),
     tenderedAmount:String(formData.get("tenderedAmount")??""),
     customerId:String(formData.get("customerId")??""),
     tableLabel:String(formData.get("tableLabel")??""),
@@ -56,6 +59,7 @@ export async function submitLiveSale(_previous:{error:string|null},formData:Form
     clientOrderId:parsed.clientOrderId,
     cart:parsed.cart.map(line=>({...line,note:line.note??null})),
     serviceMode:resolvedMode,paymentMethod:parsed.paymentMethod,
+    redeemPoints:parsed.redeemPoints,
     tenderedAmount:parsed.paymentMethod==="CASH" && parsed.tenderedAmount.trim()!==""
       ? Number(parsed.tenderedAmount) : null,
     customerId:parsed.customerId||null,tableLabel:resolvedLabel,
