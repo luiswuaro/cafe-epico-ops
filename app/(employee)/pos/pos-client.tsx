@@ -359,6 +359,7 @@ export function PosClient({
             className="pos-mobile-cart-close" onClick={()=>setMobileCartOpen(false)}
             aria-label="Cerrar detalle y volver al catálogo">✕</button>
         </div>
+        <div className="pos-cart-body">
         <div className="section-heading">
           <div>
             <p className="eyebrow">{savedTicket?"TICKET GUARDADO":liveEnabled?"VENTA LIVE":"ORDEN ESPEJO"}</p>
@@ -532,7 +533,7 @@ export function PosClient({
           </details>
         </div>}
 
-        <form action={savedTicket?addProductsToLiveCommand:liveEnabled?saveAction:createShadowSale} className="stack pos-checkout">
+        <form id="pos-order-command-form" action={savedTicket?addProductsToLiveCommand:liveEnabled?saveAction:createShadowSale} className="stack pos-checkout">
           {savedTicket&&<>
             <input type="hidden" name="orderId" value={savedTicket.id}/>
             <input type="hidden" name="requestId" value={additionRequestId}/>
@@ -634,6 +635,39 @@ export function PosClient({
         {liveEnabled
           ? <p className="pos-shadow-warning">Notas libres permitidas para preparación. No cambian costos ni inventario: los extras que agregan insumos requieren modificadores estructurados. El inventario se descuenta al cobrar.</p>
           : <p className="pos-shadow-warning">MODO ESPEJO: comandas, puntos e inventario son simulación. Nada se descuenta ni se acredita todavía.</p>}
+        </div>
+        <div className="pos-mobile-cart-footer" aria-label="Acciones de la cuenta">
+          {savedTicket
+            ?cartLines.length>0
+              ?<button type="submit" form="pos-order-command-form" formNoValidate
+                className="pos-command-button" disabled={savePending}>
+                Guardar nueva ronda · {cartLines.length}
+              </button>
+              :<>
+                <Link href={"/pos/checkout?ticket="+savedTicket.id}
+                  className="button pos-mobile-footer-primary">Cobrar · {money.format(savedTicket.total)}</Link>
+                <Link href={"/pos/orders/"+savedTicket.id+"/split"}
+                  className="button pos-mobile-footer-secondary">Dividir cuenta</Link>
+              </>
+            :<>
+              <button type="submit" form="pos-order-command-form" formNoValidate
+                formAction={liveEnabled?saveAction:createShadowCommand}
+                className="pos-command-button"
+                disabled={cartLines.length===0||savePending}>
+                {savePending?"Guardando…":"Guardar ticket"}
+              </button>
+              {liveEnabled
+                ?<button type="button" className="pos-pay-button"
+                  disabled={cartLines.length===0}
+                  onClick={()=>{setMobileCartOpen(false);setCheckoutOpen(true);}}>
+                  Cobrar · {money.format(total)}
+                </button>
+                :<button type="submit" form="pos-order-command-form" className="pos-pay-button"
+                   disabled={cartLines.length===0}>
+                   Registrar espejo
+                 </button>}
+            </>}
+        </div>
       </aside>
     </div>
   );
