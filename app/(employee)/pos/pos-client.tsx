@@ -11,6 +11,10 @@ import {
 } from "./actions";
 import { submitLiveSale } from "./live-actions";
 import type {ExtraOption} from "@/src/application/pos/extra-catalog";
+import {
+  DINE_IN_TICKET_PRESETS,TAKEAWAY_TICKET_PRESETS,
+  effectiveOrderServiceMode,
+} from "@/src/application/pos/ticket-names";
 
 type CatalogItem = {
   id: string;
@@ -87,7 +91,8 @@ export function PosClient({
   const mobileCartCloseRef=useRef<HTMLButtonElement>(null);
   const mobileSummaryRef=useRef<HTMLButtonElement>(null);
   const [allowStockShortage,setAllowStockShortage]=useState(false);
-  const [tableLabel,setTableLabel]=useState("");
+  const [ticketNameOption,setTicketNameOption]=useState("");
+  const [customTicketName,setCustomTicketName]=useState("");
   const [orderNote,setOrderNote]=useState("");
   const [checkoutState,checkoutAction,checkoutPending]=useActionState(submitLiveSale,{error:null});
   const [saveState,saveAction,savePending]=useActionState(saveLiveCommand,{error:null});
@@ -119,6 +124,20 @@ export function PosClient({
   const newSubtotal=cartLines.reduce((sum,line)=>sum+unitPrice(line),0);
   const total=(savedTicket?.total??0)+newSubtotal;
   const units=(savedTicket?.lines.reduce((sum,line)=>sum+line.quantity,0)??0)+cartLines.length;
+  const ticketServiceMode=cartLines.length
+    ?effectiveOrderServiceMode(serviceMode,cartLines):serviceMode;
+  const namePresets=ticketServiceMode==="DINE_IN"
+    ?DINE_IN_TICKET_PRESETS:TAKEAWAY_TICKET_PRESETS;
+  const displayTicketNameOption=ticketNameOption==="CUSTOM" ||
+    (ticketServiceMode==="TAKEAWAY"&&ticketNameOption==="AUTO") ||
+    namePresets.some(option=>option===ticketNameOption)
+      ?ticketNameOption:ticketServiceMode==="TAKEAWAY"?"AUTO":"";
+  const tableLabel=displayTicketNameOption==="CUSTOM"
+    ?customTicketName.trim()
+    :displayTicketNameOption==="AUTO"?"":displayTicketNameOption;
+  const missingTable=!savedTicket&&ticketServiceMode==="DINE_IN"&&!tableLabel;
+  const ticketNamePreview=tableLabel||
+    (ticketServiceMode==="DINE_IN"?"Mesa obligatoria":"Folio automático de hoy");
 
   useEffect(()=>{
     if(!mobileCartOpen)return;
@@ -194,6 +213,16 @@ export function PosClient({
 
   function updateServiceMode(key:string,next:ServiceMode){
     setCart(current=>current.map(line=>line.key===key?{...line,serviceMode:next}:line));
+    // Ante un cambio a modo mixto, el selector se recalcula automáticamente.
+  }
+
+  function changeDefaultService(next:ServiceMode){
+    setServiceMode(next);
+    // El botón Aquí/Para llevar es para toda la cuenta; las líneas
+    // pueden corregirse por separado después.
+    setCart(current=>current.map(line=>({...line,serviceMode:next})));
+    setTicketNameOption(next==="TAKEAWAY"?"AUTO":"");
+    setCustomTicketName("");
   }
 
   function updateExtraQuantity(key:string,id:string,quantity:number){
@@ -215,6 +244,7 @@ export function PosClient({
       <section className="card stack" style={{maxWidth:780,margin:"0 auto",width:"100%"}}>
         <p className="eyebrow">POS · COBRAR</p>
         <h2>Elegir método de pago</h2>
+        <p className="muted">Ticket: <strong>{ticketNamePreview}</strong> · {ticketServiceMode==="DINE_IN"?"Aquí":"Para llevar"}</p>
         <p className="muted">El pedido sigue en memoria hasta confirmar el cobro. Puedes volver sin perder productos ni notas.</p>
         {checkoutState.error&&<div className="status-bad" role="alert">
           No se cobró. {checkoutState.error}
@@ -241,7 +271,7 @@ export function PosClient({
             serviceMode:line.serviceMode,
             extras:line.extras
           })))}/>
-          <input type="hidden" name="serviceMode" value={serviceMode}/>
+          <input type="hidden" name="serviceMode" value={ticketServiceMode}/>
           <input type="hidden" name="customerId" value={customerId}/>
           <input type="hidden" name="tableLabel" value={tableLabel}/>
           <input type="hidden" name="note" value={orderNote}/>
@@ -272,7 +302,7 @@ export function PosClient({
             <small className="muted">Registra inventario negativo y auditoría; exige reconteo posterior. No crea existencias ficticias.</small>
           </label>}
           <button className="pos-pay-button" type="submit" disabled={checkoutPending ||
-            (paymentMethod==="CASH"&&(!tendered.trim()||Number(tendered)<total))}>
+            missingTable || (paymentMethod==="CASH"&&(!tendered.trim()||Number(tendered)<total))}>
             {checkoutPending?"Procesando...":"Confirmar cobro · "+money.format(total)}
           </button>
         </form>
@@ -390,19 +420,19 @@ export function PosClient({
           <span className="pill">{units} unidad(es)</span>
         </div>
 
-        <p className="muted" style={{marginBottom:0}}>Servicio predeterminado de las próximas bebidas. Cada producto puede cambiarse de forma independiente.</p>
+        <p className="muted" style={{marginBottom:0}}>Elige el servicio para esta cuenta. Puedes ajustarlo por bebida si el pedido es mixto.</p>
         <div className="pos-service-toggle">
           <button
             type="button"
             className={serviceMode === "DINE_IN" ? "active" : ""}
-            onClick={() => setServiceMode("DINE_IN")}
+            onClick={() => changeDefaultService("DINE_IN")}
           >
             Aquí
           </button>
           <button
             type="button"
             className={serviceMode === "TAKEAWAY" ? "active" : ""}
-            onClick={() => setServiceMode("TAKEAWAY")}
+            onClick={() => changeDefaultService("TAKEAWAY")}
           >
             Para llevar
           </button>
@@ -597,17 +627,44 @@ export function PosClient({
               })),
             )}
           />
-          <input type="hidden" name="serviceMode" value={serviceMode} />
+          <input type="hidden" name="serviceMode" value={ticketServiceMode} />
           <input type="hidden" name="customerId" value={customerId} />
 
           {!savedTicket && (
-            <label>
-              Nombre del ticket / mesa
-              <input name="tableLabel" placeholder="Ej. Mesa 1, Mesa 2, Balcón 1"
-                maxLength={100} autoComplete="off" value={tableLabel}
-                onChange={e=>setTableLabel(e.target.value)}/>
-            </label>
+            <details className="pos-cancel-panel" style={{padding:"8px 12px"}}>
+              <summary style={{cursor:"pointer",fontWeight:700}}>
+                {ticketServiceMode==="DINE_IN"?"Mesa / nombre de ticket":"Nombre para llevar"}
+                {" · "}{ticketNamePreview}
+              </summary>
+              <div className="stack" style={{paddingTop:10}}>
+                <small className="muted">
+                  {ticketServiceMode==="DINE_IN"
+                    ?"Obligatorio para consumir aquí. Elige una mesa o escribe un nombre."
+                    :"Opcional: si lo dejas automático, OPS asigna el número de orden del día al guardar o cobrar."}
+                </small>
+                <label>Identificar pedido
+                  <select aria-label="Mesa o nombre del ticket"
+                    value={displayTicketNameOption}
+                    onChange={event=>setTicketNameOption(event.target.value)}>
+                    {ticketServiceMode==="DINE_IN"
+                      ?<option value="">Selecciona una mesa…</option>
+                      :<option value="AUTO">Número de orden de hoy · automático</option>}
+                    {namePresets.map(name=><option key={name} value={name}>{name}</option>)}
+                    <option value="CUSTOM">Nombre personalizado…</option>
+                  </select>
+                </label>
+                {displayTicketNameOption==="CUSTOM"&&<label>Nombre personalizado
+                  <input type="text" maxLength={100} autoComplete="off"
+                    placeholder={ticketServiceMode==="DINE_IN"?"Ej. Mesa de cumpleaños":"Ej. Juan, pedido de María"}
+                    value={customTicketName} onChange={event=>setCustomTicketName(event.target.value)}/>
+                </label>}
+              </div>
+            </details>
           )}
+          {!savedTicket&&<input type="hidden" name="tableLabel" value={tableLabel}/>}
+          {missingTable&&<p role="alert" className="status-warn">
+            Elige la mesa en «Mesa / nombre de ticket» para poder guardar o cobrar.
+          </p>}
 
           {!savedTicket&&!liveEnabled&&<label>
             Método de pago
@@ -646,7 +703,7 @@ export function PosClient({
 
           <div className="pos-command-actions">
             {savedTicket?<>
-              <button type="submit" className="pos-command-button" disabled={cartLines.length===0}>
+              <button type="submit" className="pos-command-button" disabled={cartLines.length===0||missingTable}>
                 Guardar ticket · añadir {cartLines.length} producto(s)
               </button>
               {cartLines.length===0?<Link href={"/pos/checkout?ticket="+savedTicket.id}
@@ -664,7 +721,7 @@ export function PosClient({
               formAction={liveEnabled ? saveAction : createShadowCommand}
               formNoValidate
               className="pos-command-button"
-              disabled={cartLines.length === 0 || savePending}
+              disabled={cartLines.length === 0 || savePending || missingTable}
             >
               Enviar comanda · cobrar después
             </button>
@@ -672,7 +729,7 @@ export function PosClient({
               type={liveEnabled?"button":"submit"}
               className="pos-pay-button"
               onClick={liveEnabled?()=>{setMobileCartOpen(false);setCheckoutOpen(true);}:undefined}
-              disabled={cartLines.length===0}
+              disabled={cartLines.length===0||missingTable}
             >
               {liveEnabled?"Ir a cobrar":"Registrar espejo"} · {money.format(total)}
             </button>
@@ -703,17 +760,17 @@ export function PosClient({
               <button type="submit" form="pos-order-command-form" formNoValidate
                 formAction={liveEnabled?saveAction:createShadowCommand}
                 className="pos-command-button"
-                disabled={cartLines.length===0||savePending}>
+                disabled={cartLines.length===0||savePending||missingTable}>
                 {savePending?"Guardando…":"Guardar ticket"}
               </button>
               {liveEnabled
                 ?<button type="button" className="pos-pay-button"
-                  disabled={cartLines.length===0}
+                  disabled={cartLines.length===0||missingTable}
                   onClick={()=>{setMobileCartOpen(false);setCheckoutOpen(true);}}>
                   Cobrar · {money.format(total)}
                 </button>
                 :<button type="submit" form="pos-order-command-form" className="pos-pay-button"
-                   disabled={cartLines.length===0}>
+                   disabled={cartLines.length===0||missingTable}>
                    Registrar espejo
                  </button>}
             </>}

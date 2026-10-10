@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { checkoutLiveOrder } from "@/src/application/pos/live";
+import {effectiveOrderServiceMode,validateTicketLabel} from "@/src/application/pos/ticket-names";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
 import { assertEmployeePermission, employeeHasPermission } from "@/src/infrastructure/auth/permissions";
 
@@ -43,6 +44,8 @@ export async function submitLiveSale(_previous:{error:string|null},formData:Form
     note:String(formData.get("note")??""),
     allowStockShortage:formData.get("allowStockShortage")==="on",
   });
+  const resolvedMode=effectiveOrderServiceMode(parsed.serviceMode,parsed.cart);
+  const resolvedLabel=validateTicketLabel(resolvedMode,parsed.tableLabel);
   if(parsed.allowStockShortage){
     const permitted=await employeeHasPermission(employee.id,"inventory.adjust",employee.homeStoreId);
     if(!permitted)throw new Error("Solo el propietario puede autorizar una diferencia de inventario.");
@@ -52,10 +55,10 @@ export async function submitLiveSale(_previous:{error:string|null},formData:Form
     actorUserId:user.id,employeeId:employee.id,
     clientOrderId:parsed.clientOrderId,
     cart:parsed.cart.map(line=>({...line,note:line.note??null})),
-    serviceMode:parsed.serviceMode,paymentMethod:parsed.paymentMethod,
+    serviceMode:resolvedMode,paymentMethod:parsed.paymentMethod,
     tenderedAmount:parsed.paymentMethod==="CASH" && parsed.tenderedAmount.trim()!==""
       ? Number(parsed.tenderedAmount) : null,
-    customerId:parsed.customerId||null,tableLabel:parsed.tableLabel||null,
+    customerId:parsed.customerId||null,tableLabel:resolvedLabel,
     note:parsed.note||null,
     allowStockShortage:parsed.allowStockShortage,
     });
