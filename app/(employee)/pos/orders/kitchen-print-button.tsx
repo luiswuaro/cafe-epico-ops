@@ -59,9 +59,12 @@ function encodeBase64(bytes:Uint8Array) {
   return btoa(binary);
 }
 
-async function buildKitchenRaster(slip:KitchenSlip,selection:"latest"|"all"){
+async function buildKitchenRaster(slip:KitchenSlip,selection:"latest"|"all",serviceFilter?:"DINE_IN"|"TAKEAWAY"){
   await document.fonts.ready;
-  const prepared=selectedKitchenSlip(slip,selection);
+  const selected=selectedKitchenSlip(slip,selection);
+  const prepared=serviceFilter
+    ?{...selected,lines:selected.lines.filter(line=>line.serviceMode===serviceFilter)}
+    :selected;
   if(!prepared.lines.length)throw new Error("La comanda no tiene productos para imprimir");
 
   const canvas=document.createElement("canvas");
@@ -156,6 +159,30 @@ async function buildKitchenRaster(slip:KitchenSlip,selection:"latest"|"all"){
   return {dataBase64:encodeBase64(packed),width:PAPER_WIDTH,height,align:"center" as const};
 }
 
+export async function printKitchenSlip(
+  slip:KitchenSlip,
+  selection:"latest"|"all"="latest",
+  serviceFilter?:"DINE_IN"|"TAKEAWAY",
+):Promise<string>{
+  const separate=window.localStorage.getItem(ROUTE_KEY)==="separate";
+  const config=readConfig(separate?KITCHEN_PRINTER_KEY:TICKET_PRINTER_KEY);
+  if(!config)throw new Error(separate
+    ?"Configura la impresora de barra en POS > Impresora."
+    :"Configura la impresora de tickets en POS > Impresora.");
+  if(!/^http:\/\/(127\.0\.0\.1|localhost):\d{2,5}\/?$/.test(config.url)){
+    throw new Error("El puente debe usar localhost. Revisa configuración.");
+  }
+  const raster=await buildKitchenRaster(slip,selection,serviceFilter);
+  const response=await fetch(config.url.replace(/\/$/,"")+"/print",{
+    method:"POST",
+    headers:{"Content-Type":"application/json","X-Cafe-Epico-Token":config.token},
+    body:JSON.stringify({raster,feed:2,cut:false}),
+  });
+  const result=await response.json() as {ok?:boolean;error?:string;printer?:string};
+  if(!response.ok||!result.ok)throw new Error(result.error||"La impresora no respondió");
+  return result.printer||"impresora";
+}
+
 export function KitchenPrintButton({
   slip,viewUrl,compact=false,
 }:{
@@ -168,29 +195,10 @@ export function KitchenPrintButton({
 
   async function print(){
     if(status==="printing")return;
-    const separate=window.localStorage.getItem(ROUTE_KEY)==="separate";
-    const config=readConfig(separate?KITCHEN_PRINTER_KEY:TICKET_PRINTER_KEY);
-    if(!config){
-      setStatus("error");
-      setMessage(separate
-        ?"Configura y prueba la impresora de barra en POS > Impresora."
-        :"Configura la impresora de tickets en POS > Impresora.");
-      return;
-    }
-    if(!/^http:\/\/(127\.0\.0\.1|localhost):\d{2,5}\/?$/.test(config.url)){
-      setStatus("error");setMessage("El puente debe usar localhost. Revisa configuración.");return;
-    }
     setStatus("printing");setMessage("");
     try{
-      const raster=await buildKitchenRaster(slip,selection);
-      const response=await fetch(config.url.replace(/\/$/,"")+"/print",{
-        method:"POST",
-        headers:{"Content-Type":"application/json","X-Cafe-Epico-Token":config.token},
-        body:JSON.stringify({raster,feed:2,cut:false}),
-      });
-      const result=await response.json() as {ok?:boolean;error?:string;printer?:string};
-      if(!response.ok||!result.ok)throw new Error(result.error||"La impresora no respondió");
-      setStatus("ok");setMessage("Enviada a "+(result.printer||"impresora"));
+      const printer=await printKitchenSlip(slip,selection);
+      setStatus("ok");setMessage("Enviada a "+printer);
     }catch(e){
       setStatus("error");
       setMessage(e instanceof Error?e.message:"No se pudo imprimir");
