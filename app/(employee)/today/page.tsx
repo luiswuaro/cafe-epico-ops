@@ -142,8 +142,8 @@ export default async function TodayPage({
           }
         >
           {params.reconcile === "1"
-            ? "Conteo guardado. La diferencia quedó pendiente para conciliación administrativa con Loyverse."
-            : "Conteo guardado y sin diferencia relevante contra Loyverse."}
+            ? "Conteo registrado contra el saldo de OPS. Hay una diferencia pendiente de revisión; no se cambió inventario."
+            : "Conteo registrado sin diferencia significativa respecto al saldo OPS."}
         </p>
       )}
       {typeof params.error === "string" && (
@@ -294,7 +294,7 @@ export default async function TodayPage({
             href={
               cockpit.inventoryCorrectionCount > 0
                 ? "/today?action=count#conteo-rapido"
-                : "/inventory"
+                : "/inventory/ops"
             }
           >
             {cockpit.inventoryCorrectionCount > 0
@@ -720,8 +720,9 @@ export default async function TodayPage({
           <p className="eyebrow">CONTEO RÁPIDO</p>
           <h2>Confirmar existencia física</h2>
           <p className="muted">
-            Registra lo que realmente hay. No modifica Loyverse; si existe una
-            diferencia, administración recibe el pendiente para conciliarlo.
+            Verificación opcional contra las existencias actuales de OPS. Sólo
+            guarda la observación y no modifica saldos. Para corregir una
+            diferencia confirmada, el responsable utiliza Inventario OPS.
           </p>
           {suggestedCountRows.length > 0 && (
             <div>
@@ -764,7 +765,7 @@ export default async function TodayPage({
                   key={row.variantExternalId}
                   value={row.variantExternalId}
                 >
-                  {row.itemName} · Loyverse{" "}
+                  {row.itemName} · OPS{" "}
                   {number.format(row.sourceQuantity)}{" "}
                   {operationalUnit(row.unitLabel)}
                   {row.countedToday ? " · contado hoy" : ""}
@@ -837,8 +838,9 @@ export default async function TodayPage({
           <p className="eyebrow">REGISTRO RÁPIDO</p>
           <h2>Merma / derrame / bebida rehecha</h2>
           <p className="muted">
-            No modifica Loyverse. Explica diferencias entre consumo teórico y
-            existencia y mejora el detector de mermas.
+            Registro operativo de merma o bebida rehecha. Este formulario
+            NO descuenta existencias OPS. Para descontar una pérdida física,
+            registra también «Merma» en Inventario OPS.
           </p>
           <label>
             Insumo
@@ -976,7 +978,7 @@ export default async function TodayPage({
               ? "Sin faltantes abiertos."
               : "Hay faltantes que deben quedar documentados."}
           </p>
-          <Link href="/inventory">Abrir inventario →</Link>
+          <Link href="/inventory/ops">Abrir inventario OPS →</Link>
         </article>
       </section>
     </main>
