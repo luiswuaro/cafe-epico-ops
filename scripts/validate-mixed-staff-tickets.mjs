@@ -19,7 +19,27 @@ try{
     ownThermos:false,serviceMode:"DINE_IN",staffBenefit:"INCLUDED_DRINK",employeeId:"azucena"};
   const additional={key:"c",name:"Moka trabajador",category:"FRÍAS",basePrice:80,extrasPrice:10,
     ownThermos:false,serviceMode:"DINE_IN",staffBenefit:"ADDITIONAL_10",employeeId:"otro"};
-  let t=quote([customer,free]);
+  // Regla de caja: un cliente identificado bloquea cualquier beneficio de personal.
+  let t=quote([customer,free],"cliente-registrado");
+  assert.equal(t.valid,false);
+  assert.equal(t.staffDiscount,0);
+  assert.ok(t.warnings.some(w=>w.includes("Ticket con cliente registrado")));
+  assert.throws(()=>settle(t,0),/Cotización inválida/);
+  t=quote([customer,additional],"cliente-registrado");
+  assert.equal(t.valid,false);
+  assert.equal(t.staffDiscount,0);
+  t=quote([customer],"cliente-registrado");
+  assert.equal(t.valid,true);
+  assert.equal(t.customerEligibleTotal,70);
+  assert.equal(settle(t,20).earnedPoints,2.5);
+  t=quote([free],"cliente-registrado");
+  assert.equal(t.valid,false);
+  assert.equal(t.staffDiscount,0);
+  // Sin cliente, el trabajador puede recibir el beneficio en su ticket propio.
+  t=quote([free],null);
+  assert.equal(t.valid,true);
+  assert.equal(t.staffDiscount,60);
+  t=quote([customer,free]); // Tickets sin cliente identificado: legacy test
   assert.equal(t.valid,true);
   assert.equal(t.listedTotal,130);
   assert.equal(t.staffDiscount,60);
@@ -34,7 +54,7 @@ try{
   assert.equal(t.customerEligibleTotal,70);
   assert.deepEqual(settle(t,20),{customerDue:50,staffDue:82,totalDue:132,earnedPoints:2.5});
   assert.throws(()=>settle(t,80),/cliente/);
-  // Cliente seleccionado y dos bebidas de personal: no hay puntos para el cliente.
+  // Ticket sin cliente y dos consumos personal: no hay puntos de lealtad.
   t=quote([free,additional]);
   assert.equal(t.customerEligibleTotal,0);
   assert.equal(t.staffPayable,82);
@@ -50,7 +70,8 @@ try{
   assert.equal(t.valid,true);
   assert.equal(t.staffDiscount,8);
   assert.equal(t.staffPayable,82);
-  // Mezcla normal: cliente para llevar + cortesía de personal aquí.
+  // Ticket no identificado: se verifica cotización antigua sin cliente registrado.
+  // La interfaz operativa ofrece crear tickets separados.
   t=quote([{...customer,serviceMode:"TAKEAWAY"},free]);
   assert.equal(t.valid,true);
   assert.equal(t.customerEligibleTotal,70);
