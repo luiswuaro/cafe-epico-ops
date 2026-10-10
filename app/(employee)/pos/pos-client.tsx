@@ -607,6 +607,9 @@ export function PosClient({
               {cartLines.length===0?<Link href={"/pos/checkout?ticket="+savedTicket.id}
                 className="button">Cobrar ticket · {money.format(savedTicket.total)}</Link>
                 :<p className="muted">Guarda estos productos nuevos antes de cobrar la mesa.</p>}
+              <Link href={"/pos/orders/"+savedTicket.id+"/prebill"} className="button pos-prebill-link">
+                Ver o imprimir precuenta de mesa
+              </Link>
               <Link href={"/pos/orders/"+savedTicket.id+"/split"} className="button">
                 Dividir cuenta
               </Link>
@@ -648,6 +651,8 @@ export function PosClient({
                   className="button pos-mobile-footer-primary">Cobrar · {money.format(savedTicket.total)}</Link>
                 <Link href={"/pos/orders/"+savedTicket.id+"/split"}
                   className="button pos-mobile-footer-secondary">Dividir cuenta</Link>
+                <Link href={"/pos/orders/"+savedTicket.id+"/prebill"}
+                  className="button pos-mobile-footer-prebill">Imprimir precuenta</Link>
               </>
             :<>
               <button type="submit" form="pos-order-command-form" formNoValidate
