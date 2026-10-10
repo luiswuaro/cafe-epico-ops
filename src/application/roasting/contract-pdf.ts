@@ -84,9 +84,14 @@ export function createContractPdf(report:Report) {
     line(paper.left,current.y,paper.right,current.y);current.y-=20;
   }
   function row(left:unknown,right:unknown){
-    need(24);label(paper.left,current.y,left,9,false,muted);
-    label(349,current.y,right,10,true,ink);
-    current.y-=22;
+    const lines=wrap(right,39);
+    need(Math.max(24,lines.length*15+10));
+    label(paper.left,current.y,left,9,false,muted);
+    for(const value of lines){
+      label(340,current.y,value,10,true,ink);
+      current.y-=15;
+    }
+    current.y-=7;
   }
   function paragraph(title:string,value:unknown){
     const ls=wrap(value,101);need(36+ls.length*13);
