@@ -84,7 +84,7 @@ export function FinancialWorkbench({data}:{data:Data}){
   const chosen=data.menu.find(x=>x.id===productId);
   const canThermos=service==="THERMOS" && chosen?.category!=="ALIMENTOS";
   const actualPromo:Promo = promo==="THERMOS_10" && !canThermos ? "NONE"
-    : promo==="STAFF_FREE" ? "STAFF_FREE" : promo;
+    : promo==="STAFF_FREE" ? "STAFF_FREE" : promo==="STAFF_10" && canThermos ? "NONE" : promo;
   const modeCost=chosen?(service==="DINE_IN"?chosen.dineIn:
     service==="THERMOS"?chosen.thermos:chosen.takeaway):null;
   const baseCost=chosen?(service==="DINE_IN"?chosen.dineIn:chosen.takeaway):null;
