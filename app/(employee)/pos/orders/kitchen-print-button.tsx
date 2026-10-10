@@ -120,6 +120,10 @@ async function buildKitchenRaster(slip:KitchenSlip,selection:"latest"|"all",serv
     ?"MESA "+prepared.table:prepared.table;
   y+=2;
   draw(tableName,"900 38px Arial, Helvetica, sans-serif",44,"center");
+  if(prepared.customerName){
+    draw("CLIENTE: "+prepared.customerName,
+      "800 21px Arial, Helvetica, sans-serif",26,"center");
+  }
   const date=new Intl.DateTimeFormat("es-MX",{
     timeZone:"America/Mexico_City",hour:"2-digit",minute:"2-digit",
     hour12:false,
