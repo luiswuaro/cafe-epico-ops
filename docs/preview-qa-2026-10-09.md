@@ -133,3 +133,15 @@ La ejecución de GitHub Actions prueba estructura, tipos, lint y compilación, *
 - `audit_events`: `POS_LIVE_ORDER_ITEMS_ADDED` con `added=40`, `total=75`, `status=SENT`, `divisionReset=false`.
 - En la revisión: **0 pagos, 0 consumos de inventario** y 0 efectos de cobro anticipado. Producción conserva sus 19 órdenes; QA tiene 7 órdenes.
 - **Pendiente:** dividir el ticket de $75 con una línea de $35 en Cuenta 1 y una de $40 en Cuenta 2. Cobrar por separado y verificar 2 pagos ($35+$40) y 37.8 g de café total, sin recomputar ambos al precio actual de $40.
+
+
+## QA-06 — COBROS DIVIDIDOS DE DOS RONDAS CON PRECIOS DISTINTOS: aprobado (2026-10-10 UTC)
+
+- Orden QA `c84c375c-ec5f-4b64-8b1d-b1d9469b0a24`, folio `SH-261009180655-29EF`, mesa 1, `LIVE/PAID`, importe original y final $75.00, `inventory_effect_applied=true`.
+- Cuenta 1: `47ad60e2-9431-485b-904f-d59d9981b036`, línea original `e487f695-ed2c-45de-bf8c-7014e29ca843`, **$35.00**, `PAID`; único pago `CASH` $35.00 y único movimiento `SALE` $35.00 de caja. Café consumido −18.900 g.
+- Cuenta 2: `ca11a028-40d3-414f-917d-069829269b1a`, línea de segunda ronda `8cae8b49-8f78-44af-99f3-0155a7cda1de`, **$40.00**, `PAID`; único pago `CASH` $40.00 y único movimiento `SALE` $40.00 de caja. Café consumido −18.900 g.
+- **Conciliación:** 2 pagos por $75 en total, 2 movimientos de caja por $75, 2 movimientos de café por **−37.800 g**; inventario QA café pasa de 5886.600 g a **5848.800 g**.
+- Caja QA permanece `OPEN`: fondo $500 + movimientos netos acumulados $270 = **$770.00 efectivo esperado**.
+- `audit_events` contiene `POS_ORDER_SPLIT_SAVED` y dos `POS_LIVE_SPLIT_PAID`, además de la incorporación de la ronda. Sin pagos repetidos en esta operación.
+- Organización de producción `cafe-epico` conserva 19 órdenes, QA 7; comparación global de referencias pagos→órdenes con organización incorrecta: 0.
+- **Aún no validado:** impresión física de ambos tickets, cobro realmente simultáneo desde dispositivos distintos y casos de stock insuficiente. No se han alterado registros productivos por esta prueba.
