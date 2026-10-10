@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { PosClient } from "./pos-client";
+import { AutoKitchenPrint } from "./orders/auto-kitchen-print";
 import { getShadowOrderMirror } from "@/src/application/pos/mirror";
 import { getPosCatalog } from "@/src/application/pos/catalog";
 import { isPosLiveEnabled } from "@/src/application/pos/live";
@@ -69,6 +70,28 @@ export default async function PosPage({
 
   return (
     <main className="shell pos-shell">
+      {params.autoKitchen==="saved"&&selectedTicket&&
+       typeof params.savedRound==="string"&&
+       selectedTicket.lines.some(line=>line.expectedConsumption?.roundId===params.savedRound)&&
+       <AutoKitchenPrint
+         event="saved"
+         eventId={selectedTicket.id+":"+params.savedRound}
+         roundId={params.savedRound}
+         slip={{
+           folio:selectedTicket.folio,
+           table:selectedTicket.tableLabel||(selectedTicket.serviceMode==="TAKEAWAY"?"Para llevar":"Aquí"),
+           orderNote:selectedTicket.note,
+           lines:selectedTicket.lines.map(line=>({
+             id:line.id,name:line.name,category:line.category,
+             quantity:Number(line.quantity),note:line.note,
+             serviceMode:typeof line.expectedConsumption?.serviceMode==="string"
+               ?line.expectedConsumption.serviceMode:null,
+             roundId:typeof line.expectedConsumption?.roundId==="string"
+               ?line.expectedConsumption.roundId:null,
+           })),
+         }}
+       />}
+
       <section className="hero pos-hero">
         <div>
           <p className="eyebrow">{liveEnabled ? "POS · LIVE" : "POS V0.1 · MODO ESPEJO"}</p>
