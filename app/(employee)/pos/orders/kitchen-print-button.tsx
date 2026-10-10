@@ -193,7 +193,7 @@ export async function printKitchenSlip(
   // Evitar tiras de símbolos cuando un firmware térmico deja de interpretar
   // una imagen raster grande. Las versiones anteriores del puente mandaban
   // todo el bitmap en un único comando GS v 0.
-  const statusResponse=await fetch(config.url.replace(/\\/$/,"")+"/status",{
+  const statusResponse=await fetch(config.url.replace(/\/$/,"")+"/status",{
     headers:{"X-Cafe-Epico-Token":config.token},
     cache:"no-store",
   });
