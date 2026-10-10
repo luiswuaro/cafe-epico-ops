@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getPosCatalog, type PosServiceMode } from "@/src/application/pos/catalog";
 import {priceExtras} from "@/src/application/pos/extras";
+import {getPosExtraCatalog} from "@/src/application/pos/extra-catalog";
 import { cancelLiveOrder } from "@/src/application/pos/live-cancellation";
 import { checkoutLiveOrder, isPosLiveEnabled } from "@/src/application/pos/live";
 import { getPosReadiness } from "@/src/application/pos/readiness";
@@ -33,7 +34,7 @@ const cartSchema = z
       quantity: z.number().int().min(1).max(20),
       note: z.string().trim().max(180).nullable().optional(),
       serviceMode: z.enum(["DINE_IN","TAKEAWAY"]).optional(),
-      extras: z.array(z.object({id:z.literal("ESPRESSO_SHOT"),quantity:z.number().int().min(1).max(2)})).max(1).optional(),
+      extras: z.array(z.object({id:z.string().min(1).max(90),quantity:z.number().int().min(1).max(2)})).max(1).optional(),
     }),
   )
   .min(1)
@@ -82,14 +83,16 @@ async function buildOrderInput(
   const customerId = String(formData.get("customerId") ?? "").trim() || null;
 
   const parsedCart = cartSchema.parse(JSON.parse(rawCart));
-  const catalog = await getPosCatalog(organizationId);
+  const [catalog,extrasCatalog] = await Promise.all([
+    getPosCatalog(organizationId),getPosExtraCatalog(organizationId),
+  ]);
   const catalogById = new Map(catalog.map((item) => [item.id, item]));
 
   const lines = parsedCart.map((line) => {
     const item = catalogById.get(line.externalId);
     if (!item) throw new Error("Producto no disponible en el catálogo POS");
 
-    const extras=priceExtras(line.extras,item,catalog);
+    const extras=priceExtras(line.extras,item,extrasCatalog);
     const unitPrice=Number((item.price+extras.unitPrice).toFixed(2));
     const lineTotal = Number((unitPrice * line.quantity).toFixed(2));
     const lineMode = line.serviceMode ?? serviceMode;
