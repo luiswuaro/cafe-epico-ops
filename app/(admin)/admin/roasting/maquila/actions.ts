@@ -100,7 +100,9 @@ export async function createContractBatch(data:FormData){
   const dtr=optionalNum(data,"dtrPct"),duration=optionalNum(data,"durationS");
   const defects=parseDefects(data,sample);
   const dateText=val(data,"roastedAt");
-  const roastedAt=dateText?new Date(dateText):new Date();
+  // El input datetime-local se interpreta en la zona de la cafetería (UTC-06:00),
+  // no en la zona del servidor Vercel (UTC).
+  const roastedAt=dateText?new Date(dateText+"-06:00"):new Date();
   if(!validText(code,100)||!finite(green,.01,100000)||!finite(roasted,.01,100000)||
     roasted>green||!finite(sample,.01,10000)||!finite(fc,0,350)||
     !finite(drop,0,350)||!finite(dtr,0,100)||!finite(duration,1,100000)||
