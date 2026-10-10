@@ -1,9 +1,36 @@
 # Paquete operativo POS: beneficios y canjes — SOLO PREVIEW
 
-**Estado**: primer bloque del PR #74. El calculador no cobra ni escribe datos.
+**Estado**: checkout POS conectado y preparado para preview; la lógica LIVE solo se ejecuta con `POS_LIVE_ENABLED=true`. No fusionar a producción antes de validación con datos aislados.
 **Reglas confirmadas**: 1 punto acumulado vale $1.00 MXN cuando se canjea (10/oct/2026). Tasa no editable por cajeros. El cliente acumula 5% exclusivamente sobre efectivo, tarjeta o transferencia efectivamente cobrados; los puntos redimidos no acreditan puntos nuevos.
 **Integración**: preparado a partir del PR #73. El presupuesto compartido del PR #72
 se integrará tras resolver diferencias en `financial-workbench.tsx` y `globals.css`.
+
+## Diseño operativo reemplazado: canje dentro de COBRAR
+
+La ruta de simulador independiente fue retirada. El cliente y el canje ahora se gestionan
+en la pantalla de cobro habitual, sin reconstruir el ticket:
+- **Venta nueva (POS espejo):** al pulsar **Simular cobro** se selecciona cliente,
+  se canjean puntos, se elige efectivo/tarjeta/transferencia y se muestra la cantidad
+  monetaria restante; en espejo NO se escribe en base de datos.
+- **Venta nueva (POS LIVE):** al pulsar **Cobrar**, la misma pantalla envía
+  identificador de cliente y puntos; la transacción valida saldo, descuenta puntos
+  con bloqueo de fila, registra `REDEEM` (negativo), crea pago `POINTS` sin caja,
+  y registra el dinero cobrado por su medio real.
+- **Ticket guardado:** selección de cliente, canje y registro rápido en
+  `/pos/checkout?ticket=<id>`. El ticket original permanece ligado a la venta.
+- **Alta rápida:** integrada en el cobro. En modo espejo es solo local; en LIVE
+  usa la acción autenticada y deja registro de auditoría.
+- **Cobro con 100% puntos:** `POINTS` como liquidación completa y cero ingreso de caja;
+  el sistema sigue descontando receta e inventario de venta.
+- **Cancelación:** reversa `EARN` y `REDEEM`, con guardia de saldo no negativo.
+- **Comprobante:** muestra importe cubierto por puntos y pago monetario por separado.
+
+### Aún pendiente
+- Permitir descuentos especiales y cortesías de personal dentro del cobro en lugar
+  del cálculo de laboratorio.
+- Canjes por cuenta dividida (el flujo dividido actual continúa sin selector de canje).
+- Ejecutar pruebas E2E contra una base de datos **aislada**, con dos cajas concurrentes.
+- Confirmar tratamiento fiscal con contabilidad y conciliación con saldos Loyverse.
 
 ## Casos de negocio
 
