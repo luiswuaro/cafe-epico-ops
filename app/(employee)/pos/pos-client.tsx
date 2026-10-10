@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useMemo, useState } from "react";
+import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { addProductsToLiveCommand } from "./orders/live-actions";
 import {
@@ -79,6 +79,10 @@ export function PosClient({
   const [paymentMethod, setPaymentMethod] = useState<"CASH"|"CARD"|"TRANSFER">(cashOpen ? "CASH" : "CARD");
   const [tendered, setTendered] = useState("");
   const [checkoutOpen,setCheckoutOpen]=useState(false);
+  const [mobileCartOpen,setMobileCartOpen]=useState(false);
+  const mobileCartRef=useRef<HTMLElement>(null);
+  const mobileCartCloseRef=useRef<HTMLButtonElement>(null);
+  const mobileSummaryRef=useRef<HTMLButtonElement>(null);
   const [allowStockShortage,setAllowStockShortage]=useState(false);
   const [tableLabel,setTableLabel]=useState("");
   const [orderNote,setOrderNote]=useState("");
@@ -107,6 +111,39 @@ export function PosClient({
   const historicalRoundIds=[...new Set((savedTicket?.lines??[]).map(line=>line.roundId??"INITIAL"))];
   const newSubtotal=cartLines.reduce((sum,line)=>sum+line.item.price,0);
   const total=(savedTicket?.total??0)+newSubtotal;
+  const units=(savedTicket?.lines.reduce((sum,line)=>sum+line.quantity,0)??0)+cartLines.length;
+
+  useEffect(()=>{
+    if(!mobileCartOpen)return;
+    const breakpoint=window.matchMedia("(max-width: 760px)");
+    if(!breakpoint.matches)return;
+    const oldOverflow=document.body.style.overflow;
+    document.body.style.overflow="hidden";
+    mobileCartCloseRef.current?.focus();
+    const onResize=()=>{if(!breakpoint.matches)setMobileCartOpen(false);};
+    const onKeyDown=(event:KeyboardEvent)=>{
+      if(event.key==="Escape"){
+        event.preventDefault();
+        setMobileCartOpen(false);
+      }
+      if(event.key!=="Tab"||!mobileCartRef.current)return;
+      const controls=Array.from(mobileCartRef.current.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex="-1"])'
+      )).filter(element=>element.getClientRects().length>0);
+      const first=controls[0],last=controls[controls.length-1];
+      if(!first||!last)return;
+      if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}
+      else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}
+    };
+    window.addEventListener("keydown",onKeyDown);
+    breakpoint.addEventListener("change",onResize);
+    return ()=>{
+      document.body.style.overflow=oldOverflow;
+      window.removeEventListener("keydown",onKeyDown);
+      breakpoint.removeEventListener("change",onResize);
+      mobileSummaryRef.current?.focus();
+    };
+  },[mobileCartOpen,checkoutOpen]);
 
   const selectedCustomer =
     customers.find((customer) => customer.id === customerId) ?? null;
@@ -226,7 +263,26 @@ export function PosClient({
   }
 
   return (
-    <div className="pos-layout">
+    <div className="pos-layout pos-layout-mobile-cart">
+      <button
+        ref={mobileSummaryRef}
+        type="button"
+        className="pos-mobile-cart-summary"
+        aria-controls="pos-order-cart"
+        aria-expanded={mobileCartOpen}
+        aria-label={"Ver cuenta. "+units+" unidades. Total "+money.format(total)}
+        onClick={()=>setMobileCartOpen(true)}
+      >
+        <span className="pos-mobile-summary-count" aria-hidden="true">{units}</span>
+        <span className="pos-mobile-summary-label">
+          <strong>{savedTicket?"Mesa · ver cuenta":"Ver cuenta"}</strong>
+          <small>{units===0?"Sin productos":units+" unidad(es)"} · {savedTicket?"incluye rondas":"venta actual"}</small>
+        </span>
+        <strong className="pos-mobile-summary-total">{money.format(total)}</strong>
+        <span className="pos-mobile-summary-chevron" aria-hidden="true">⌃</span>
+      </button>
+      {mobileCartOpen&&<button type="button" className="pos-mobile-cart-backdrop"
+        tabIndex={-1} aria-label="Cerrar cuenta" onClick={()=>setMobileCartOpen(false)}/>}
       <section className="pos-catalog">
         <div className="card pos-toolbar">
           <input
@@ -291,14 +347,25 @@ export function PosClient({
         </div>
       </section>
 
-      <aside className="card pos-cart">
+      <aside id="pos-order-cart" ref={mobileCartRef}
+        className={"card pos-cart"+(mobileCartOpen?" pos-cart-open":"")}
+        aria-label="Detalle de la cuenta">
+        <div className="pos-mobile-cart-header">
+          <div>
+            <span className="eyebrow">DETALLE DE LA CUENTA</span>
+            <strong>{units} unidad(es) · {money.format(total)}</strong>
+          </div>
+          <button type="button" ref={mobileCartCloseRef}
+            className="pos-mobile-cart-close" onClick={()=>setMobileCartOpen(false)}
+            aria-label="Cerrar detalle y volver al catálogo">✕</button>
+        </div>
         <div className="section-heading">
           <div>
             <p className="eyebrow">{savedTicket?"TICKET GUARDADO":liveEnabled?"VENTA LIVE":"ORDEN ESPEJO"}</p>
             <h2>{savedTicket?.name??"Cuenta"}</h2>
             {savedTicket&&<p className="muted">{savedTicket.folio}</p>}
           </div>
-          <span className="pill">{(savedTicket?.lines.reduce((sum,line)=>sum+line.quantity,0)??0)+cartLines.length} unidad(es)</span>
+          <span className="pill">{units} unidad(es)</span>
         </div>
 
         <p className="muted" style={{marginBottom:0}}>Servicio predeterminado de las próximas bebidas. Cada producto puede cambiarse de forma independiente.</p>
@@ -555,7 +622,7 @@ export function PosClient({
             <button
               type={liveEnabled?"button":"submit"}
               className="pos-pay-button"
-              onClick={liveEnabled?()=>setCheckoutOpen(true):undefined}
+              onClick={liveEnabled?()=>{setMobileCartOpen(false);setCheckoutOpen(true);}:undefined}
               disabled={cartLines.length===0}
             >
               {liveEnabled?"Ir a cobrar":"Registrar espejo"} · {money.format(total)}
