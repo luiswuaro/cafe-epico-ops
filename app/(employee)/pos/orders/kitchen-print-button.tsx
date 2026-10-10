@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { KitchenSlip, kitchenCategoryLabel, selectedKitchenSlip } from "@/src/application/pos/kitchen-slip";
+import { KitchenSlip, kitchenCategoryLabel, kitchenRounds, selectedKitchenSlip } from "@/src/application/pos/kitchen-slip";
 
 const TICKET_PRINTER_KEY="cafe-epico-printer-bridge-v1";
 const ROUTE_KEY="cafe-epico-kitchen-route-v1";
@@ -59,9 +59,15 @@ function encodeBase64(bytes:Uint8Array) {
   return btoa(binary);
 }
 
-async function buildKitchenRaster(slip:KitchenSlip,selection:"latest"|"all",serviceFilter?:"DINE_IN"|"TAKEAWAY"){
+async function buildKitchenRaster(slip:KitchenSlip,selection:"latest"|"all",serviceFilter?:"DINE_IN"|"TAKEAWAY",roundId?:string){
   await document.fonts.ready;
-  const selected=selectedKitchenSlip(slip,selection);
+  const selected=roundId
+    ?{
+      ...selectedKitchenSlip(slip,"all"),
+      roundLabel:kitchenRounds(slip.lines).find(round=>round.id===roundId)?.label??"RONDA",
+      lines:slip.lines.filter(line=>(line.roundId||"INITIAL")===roundId),
+    }
+    :selectedKitchenSlip(slip,selection);
   const prepared=serviceFilter
     ?{...selected,lines:selected.lines.filter(line=>line.serviceMode===serviceFilter)}
     :selected;
@@ -163,6 +169,7 @@ export async function printKitchenSlip(
   slip:KitchenSlip,
   selection:"latest"|"all"="latest",
   serviceFilter?:"DINE_IN"|"TAKEAWAY",
+  roundId?:string,
 ):Promise<string>{
   const separate=window.localStorage.getItem(ROUTE_KEY)==="separate";
   const config=readConfig(separate?KITCHEN_PRINTER_KEY:TICKET_PRINTER_KEY);
@@ -172,7 +179,7 @@ export async function printKitchenSlip(
   if(!/^http:\/\/(127\.0\.0\.1|localhost):\d{2,5}\/?$/.test(config.url)){
     throw new Error("El puente debe usar localhost. Revisa configuración.");
   }
-  const raster=await buildKitchenRaster(slip,selection,serviceFilter);
+  const raster=await buildKitchenRaster(slip,selection,serviceFilter,roundId);
   const response=await fetch(config.url.replace(/\/$/,"")+"/print",{
     method:"POST",
     headers:{"Content-Type":"application/json","X-Cafe-Epico-Token":config.token},
