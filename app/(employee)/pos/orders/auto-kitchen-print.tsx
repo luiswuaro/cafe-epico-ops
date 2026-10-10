@@ -9,7 +9,7 @@ import {
   AUTO_KITCHEN_ATTEMPT_PREFIX,
 } from "./kitchen-print-settings";
 
-export type AutoKitchenEvent = "saved"|"paid";
+export type AutoKitchenEvent = "saved"|"paid"|"paid-direct";
 
 export function AutoKitchenPrint({
   slip,event,eventId,roundId,
@@ -30,18 +30,27 @@ export function AutoKitchenPrint({
     if(handled.current===id)return;
     handled.current=id;
 
-    const mode=event==="saved"?"DINE_IN" as const:"TAKEAWAY" as const;
-    const preference=event==="saved"
-      ?AUTO_KITCHEN_DINE_IN_KEY:AUTO_KITCHEN_TAKEAWAY_KEY;
-    if(window.localStorage.getItem(preference)!=="1")return;
+    const autoDineIn=window.localStorage.getItem(AUTO_KITCHEN_DINE_IN_KEY)==="1";
+    const autoTakeaway=window.localStorage.getItem(AUTO_KITCHEN_TAKEAWAY_KEY)==="1";
 
-    // Filtrar únicamente la última ronda para mesas; después seleccionar el
-    // tipo de servicio. Impide imprimir rondas previas si la última es otra.
+    // Mesa guardada: sólo AQUÍ y sólo la ronda recién guardada.
+    // Mesa ya guardada cobrada: sólo PARA LLEVAR (AQUÍ ya se envió).
+    // Cobro directo: ambos servicios son nuevos; respetar ambos ON/OFF y
+    // enviarlos en una sola comanda cuando las dos opciones estén activas.
+    const selectedModes:Array<"DINE_IN"|"TAKEAWAY">=event==="saved"
+      ?(autoDineIn?["DINE_IN"]:[])
+      :event==="paid"?(autoTakeaway?["TAKEAWAY"]:[])
+      :[
+        ...(autoDineIn?["DINE_IN" as const]:[]),
+        ...(autoTakeaway?["TAKEAWAY" as const]:[]),
+      ];
+    if(!selectedModes.length)return;
     const eligible=slip.lines.some(line=>
-      line.serviceMode===mode&&
+      selectedModes.some(mode=>line.serviceMode===mode)&&
       (event!=="saved"||!roundId||(line.roundId||"INITIAL")===roundId)
     );
     if(!eligible)return;
+    const serviceFilter=selectedModes.length===2?"BOTH":selectedModes[0];
 
     // Reservar antes del I/O: un refresh, doble montaje de React o pestañas
     // concurrentes no deben enviar dos comandas a la misma impresora.
@@ -50,7 +59,7 @@ export function AutoKitchenPrint({
     window.localStorage.setItem(attempt,new Date().toISOString());
 
     let active=true;
-    void printKitchenSlip(slip,event==="saved"?"latest":"all",mode,roundId)
+    void printKitchenSlip(slip,event==="saved"?"latest":"all",serviceFilter,roundId)
       .then(printer=>{
         if(active){setError(false);setMessage("Comanda enviada automáticamente a "+printer);}
       })
