@@ -12,7 +12,7 @@ export default async function AdvancedRoastPage(){
     id:b.id, name:b.batchCode, lot:b.lot?.name??"Sin lote",
     greenG:Number(b.greenWeightG),roastedG:Number(b.roastedWeightG),
     greenPriceKg:b.lot?.greenCostPerKg==null?null:Number(b.lot.greenCostPerKg),
-    charge:b.chargeTimeS??null,yellow:b.yellowingTimeS??null,
+    charge:0,yellow:b.yellowingTimeS??null,
     fc:b.firstCrackTimeS??null,drop:b.dropTimeS??null,
     points:Array.isArray(b.curveData)?b.curveData as RoastCurvePoint[]:[],
   }));
