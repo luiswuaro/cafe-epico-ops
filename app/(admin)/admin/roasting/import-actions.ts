@@ -4,7 +4,8 @@ import { createHash } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { parseRoastCurveInput } from "@/src/domain/roasting/curve";
+import { parseRoastCurveInput, type RoastCurveImport } from "@/src/domain/roasting/curve";
+import { MAX_HIBEAN_JSON_BYTES } from "@/src/domain/roasting/upload-constraints";
 import { requirePermission } from "@/src/infrastructure/auth/permissions";
 import { getDb } from "@/src/infrastructure/db/client";
 import {
@@ -86,12 +87,26 @@ export async function startHiBeanRoastImport(formData: FormData) {
   if (!(file instanceof File) || file.size <= 0) {
     redirect("/admin/roasting?error=hibean-file");
   }
-  if (file.size > 8_000_000) {
+  if (file.size > MAX_HIBEAN_JSON_BYTES) {
     redirect("/admin/roasting?error=hibean-file-large");
   }
 
-  const raw = await file.text();
-  const parsed = parseRoastCurveInput(raw);
+  let raw: string;
+  try {
+    raw = await file.text();
+  } catch {
+    redirect("/admin/roasting?error=hibean-read");
+  }
+  let parsed: RoastCurveImport;
+  try {
+    parsed = parseRoastCurveInput(raw);
+  } catch (error) {
+    console.error("HIBEAN_IMPORT_PARSE_ERROR", {
+      fileSize: file.size,
+      error: error instanceof Error ? error.message.slice(0, 200) : "unexpected",
+    });
+    redirect("/admin/roasting?error=hibean-parse");
+  }
 
   if (
     parsed.format !== "JSON_HIBEAN" ||
