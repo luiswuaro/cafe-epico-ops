@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useSyncExternalStore } from "react";
+import { AUTO_KITCHEN_DINE_IN_KEY, AUTO_KITCHEN_TAKEAWAY_KEY, KITCHEN_SETTINGS_EVENT } from "../orders/kitchen-print-settings";
 
 const STORAGE_KEY = "cafe-epico-printer-bridge-v1";
 const STORAGE_EVENT = "cafe-epico-printer-bridge-changed";
@@ -350,5 +351,44 @@ export function KitchenPrinterSetup() {
       </button>
     </div>
     {status&&<p role="status" className="printer-bridge-status">{status}</p>}
+  </div>;
+}
+
+function listenAutoKitchen(callback:()=>void){
+  window.addEventListener("storage",callback);
+  window.addEventListener(KITCHEN_SETTINGS_EVENT,callback);
+  return ()=>{
+    window.removeEventListener("storage",callback);
+    window.removeEventListener(KITCHEN_SETTINGS_EVENT,callback);
+  };
+}
+function getAutoDineIn(){return window.localStorage.getItem(AUTO_KITCHEN_DINE_IN_KEY)==="1";}
+function getAutoTakeaway(){return window.localStorage.getItem(AUTO_KITCHEN_TAKEAWAY_KEY)==="1";}
+
+export function AutoKitchenPrintSettings(){
+  const dineIn=useSyncExternalStore(listenAutoKitchen,getAutoDineIn,()=>false);
+  const takeaway=useSyncExternalStore(listenAutoKitchen,getAutoTakeaway,()=>false);
+  function update(key:string,enabled:boolean){
+    window.localStorage.setItem(key,enabled?"1":"0");
+    window.dispatchEvent(new Event(KITCHEN_SETTINGS_EVENT));
+  }
+  return <div className="stack">
+    <h2>Impresión automática de comandas</h2>
+    <p className="muted">Ambas opciones están apagadas inicialmente y se guardan por computadora/navegador. Usan el destino seleccionado arriba (tickets o impresora de barra).</p>
+    <label className="kitchen-printer-route">
+      <input type="checkbox" checked={takeaway}
+        onChange={event=>update(AUTO_KITCHEN_TAKEAWAY_KEY,event.target.checked)}/>
+      <span><strong>Para llevar · al confirmar cobro</strong>
+        <small className="muted">Imprime los productos para llevar una sola vez, sólo después de registrar el pago.</small>
+      </span>
+    </label>
+    <label className="kitchen-printer-route">
+      <input type="checkbox" checked={dineIn}
+        onChange={event=>update(AUTO_KITCHEN_DINE_IN_KEY,event.target.checked)}/>
+      <span><strong>Para aquí · al guardar o enviar comanda</strong>
+        <small className="muted">Imprime sólo lo añadido en la ronda nueva; no repite la comanda al cobrar.</small>
+      </span>
+    </label>
+    <p className="muted">La computadora con el puente local debe estar encendida y ser la estación donde guardes o cobres. Si el puente no responde, la venta o la comanda quedan registradas y puedes imprimir manualmente desde Comandas.</p>
   </div>;
 }
