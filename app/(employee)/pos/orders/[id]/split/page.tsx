@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { SplitAccountBuilder } from "./split-client";
+import {extraLabels} from "@/src/application/pos/extras";
 import { SplitPaymentFields } from "./split-payment-fields";
 import { payOrderSplit, resetUnpaidOrderSplit } from "./actions";
 import { getCashState } from "@/src/application/pos/cash";
@@ -105,6 +106,8 @@ export default async function SplitOrderPage({
                     <div key={assignment.id}>
                       {Number(assignment.quantity)}×{" "}
                       {line?.nameSnapshot ?? "Producto"}
+                      {extraLabels(line?.expectedConsumption,{showPrices:true}).map((x,i)=>
+                        <div className="command-line-note" key={i}>↳ {x}</div>)}
                       {line?.note ? (
                         <div className="command-line-note">↳ {line.note}</div>
                       ) : null}
