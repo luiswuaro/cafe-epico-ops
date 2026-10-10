@@ -1,6 +1,7 @@
 import Link from "next/link";
+import { HiBeanImportForm } from "./hibean-import-form";
 import { RoastingSessionPlanner } from "./session-planner";
-import { startHiBeanRoastImport } from "./import-actions";
+
 import {
   assignRoastBatchToBar,
   recordRoastBatch,
@@ -391,22 +392,7 @@ export default async function RoastingPage({
           por HiBean. Antes de guardar, te obliga a confirmar o corregir esa
           existencia.
         </p>
-        <form
-          action={startHiBeanRoastImport}
-          encType="multipart/form-data"
-          className="stack"
-        >
-          <label>
-            JSON de HiBean
-            <input
-              name="roastFile"
-              type="file"
-              accept=".json,application/json"
-              required
-            />
-          </label>
-          <button type="submit">Leer JSON y revisar antes de registrar</button>
-        </form>
+        <HiBeanImportForm />
       </section>
 
       <section className="card" style={{ marginTop: "1rem" }}>
