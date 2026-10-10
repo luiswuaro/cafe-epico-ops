@@ -132,8 +132,11 @@ async function buildKitchenRaster(slip:KitchenSlip,selection:"latest"|"all",serv
       draw(category,"900 19px Arial, Helvetica, sans-serif",24);
     }
     draw(item.quantity+"× "+item.name,"900 25px Arial, Helvetica, sans-serif",29);
-    if(item.serviceMode==="TAKEAWAY")
-      draw("PARA LLEVAR","800 19px Arial, Helvetica, sans-serif",23,"left",12);
+    // El destino de cada bebida siempre va explícito, incluso en una
+    // comanda mixta con productos iguales y distintas modalidades.
+    const destination=item.serviceMode==="TAKEAWAY"?"PARA LLEVAR"
+      :item.serviceMode==="DINE_IN"?"AQUÍ":"SERVICIO SIN DEFINIR";
+    draw(destination,"900 19px Arial, Helvetica, sans-serif",23,"left",12);
     if(item.note)
       draw("NOTA: "+item.note,"900 20px Arial, Helvetica, sans-serif",24,"left",12);
     y+=4;
