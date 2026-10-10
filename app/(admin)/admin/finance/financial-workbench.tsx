@@ -237,7 +237,7 @@ export function FinancialWorkbench({data}:{data:Data}){
       <p className="status-warn">Insumos sin precio: {unpriced.length?unpriced.join(", "):"ninguno identificado"}. Faltantes no implican costo cero. Los gastos capturados aquí son presupuestos o registros manuales, no comprobantes bancarios conciliados.</p>
     </section>
 
-    <section className="card stack">
+    <section className="card stack ops-finance-workbench">
       <div className="section-heading">
         <div>
           <p className="eyebrow">CONTROL DE GASTOS · EDITABLE</p>
@@ -246,7 +246,7 @@ export function FinancialWorkbench({data}:{data:Data}){
         <button type="button" onClick={addExpense}>+ Añadir gasto</button>
       </div>
       <p className="muted">Puedes modificar los conceptos iniciales, añadir cuantos gastos necesites y eliminarlos. Mensual: se prorratea hasta hoy; puntual: se descuenta completo sólo en {data.month}. Los datos quedan guardados únicamente en este navegador en la versión de pruebas.</p>
-      <div className="table-scroll"><table>
+      <div className="table-scroll ops-finance-expenses"><table>
         <thead><tr><th>Concepto</th><th>Tipo</th><th>Periodicidad</th><th>Importe MXN</th><th>Registro</th><th>Acción</th></tr></thead>
         <tbody>
           {currentExpenses.map(e=><tr key={e.id}>
