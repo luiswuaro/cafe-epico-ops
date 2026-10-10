@@ -1,5 +1,6 @@
 import type {PosCatalogCategory,PosRecipeComponent} from "./catalog";
 import type {ExtraOption} from "./extra-catalog";
+import {isOwnContainerSnapshot,OWN_CONTAINER_DISCOUNT_MXN} from "@/src/domain/pos/own-container";
 
 export type ExtraRequest={id:string;quantity:number};
 export type ExtraSnapshot={
@@ -51,8 +52,13 @@ export function readExtraSnapshots(expected:unknown):ExtraSnapshot[]{
   });
 }
 export function extraLabels(expected:unknown,{showPrices=false}:{showPrices?:boolean}={}):string[]{
-  return readExtraSnapshots(expected).map(e=>
+  const labels=readExtraSnapshots(expected).map(e=>
     "+ "+e.quantity+"× "+e.label+(showPrices?" ("+money(e.quantity*e.unitPrice)+")":""));
+  if(isOwnContainerSnapshot(expected))
+    labels.unshift(showPrices
+      ?"Termo propio · -"+money(OWN_CONTAINER_DISCOUNT_MXN)+"/bebida"
+      :"TERMO PROPIO · NO ENTREGAR DESECHABLES");
+  return labels;
 }
 export function preparationNote(note:string|null|undefined,expected:unknown):string|null{
   const all=[...extraLabels(expected),note?.trim()||""].filter(Boolean);
