@@ -219,11 +219,6 @@ export function PosClient({
   const pointsEarned=selectedCustomer?(mixedSettlement?.earnedPoints??0):0;
   const pointCheckout=!staffTicket.valid || !redemption.valid ||
     (redemption.points>0&&!selectedCustomer);
-  const loyaltyControl=<CheckoutLoyalty customers={createdCustomer
-    ?[...customers.filter(c=>c.id!==createdCustomer.id),createdCustomer]:customers}
-    selectedId={customerId} onSelect={checkoutCustomerChange}
-    redeemPoints={redeemPoints} onRedeemChange={setRedeemPoints}
-    total={staffTicket.customerEligibleTotal} liveEnabled={liveEnabled}/>;
   const assignBenefits=<section className="card stack" style={{padding:14,gap:12}}>
     <strong>Beneficios de personal · por bebida</strong>
     <small className="muted">Cada producto puede ser del cliente o de un trabajador diferente.</small>
