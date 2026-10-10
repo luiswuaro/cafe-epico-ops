@@ -892,14 +892,147 @@ th, td { vertical-align: top; }
   flex: 0 0 auto;
   white-space: nowrap;
 }
+/* Customer loyalty card inherits the active theme instead of hard-coded
+   cream. This is inside the cart sheet, including in Chrome Android. */
 .pos-customer-box {
-  padding: .65rem;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: #faf7f1;
+  display:grid;
+  gap:.85rem;
+  min-width:0;
+  padding:1rem;
+  border:1px solid var(--epic-border, var(--line));
+  border-radius:16px;
+  background:var(--epic-soft, #f2eee6);
+  color:var(--epic-fg, var(--ink));
 }
-.pos-customer-box strong {
-  display: block;
+.pos-customer-heading{
+  display:flex;
+  align-items:center;
+  gap:.7rem;
+  min-width:0;
+}
+.pos-customer-icon{
+  display:grid;
+  place-items:center;
+  flex:0 0 38px;
+  width:38px;
+  height:38px;
+  border-radius:12px;
+  background:var(--epic-card, #fffdfa);
+  color:var(--epic-fg, var(--ink));
+  font-size:1.45rem;
+  line-height:1;
+}
+.pos-customer-heading h3{
+  margin:0;
+  color:var(--epic-fg, var(--ink));
+  font-size:1rem;
+  font-weight:850;
+  line-height:1.2;
+  letter-spacing:-.025em;
+}
+.pos-customer-heading p{
+  margin:.2rem 0 0;
+  color:var(--epic-secondary, var(--muted));
+  font-size:.77rem;
+  line-height:1.4;
+}
+.pos-customer-selector{
+  display:block;
+  min-width:0;
+  color:var(--epic-fg, var(--ink));
+  font-size:.81rem;
+  font-weight:750;
+}
+.pos-customer-selector select{
+  display:block;
+  width:100%;
+  min-width:0;
+  min-height:48px;
+  margin-top:.4rem;
+  padding:.7rem 2.2rem .7rem .8rem;
+  border:1px solid var(--epic-border, var(--line));
+  border-radius:12px;
+  background:var(--epic-card, #fffdfa);
+  color:var(--epic-fg, var(--ink));
+  font-weight:700;
+  font-size:1rem;
+  color-scheme:inherit;
+}
+.pos-customer-help{
+  margin:0;
+  color:var(--epic-secondary, var(--muted));
+  font-size:.81rem;
+  line-height:1.45;
+}
+.pos-customer-points{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:.55rem;
+}
+.pos-customer-points>div{
+  display:grid;
+  gap:.25rem;
+  padding:.7rem;
+  border:1px solid var(--epic-border, var(--line));
+  border-radius:12px;
+  background:var(--epic-card, #fffdfa);
+}
+.pos-customer-points span{
+  color:var(--epic-secondary, var(--muted));
+  font-size:.74rem;
+  line-height:1.35;
+}
+.pos-customer-points strong{
+  color:var(--epic-fg, var(--ink));
+  font-size:1.12rem;
+  font-weight:900;
+  font-variant-numeric:tabular-nums;
+}
+.pos-customer-registration{
+  min-width:0;
+  padding-top:.35rem;
+  border-top:1px solid var(--epic-border, var(--line));
+}
+.pos-customer-registration>summary{
+  display:flex;
+  align-items:center;
+  gap:.4rem;
+  min-height:44px;
+  list-style:none;
+  color:var(--epic-fg, var(--ink));
+  cursor:pointer;
+  font-size:.83rem;
+  font-weight:800;
+}
+.pos-customer-registration>summary::-webkit-details-marker{display:none}
+.pos-customer-registration>summary span{
+  display:inline-grid;place-items:center;
+  width:23px;height:23px;
+  border-radius:7px;
+  background:var(--epic-card, #fffdfa);
+  border:1px solid var(--epic-border, var(--line));
+  font-size:1.05rem;
+}
+.pos-customer-registration[open]>summary{margin-bottom:.8rem}
+.pos-customer-registration form{gap:.65rem}
+.pos-customer-registration form label{
+  color:var(--epic-fg, var(--ink));
+  font-size:.83rem;
+  font-weight:720;
+}
+.pos-customer-registration form input{
+  min-height:45px;
+  background:var(--epic-card, #fffdfa);
+  color:var(--epic-fg, var(--ink));
+  border-color:var(--epic-border, var(--line));
+}
+.pos-customer-registration form button{min-height:46px}
+@media(max-width:760px){
+  .pos-customer-box{padding:.82rem;gap:.75rem;border-radius:15px}
+  .pos-customer-heading p{font-size:.75rem}
+}
+@media(max-width:360px){
+  .pos-customer-points{grid-template-columns:1fr}
 }
 .pos-command-actions {
   display: grid;
