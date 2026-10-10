@@ -386,16 +386,21 @@ export default async function RoastingPage({
       </section>
 
       <section className="card" style={{marginTop:"1rem"}} id="plan-sesion">
-        <p className="eyebrow">PLAN OPERATIVO · 5 KG · SKYWALKER V1</p>
-        <h2>Planificar sesión de tueste</h2>
-        <p className="muted">Programa las cargas antes de encender el tostador, pesa la salida de cada batch y conserva el JSON original en HiBean. Los cálculos son locales y no alteran el inventario hasta confirmar una importación.</p>
-        <RoastingSessionPlanner lots={data.lots.filter(l=>l.isActive).map(l=>({
-          id:l.id,name:l.name,greenStockG:l.greenStockG,
-          greenStockSource:l.greenStockSource,targetUse:l.targetUse,
-          hibeanGreenStockG:l.hibeanGreenStockG,
-          internalGreenStockG:l.internalGreenStockG,
-        }))}/>
-        <p><a href="#importar-hibean">Después de cada batch → Importar JSON y confirmar</a></p>
+        <RoastingSessionPlanner
+          lots={data.lots.filter(l=>l.isActive).map(l=>({
+            id:l.id,name:l.name,greenStockG:l.greenStockG,
+            greenStockSource:l.greenStockSource,targetUse:l.targetUse,
+            hibeanGreenStockG:l.hibeanGreenStockG,
+            internalGreenStockG:l.internalGreenStockG,
+          }))}
+          batches={data.batches.map(batch=>({
+            id:batch.id,coffeeLotId:batch.coffeeLotId,
+            batchCode:batch.batchCode,roastedAt:batch.roastedAt.toISOString(),
+            greenWeightG:Number(batch.greenWeightG),
+            roastedWeightG:Number(batch.roastedWeightG),
+            inventoryPosted:batch.inventoryPosted,
+          }))}
+        />
       </section>
 
       <section className="card" style={{ marginTop: "1rem" }} id="importar-hibean">
