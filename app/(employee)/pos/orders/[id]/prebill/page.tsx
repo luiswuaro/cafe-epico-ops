@@ -55,9 +55,11 @@ export default async function PrebillPage({params,searchParams}:{
       note:line.note,serviceMode:line.expectedConsumption?.serviceMode}));
   const total=split?Number(split.total):Number(state.order.total);
   const db=getDb();
-  const [staff]=await db.select({name:employees.name}).from(employees)
-    .where(and(eq(employees.organizationId,employee.organizationId),
-      eq(employees.id,state.order.employeeId))).limit(1);
+  const [staff]=state.order.employeeId
+    ?await db.select({name:employees.name}).from(employees)
+      .where(and(eq(employees.organizationId,employee.organizationId),
+        eq(employees.id,state.order.employeeId))).limit(1)
+    :[undefined];
   const payments=split?[]:await db.select({amount:posPayments.amount}).from(posPayments)
     .where(and(eq(posPayments.organizationId,employee.organizationId),
       eq(posPayments.orderId,id)));
