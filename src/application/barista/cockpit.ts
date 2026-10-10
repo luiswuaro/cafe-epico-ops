@@ -331,6 +331,7 @@ export async function getBaristaCockpit(employee: {
   for (const event of barEventsToday) {
     if (
       event.eventType === "STOCK_COUNT" &&
+      event.note?.startsWith("Conteo físico OPS") &&
       event.variantExternalId &&
       !latestCountByVariant.has(event.variantExternalId)
     ) {
@@ -407,46 +408,28 @@ export async function getBaristaCockpit(employee: {
       displayFactor: row.displayFactor ?? 1,
     }));
 
-  const countOptions = inventory.smartRows
-    .map((row) => {
-      const factor = row.displayFactor ?? 1;
-      const latestCount = latestCountByVariant.get(row.variantExternalId);
-      return {
-        variantExternalId: row.variantExternalId,
-        itemName: row.itemName,
-        unitLabel: displayUnit(row),
-        soldByWeight: row.soldByWeight,
-        sourceQuantity: row.inStock * factor,
-        countedToday: Boolean(latestCount),
-        latestCountQuantity:
-          latestCount?.displayQuantity == null
-            ? null
-            : Number(latestCount.displayQuantity),
-        pendingAdmin:
-          latestCount != null && latestCount.resolvedAt == null,
-        status: row.status,
-      };
-    })
-    .sort((a, b) => {
-      const aRank =
-        a.sourceQuantity < 0
-          ? 0
-          : a.status === "CRITICAL"
-            ? 1
-            : a.status === "WATCH"
-              ? 2
-              : 3;
-      const bRank =
-        b.sourceQuantity < 0
-          ? 0
-          : b.status === "CRITICAL"
-            ? 1
-            : b.status === "WATCH"
-              ? 2
-              : 3;
-      return aRank - bRank || a.itemName.localeCompare(b.itemName, "es");
-    })
-    .slice(0, 80);
+  // Contar sólo los insumos confirmados en OPS. No sugerir la leche de
+  // almendras, que aún no está dada de alta en este inventario.
+  const countOptions = [...opsByVariant.values()].map((stock) => {
+    const latestCount = latestCountByVariant.get(stock.variantExternalId);
+    return {
+      variantExternalId: stock.variantExternalId,
+      itemName: stock.name,
+      unitLabel: stock.unit,
+      soldByWeight: stock.unit !== "pz",
+      sourceQuantity: stock.quantity,
+      countedToday: Boolean(latestCount),
+      latestCountQuantity: latestCount?.displayQuantity == null
+        ? null : Number(latestCount.displayQuantity),
+      pendingAdmin: latestCount != null && latestCount.resolvedAt == null,
+      status: stock.quantity <= 0 ? "CRITICAL"
+        : stock.minimumStock !== null && stock.quantity < stock.minimumStock
+          ? "WATCH" : "OK",
+    };
+  }).sort((a,b) => {
+    const rank = (status:string) => status === "CRITICAL" ? 0 : status === "WATCH" ? 1 : 2;
+    return rank(a.status)-rank(b.status) || a.itemName.localeCompare(b.itemName,"es");
+  });
 
   const lossEvents = barEventsToday.filter(
     (event) => event.eventType === "WASTE" || event.eventType === "REMAKE",
@@ -560,23 +543,16 @@ export async function getBaristaCockpit(employee: {
 
   const stockCountsToday = [...latestCountByVariant.values()]
     .map((event) => {
-      const row = event.variantExternalId
-        ? smartByVariant.get(event.variantExternalId)
-        : null;
-      const factor = row?.displayFactor ?? 1;
-      const currentSource =
-        row == null ? null : row.inStock * factor;
-      const physical =
-        event.displayQuantity == null
-          ? null
-          : Number(event.displayQuantity);
+      const stock = event.variantExternalId
+        ? opsByVariant.get(event.variantExternalId) : null;
+      const currentSource = stock?.quantity ?? null;
+      const physical = event.displayQuantity == null
+        ? null : Number(event.displayQuantity);
       return {
         id: event.id,
         variantExternalId: event.variantExternalId,
-        itemName: event.itemName ?? "Insumo",
-        displayUnit:
-          event.displayUnit ??
-          (row ? displayUnit(row) : event.unitLabel ?? "u."),
+        itemName: stock?.name ?? event.itemName ?? "Insumo",
+        displayUnit: stock?.unit ?? event.displayUnit ?? event.unitLabel ?? "u.",
         physicalQuantity: physical,
         sourceQuantity: currentSource,
         difference:
@@ -590,8 +566,8 @@ export async function getBaristaCockpit(employee: {
     .sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime())
     .slice(0, 8);
 
-  const negativeRows = inventory.smartRows.filter(
-    (row) => row.inStock < 0,
+  const negativeRows = [...opsByVariant.values()].filter(
+    (row) => row.quantity < 0,
   );
   const inventoryCorrectionPending = negativeRows.filter(
     (row) => !latestCountByVariant.has(row.variantExternalId),
@@ -645,7 +621,19 @@ export async function getBaristaCockpit(employee: {
       .filter((row) => row.soldByWeight)
       .sort((a, b) => b.expected - a.expected)
       .slice(0, 8),
-    unavailableProducts: inventory.unavailableProducts,
+    unavailableProducts: readiness.products.flatMap((product) => {
+      const blockers = [...new Set(product.recipes.flatMap(recipe =>
+        recipe.errors
+          .filter(error => /^(Sin existencias:|Sin saldo inicial:|Sin equivalencia:|Equivalencia duplicada:)/.test(error))
+          .map(error => error.replace(/^[^:]+:\s*/, ""))
+      ))];
+      return blockers.length ? [{
+        variantExternalId: product.id,
+        itemName: product.name,
+        blockers,
+        recentQty: 0,
+      }] : [];
+    }),
     activeRoast: activeRoast
       ? {
           ...activeRoast,
