@@ -7,9 +7,12 @@ import { KitchenSlip, kitchenCategoryLabel, selectedKitchenSlip } from "@/src/ap
 const TICKET_PRINTER_KEY="cafe-epico-printer-bridge-v1";
 const ROUTE_KEY="cafe-epico-kitchen-route-v1";
 const KITCHEN_PRINTER_KEY="cafe-epico-kitchen-printer-bridge-v1";
+const PAPER_WIDTH=384;
+const SIDE_MARGIN=16;
+const CONTENT_WIDTH=PAPER_WIDTH-SIDE_MARGIN*2;
+const MAX_PRINT_HEIGHT=4900;
 
 type PrinterConfig={url:string;token:string};
-type PrintLine={text:string;bold?:boolean;align?:"left"|"center"|"right";size?:"normal"|"double"};
 
 function readConfig(key:string):PrinterConfig|null {
   try {
@@ -20,54 +23,137 @@ function readConfig(key:string):PrinterConfig|null {
   }catch{return null;}
 }
 
-function wrap(text:string,width=30){
+// Dibujar texto en Canvas evita por completo las incompatibilidades de
+// páginas de código ESC/POS: á, é, í, ó, ú, ñ, ¿, ¡ y notas de barra.
+function wrapByPixels(context:CanvasRenderingContext2D,text:string,maxWidth:number){
   const words=text.trim().replace(/\s+/g," ").split(" ");
-  const rows:string[]=[];let current="";
+  const result:string[]=[];
+  let current="";
   for(const word of words){
-    if(word.length>width){
-      if(current)rows.push(current);
-      for(let i=0;i<word.length;i+=width)rows.push(word.slice(i,i+width));
-      current="";continue;
-    }
     const candidate=current?current+" "+word:word;
-    if(candidate.length>width){if(current)rows.push(current);current=word;}
-    else current=candidate;
+    if(context.measureText(candidate).width<=maxWidth){
+      current=candidate;
+      continue;
+    }
+    if(current){result.push(current);current="";}
+    if(context.measureText(word).width<=maxWidth){current=word;continue;}
+    let part="";
+    for(const char of word){
+      const next=part+char;
+      if(part&&context.measureText(next).width>maxWidth){
+        result.push(part);
+        part=char;
+      }else part=next;
+    }
+    current=part;
   }
-  if(current)rows.push(current);
-  return rows;
+  if(current)result.push(current);
+  return result;
 }
 
-function buildLines(slip:KitchenSlip,selection:"latest"|"all"):PrintLine[]{
+function encodeBase64(bytes:Uint8Array) {
+  let binary="";
+  for(let index=0;index<bytes.length;index+=0x8000){
+    binary+=String.fromCharCode(...bytes.subarray(index,index+0x8000));
+  }
+  return btoa(binary);
+}
+
+async function buildKitchenRaster(slip:KitchenSlip,selection:"latest"|"all"){
+  await document.fonts.ready;
   const prepared=selectedKitchenSlip(slip,selection);
+  if(!prepared.lines.length)throw new Error("La comanda no tiene productos para imprimir");
+
+  const canvas=document.createElement("canvas");
+  canvas.width=PAPER_WIDTH;
+  canvas.height=MAX_PRINT_HEIGHT;
+  const context=canvas.getContext("2d",{willReadFrequently:true});
+  if(!context)throw new Error("No se pudo generar la comanda gráfica");
+  context.fillStyle="#fff";
+  context.fillRect(0,0,PAPER_WIDTH,MAX_PRINT_HEIGHT);
+  context.fillStyle="#000";
+  context.textBaseline="top";
+
+  let y=8;
+  const draw=(text:string,font:string,lineHeight:number,align:"left"|"center"="left",indent=0)=>{
+    context.font=font;
+    context.textAlign=align;
+    context.fillStyle="#000";
+    const x=align==="center"?PAPER_WIDTH/2:SIDE_MARGIN+indent;
+    const maxWidth=align==="center"?CONTENT_WIDTH:CONTENT_WIDTH-indent;
+    const rows=wrapByPixels(context,text,maxWidth);
+    for(const row of rows){
+      if(y+lineHeight+36>MAX_PRINT_HEIGHT)throw new Error("Comanda muy larga; imprime una ronda por separado");
+      context.fillText(row,x,y);
+      y+=lineHeight;
+    }
+  };
+  const rule=()=>{
+    y+=4;
+    context.save();
+    context.strokeStyle="#000";
+    context.lineWidth=2;
+    context.setLineDash([5,4]);
+    context.beginPath();
+    context.moveTo(SIDE_MARGIN,y+1);
+    context.lineTo(PAPER_WIDTH-SIDE_MARGIN,y+1);
+    context.stroke();
+    context.restore();
+    y+=10;
+  };
+
+  draw("COMANDA DE BARRA","800 21px Arial, Helvetica, sans-serif",26,"center");
+  const tableName=/^\d+$/.test(prepared.table.trim())
+    ?"MESA "+prepared.table:prepared.table;
+  y+=2;
+  draw(tableName,"900 38px Arial, Helvetica, sans-serif",44,"center");
   const date=new Intl.DateTimeFormat("es-MX",{
     timeZone:"America/Mexico_City",hour:"2-digit",minute:"2-digit",
+    hour12:false,
   }).format(new Date());
-  const lines:PrintLine[]=[
-    {text:"COMANDA DE BARRA",bold:true,align:"center"},
-    ...wrap(prepared.table,16).map((text):PrintLine=>({text,bold:true,size:"double",align:"center"})),
-    {text:prepared.roundLabel+" · "+date,bold:true,align:"center"},
-    {text:"------------------------------"},
-  ];
+  draw(prepared.roundLabel+" · "+date,"800 19px Arial, Helvetica, sans-serif",24,"center");
+  rule();
+
   let category="";
   for(const item of prepared.lines){
     const next=kitchenCategoryLabel(item.category);
     if(next!==category){
       category=next;
-      lines.push({text:category,bold:true});
+      if(category!=="")y+=2;
+      draw(category,"900 19px Arial, Helvetica, sans-serif",24);
     }
-    for(const text of wrap(item.quantity+"x "+item.name,30))
-      lines.push({text,bold:true});
-    if(item.serviceMode==="TAKEAWAY")lines.push({text:"  PARA LLEVAR"});
-    if(item.note)for(const text of wrap("NOTA: "+item.note,30))
-      lines.push({text,bold:true});
+    draw(item.quantity+"× "+item.name,"900 25px Arial, Helvetica, sans-serif",29);
+    if(item.serviceMode==="TAKEAWAY")
+      draw("PARA LLEVAR","800 19px Arial, Helvetica, sans-serif",23,"left",12);
+    if(item.note)
+      draw("NOTA: "+item.note,"900 20px Arial, Helvetica, sans-serif",24,"left",12);
+    y+=4;
   }
+
   if(prepared.orderNote){
-    lines.push({text:"------------------------------"});
-    for(const text of wrap("MESA: "+prepared.orderNote,30))
-      lines.push({text,bold:true});
+    rule();
+    draw("NOTA MESA: "+prepared.orderNote,
+      "900 20px Arial, Helvetica, sans-serif",24);
   }
-  lines.push({text:slip.folio,align:"center"});
-  return lines;
+  rule();
+  // Referencia corta para distinguir reimpresiones sin gastar una línea
+  // completa de papel con el UUID/folio del ticket.
+  const suffix=slip.folio.slice(-6);
+  draw("Ref. "+suffix,"700 16px Arial, Helvetica, sans-serif",20,"center");
+  y+=26; // Zona de seguridad para evitar que el último texto quede en el corte.
+  if(y>MAX_PRINT_HEIGHT)throw new Error("Comanda muy larga");
+  const height=Math.ceil(y);
+  const pixels=context.getImageData(0,0,PAPER_WIDTH,height).data;
+  const bytesPerRow=PAPER_WIDTH/8;
+  const packed=new Uint8Array(bytesPerRow*height);
+  for(let row=0;row<height;row++){
+    for(let col=0;col<PAPER_WIDTH;col++){
+      const offset=(row*PAPER_WIDTH+col)*4;
+      const luminance=0.2126*pixels[offset]+0.7152*pixels[offset+1]+0.0722*pixels[offset+2];
+      if(luminance<190)packed[row*bytesPerRow+Math.floor(col/8)]|=0x80>>(col%8);
+    }
+  }
+  return {dataBase64:encodeBase64(packed),width:PAPER_WIDTH,height,align:"center" as const};
 }
 
 export function KitchenPrintButton({
@@ -96,10 +182,11 @@ export function KitchenPrintButton({
     }
     setStatus("printing");setMessage("");
     try{
+      const raster=await buildKitchenRaster(slip,selection);
       const response=await fetch(config.url.replace(/\/$/,"")+"/print",{
         method:"POST",
         headers:{"Content-Type":"application/json","X-Cafe-Epico-Token":config.token},
-        body:JSON.stringify({lines:buildLines(slip,selection),feed:1,cut:false}),
+        body:JSON.stringify({raster,feed:2,cut:false}),
       });
       const result=await response.json() as {ok?:boolean;error?:string;printer?:string};
       if(!response.ok||!result.ok)throw new Error(result.error||"La impresora no respondió");
