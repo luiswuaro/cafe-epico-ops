@@ -397,7 +397,8 @@ export async function submitShadowCommand(
   }catch(error){
     return {error:safeShadowError(error)};
   }
-  redirect("/pos/orders?created="+orderId);
+  redirect("/pos/orders?created="+orderId+
+    (process.env.VERCEL_ENV==="preview"?"&autoKitchen=saved":""));
 }
 
 export async function createShadowSale(formData: FormData) {
@@ -414,7 +415,8 @@ export async function createShadowSale(formData: FormData) {
 
 export async function createShadowCommand(formData: FormData) {
   const orderId = await createShadowOrder(formData, "SENT");
-  redirect("/pos/orders?created=" + orderId);
+  redirect("/pos/orders?created=" + orderId +
+    (process.env.VERCEL_ENV==="preview"?"&autoKitchen=saved":""));
 }
 
 export async function saveLiveCommand(_previous:{error:string|null},formData:FormData):Promise<{error:string|null}> {
