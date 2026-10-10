@@ -4,6 +4,7 @@ import { KitchenPrintButton } from "./kitchen-print-button";
 import { AutoKitchenPrint } from "./auto-kitchen-print";
 import { kitchenOrderIdentity } from "@/src/application/pos/kitchen-slip";
 import {extraLabels,preparationNote} from "@/src/application/pos/extras";
+import {getPosExtraCatalog} from "@/src/application/pos/extra-catalog";
 import { AddLiveProducts } from "./add-live-products";
 import { createLiveCommandCustomer, setLiveCommandCustomer } from "./live-actions";
 import { getPosCatalog } from "@/src/application/pos/catalog";
@@ -56,7 +57,7 @@ export default async function PosOrdersPage({
     employee.homeStoreId,
   );
 
-  const [orders, canCancel, cash, catalog, customers] = await Promise.all([
+  const [orders, canCancel, cash, catalog, customers, extrasOptions] = await Promise.all([
     getOpenPosOrders(employee.organizationId, employee.homeStoreId),
     employeeHasPermission(
       employee.id,
@@ -66,6 +67,7 @@ export default async function PosOrdersPage({
     getCashState(employee.organizationId, employee.homeStoreId),
     getPosCatalog(employee.organizationId),
     getPosCustomers(employee.organizationId),
+    getPosExtraCatalog(employee.organizationId),
   ]);
 
   // Sólo acciones de guardado confirmadas incluyen autoKitchen=saved.
@@ -288,7 +290,7 @@ export default async function PosOrdersPage({
 
                 {order.mode==="LIVE" && !partiallyPaid && (
                   <>
-                    <AddLiveProducts orderId={order.id}
+                    <AddLiveProducts orderId={order.id} extrasOptions={extrasOptions}
                       products={catalog.filter(item=>item.active).map(item=>({
                         id:item.id,name:item.name,category:item.category,price:item.price
                       }))}/>
