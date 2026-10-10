@@ -1981,7 +1981,7 @@ button:not(:disabled){transition:background-color .16s,border-color .16s,transfo
 button:disabled{cursor:not-allowed;opacity:.54}
 button:not(:disabled):active{transform:scale(.986)}
 /* Generic button palette: preserve semantics of special links / kitchen receipts. */
-:root[data-theme="dark"] button:not(.ops-theme-options button):not(.ops-mobile-tabs button):not(.ops-menu-trigger):not(.ops-drawer-close):not(.ops-drawer-backdrop):not(.pos-category-tabs button):not(.pos-service-toggle button),
+:root[data-theme="dark"] :where(button:not(.ops-theme-options button):not(.ops-mobile-tabs button):not(.ops-menu-trigger):not(.ops-drawer-close):not(.ops-drawer-backdrop):not(.pos-category-tabs button):not(.pos-service-toggle button)),
 :root[data-theme="dark"] .button{
   color:#19221c;background:#e9e6db;
 }
@@ -1990,7 +1990,7 @@ button:not(:disabled):active{transform:scale(.986)}
   color:var(--epic-fg);background:var(--epic-soft);
 }
 @media(prefers-color-scheme:dark){
-  :root:not([data-theme="light"]):not([data-theme="dark"]) button:not(.ops-theme-options button):not(.ops-mobile-tabs button):not(.ops-menu-trigger):not(.ops-drawer-close):not(.ops-drawer-backdrop):not(.pos-category-tabs button):not(.pos-service-toggle button),
+  :root:not([data-theme="light"]):not([data-theme="dark"]) :where(button:not(.ops-theme-options button):not(.ops-mobile-tabs button):not(.ops-menu-trigger):not(.ops-drawer-close):not(.ops-drawer-backdrop):not(.pos-category-tabs button):not(.pos-service-toggle button)),
   :root:not([data-theme="light"]):not([data-theme="dark"]) .button{color:#19221c;background:#e9e6db}
 }
 :root[data-theme="dark"] :is(.pos-category-tabs button,.pos-service-toggle button,.pos-product-card,.pos-qty-control button),
@@ -2297,4 +2297,79 @@ details[open]>.ops-chevron,details[open]>summary>.ops-chevron{transform:rotate(1
 :root[data-theme="dark"] .pos-cart-open .pos-mobile-cart-footer .pos-mobile-footer-secondary,
 :root[data-theme="dark"] .pos-cart-open .pos-mobile-cart-footer .pos-mobile-footer-prebill{
   background:var(--epic-soft);color:var(--epic-fg);border-color:var(--epic-border)
+}
+
+/* FIX 2026-10-10: the high-specificity generic button selector previously
+   overrode card text in dark mode. Keep component foreground on its surface. */
+:root[data-theme="dark"] .pos-product-grid button.pos-product-card {
+  background:var(--epic-card);color:var(--epic-fg);border-color:var(--epic-border);
+}
+:root[data-theme="dark"] .pos-product-grid .pos-product-card > strong,
+:root[data-theme="dark"] .pos-product-grid .pos-product-card > span:not(.eyebrow):not(.pos-product-qty){
+  color:var(--epic-fg);
+}
+:root[data-theme="dark"] .pos-product-grid .pos-product-card > .eyebrow{
+  color:var(--epic-secondary);
+}
+:root[data-theme="dark"] .pos-product-grid .pos-product-card:hover,
+:root[data-theme="dark"] .pos-product-grid .pos-product-card:focus-visible{
+  background:var(--epic-raised);border-color:var(--epic-accent);
+}
+:root[data-theme="dark"] .pos-product-grid .pos-product-card > .pos-product-qty{
+  background:var(--epic-accent);color:var(--epic-accent-contrast);
+}
+:root[data-theme="dark"] .pos-layout-mobile-cart .pos-mobile-cart-summary{
+  background:var(--epic-card);color:var(--epic-fg);border-color:var(--epic-border);
+}
+:root[data-theme="dark"] .pos-layout-mobile-cart .pos-mobile-summary-count{
+  background:var(--epic-accent);color:var(--epic-accent-contrast);
+}
+:root[data-theme="dark"] .pos-layout-mobile-cart .pos-mobile-summary-label small,
+:root[data-theme="dark"] .pos-layout-mobile-cart .pos-mobile-summary-chevron{
+  color:var(--epic-secondary);
+}
+:root[data-theme="dark"] .pos-cart-open .pos-unit-actions button{
+  background:var(--epic-soft);color:var(--epic-fg);border-color:var(--epic-border);
+}
+:root[data-theme="dark"] .pos-cart .pos-service-toggle button:not(.active),
+:root[data-theme="dark"] .pos-cart .pos-cancel-panel,
+:root[data-theme="dark"] .pos-cart .pos-cancel-panel summary{
+  color:var(--epic-fg);
+}
+@media(prefers-color-scheme:dark){
+  :root:not([data-theme="light"]):not([data-theme="dark"]) .pos-product-grid button.pos-product-card{
+    background:var(--epic-card);color:var(--epic-fg);border-color:var(--epic-border);
+  }
+  :root:not([data-theme="light"]):not([data-theme="dark"]) .pos-product-grid .pos-product-card > strong,
+  :root:not([data-theme="light"]):not([data-theme="dark"]) .pos-product-grid .pos-product-card > span:not(.eyebrow):not(.pos-product-qty){
+    color:var(--epic-fg);
+  }
+  :root:not([data-theme="light"]):not([data-theme="dark"]) .pos-product-grid .pos-product-card > .eyebrow{
+    color:var(--epic-secondary);
+  }
+  :root:not([data-theme="light"]):not([data-theme="dark"]) .pos-product-grid .pos-product-card:hover,
+  :root:not([data-theme="light"]):not([data-theme="dark"]) .pos-product-grid .pos-product-card:focus-visible{
+    background:var(--epic-raised);border-color:var(--epic-accent);
+  }
+  :root:not([data-theme="light"]):not([data-theme="dark"]) .pos-product-grid .pos-product-card > .pos-product-qty{
+    background:var(--epic-accent);color:var(--epic-accent-contrast);
+  }
+  :root:not([data-theme="light"]):not([data-theme="dark"]) .pos-layout-mobile-cart .pos-mobile-cart-summary{
+    background:var(--epic-card);color:var(--epic-fg);border-color:var(--epic-border);
+  }
+  :root:not([data-theme="light"]):not([data-theme="dark"]) .pos-layout-mobile-cart .pos-mobile-summary-count{
+    background:var(--epic-accent);color:var(--epic-accent-contrast);
+  }
+  :root:not([data-theme="light"]):not([data-theme="dark"]) .pos-layout-mobile-cart .pos-mobile-summary-label small,
+  :root:not([data-theme="light"]):not([data-theme="dark"]) .pos-layout-mobile-cart .pos-mobile-summary-chevron{
+    color:var(--epic-secondary);
+  }
+  :root:not([data-theme="light"]):not([data-theme="dark"]) .pos-cart-open .pos-unit-actions button{
+    background:var(--epic-soft);color:var(--epic-fg);border-color:var(--epic-border);
+  }
+  :root:not([data-theme="light"]):not([data-theme="dark"]) .pos-cart .pos-service-toggle button:not(.active),
+  :root:not([data-theme="light"]):not([data-theme="dark"]) .pos-cart .pos-cancel-panel,
+  :root:not([data-theme="light"]):not([data-theme="dark"]) .pos-cart .pos-cancel-panel summary{
+    color:var(--epic-fg);
+  }
 }
