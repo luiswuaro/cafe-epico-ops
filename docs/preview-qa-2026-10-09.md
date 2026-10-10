@@ -104,3 +104,13 @@ La ejecución de GitHub Actions prueba estructura, tipos, lint y compilación, *
 - **Aislamiento:** desde 23:55 UTC, en `cafe-epico-qa` se registraron 1 orden, 1 pago, 8 movimientos (5 de receta + 3 de empaques); `cafe-epico` 0 órdenes, 0 pagos y 0 movimientos.
 - Comprobación visual aportada por operador: panel «Entregar vaso para llevar» se muestra legible y marca `Registrado`; la validación del procesamiento corresponde a las consultas SQL previas.
 - **Pruebas pendientes:** doble clic simultáneo con distintos requestIds, falta de stock, edición de precio con ticket abierto, cancelación después de empaque, impresión térmica real. Se mantienen fuera de producción.
+
+
+## QA-05 — PRECIO CAMBIADO CON TICKET ABIERTO: fase 1 comprobada (2026-10-09)
+
+- Ticket original `SH-261009175934-F061`, ID `3bb84c86-54cf-48a4-b262-a61d1b4ec94a`, QA `cafe-epico-qa`, estado `SENT`, precio guardado `$30.00`, 1 Americano QA caliente `DINE_IN`.
+- Precio actual del catálogo QA: `$35.00`, luego de los cambios registrados en auditoría `POS_CATALOG_PRICE_UPDATED`; el último evento muestra `beforeData.price=30` y `afterData.price=35`.
+- Ticket original mantiene `unit_price=$30.00`, `line_total=$30.00` y `total=$30.00` tras editar precio del catálogo.
+- Al auditar, el ticket todavía tenía **0 pagos**, **0 movimientos de inventario**, **0 divisiones**. No se puede concluir que checkout respete el precio hasta que se cobre.
+- Organización comercial `cafe-epico`: 19 órdenes; QA: 5. Sin evidencia en esta consulta de mutación de pedidos comerciales.
+- **Siguiente paso:** cobrar el ticket a $30 y verificar 1 pago $30, 1 descuento 18.9 g; después crear otra venta a $35 para verificar que catálogo actualizado se aplique únicamente a nuevos tickets. Probar aparte nueva ronda dentro de la misma mesa con precios históricos distintos.
