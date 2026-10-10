@@ -64,5 +64,5 @@ export async function submitLiveSale(_previous:{error:string|null},formData:Form
     const message=error instanceof Error?error.message:"No se pudo cobrar. Revisa caja, receta e inventario.";
     return {error:message.slice(0,350)};
   }
-  redirect("/pos/receipt/"+savedOrderId+(newlyPaid?"?autoKitchen=paid":""));
+  redirect("/pos/receipt/"+savedOrderId+(newlyPaid?"?autoKitchen=paid-direct":""));
 }
