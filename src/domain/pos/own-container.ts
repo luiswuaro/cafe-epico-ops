@@ -17,10 +17,13 @@ export function canUseOwnContainer(item:ItemKind,mode:string){
 }
 
 export function isOwnContainerDisposable(component:Component){
-  const label=component.name.normalize("NFD").replace(/[\u0300-\u036f]/g,"")
-    .toUpperCase().replace(/\s+/g," ");
-  // Packaging and other single-use presentation items, never drink ingredients.
-  return /\b(VASOS?|TAPAS?|MANGAS?|FAJILLAS?|POPOTES?|PAJILLAS?|SERVILLETAS?|AGITADORES?|PORTAVASOS?|BOLSAS?)\b/.test(label);
+  const normalize=(value:string)=>value.normalize("NFD")
+    .replace(/[\u0300-\u036f]/g,"").toUpperCase().replace(/\s+/g," ");
+  const label=normalize(component.name);
+  const category=normalize(component.category??"");
+  // Remove packaging by category or product name, never recipe ingredients.
+  if(/\b(EMPAQUES?|ENVASES?|DESECHABLES?|DESCARTABLES?)\b/.test(category))return true;
+  return /\b(VASOS?|TAPAS?|MANGAS?|FAJILLAS?|POPOTES?|PAJILLAS?|SERVILLETAS?|AGITADORES?|PORTAVASOS?|BOLSAS?|ENVASES?)\b/.test(label);
 }
 
 export function preparedOwnContainerComponents<T extends Component>(
