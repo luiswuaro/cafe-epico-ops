@@ -11,6 +11,7 @@ export type StaffBenefitLine={
   basePrice:number;
   extrasPrice:number;
   ownThermos:boolean;
+  serviceMode:"DINE_IN"|"TAKEAWAY";
   staffBenefit:StaffBenefitKind;
   employeeId:string|null;
 };
@@ -43,6 +44,8 @@ export function calculateStaffTicket(lines:StaffBenefitLine[]):StaffBenefitTicke
       warnings.push(label+": elige al empleado beneficiario.");
     if(staff&&line.ownThermos)
       warnings.push(label+": no combinar descuento de personal y termo en una bebida.");
+    if(line.staffBenefit==="INCLUDED_DRINK"&&line.serviceMode!=="DINE_IN")
+      warnings.push(label+": la bebida incluida de personal es solo para consumir aquí; la de 10% sí puede ser para llevar.");
     if(line.staffBenefit==="INCLUDED_DRINK"&&line.employeeId){
       if(freePerEmployee.has(line.employeeId))
         warnings.push(label+": ese trabajador ya tiene una bebida incluida en este ticket.");
@@ -52,7 +55,10 @@ export function calculateStaffTicket(lines:StaffBenefitLine[]):StaffBenefitTicke
     const thermosDiscount=line.ownThermos&&line.category!=="ALIMENTOS"?
       Math.min(5,line.basePrice):0;
     const afterThermos=round(listedAmount-thermosDiscount);
-    const staffDiscount=staff?round(Math.min(afterThermos,
+    const eligibleStaff=staff && line.category!=="ALIMENTOS" && Boolean(line.employeeId)
+      && !line.ownThermos &&
+      (line.staffBenefit!=="INCLUDED_DRINK"||line.serviceMode==="DINE_IN");
+    const staffDiscount=eligibleStaff?round(Math.min(afterThermos,
       line.staffBenefit==="INCLUDED_DRINK"?line.basePrice:line.basePrice*0.1)):0;
     const payable=round(afterThermos-staffDiscount);
     return {key:line.key,name:line.name,employeeId:staff?line.employeeId:null,
