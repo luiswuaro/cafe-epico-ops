@@ -74,8 +74,13 @@ export default async function PosOrdersPage({
   // Nunca iniciar una impresión al abrir / refrescar Comandas normalmente.
   const autoId=typeof params.created==="string"?params.created
     :typeof params.added==="string"?params.added:null;
+  // Las pruebas de impresora sobre comandas ESPEJO se habilitan sólo en
+  // deployments preview; no registrar pagos ni tocar inventario.
+  const previewShadowPrint=process.env.VERCEL_ENV==="preview";
   const autoOrder=params.autoKitchen==="saved"&&autoId
-    ?orders.find(order=>order.id===autoId&&order.mode==="LIVE")
+    ?orders.find(order=>order.id===autoId&&(
+      order.mode==="LIVE"||(previewShadowPrint&&order.mode==="SHADOW")
+    ))
     :null;
   const autoRoundId=autoOrder
     ?typeof params.round==="string"?params.round:"INITIAL"
@@ -104,6 +109,14 @@ export default async function PosOrdersPage({
         }}
       />}
       <CommandBoardAutoRefresh />
+      {previewShadowPrint&&<section className="card status-warn no-print" role="status">
+        <strong>Prueba de impresión en preview</strong>
+        <p>Las comandas ESPEJO pueden imprimirse físicamente al guardarlas si activaste
+          la impresión automática en <Link href="/pos/printer">POS → Impresora</Link>.
+          Esta prueba no registra cobros LIVE ni descuenta inventario.</p>
+        <p>Si no sale papel, usa «Imprimir comanda» aquí y revisa el puente
+          local de la impresora. Un error de conexión se mostrará en pantalla.</p>
+      </section>}
       {error && <section className="card status-bad" role="alert">
         Comanda no cobrada: {error}
       </section>}
@@ -249,7 +262,7 @@ export default async function PosOrdersPage({
                   </div>
                 )}
 
-                {order.mode==="LIVE"&&
+                {(order.mode==="LIVE"||(previewShadowPrint&&order.mode==="SHADOW"))&&
                   <KitchenPrintButton
                     slip={{
                       folio:order.folio,
