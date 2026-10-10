@@ -2,7 +2,7 @@ import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { getOrCreateChecklistRun } from "@/src/application/checklists/run";
 import { countOpenShortages } from "@/src/application/inventory/shortages";
 import { getUnreadEmployeeMessages } from "@/src/application/messages/read";
-import { getInventoryIntelligence } from "@/src/application/loyverse/inventory-intelligence";
+import { getOpsInventoryIntelligence } from "@/src/application/inventory/ops-intelligence";
 import { getDb } from "@/src/infrastructure/db/client";
 import {
   espressoQualityChecks,
@@ -43,7 +43,7 @@ export async function getTodayOperationalSummary(employee: {
     getOrCreateChecklistRun(store.code, "HANDOFF", employee.id),
     countOpenShortages(employee.organizationId, employee.homeStoreId),
     getUnreadEmployeeMessages(employee.organizationId, employee.id),
-    getInventoryIntelligence(employee.organizationId),
+    getOpsInventoryIntelligence(employee.organizationId,employee.homeStoreId),
   ]);
 
   const openingCompleted = openingTasks.filter(
