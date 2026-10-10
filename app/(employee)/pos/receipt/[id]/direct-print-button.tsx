@@ -11,6 +11,7 @@ const CONTENT_WIDTH = PAPER_WIDTH - SIDE_MARGIN * 2;
 export type DirectReceiptPayload = {
   folio: string;
   kind?: "PREBILL" | "RECEIPT";
+  simulation?: boolean;
   paidAmount?: string;
   outstanding?: string;
   status: string;
