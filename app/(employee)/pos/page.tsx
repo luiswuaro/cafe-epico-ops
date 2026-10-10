@@ -1,5 +1,6 @@
 import Link from "next/link";
-import {extraLabels} from "@/src/application/pos/extras";
+import {extraLabels,preparationNote} from "@/src/application/pos/extras";
+import {getPosExtraCatalog} from "@/src/application/pos/extra-catalog";
 import { PosClient } from "./pos-client";
 import { AutoKitchenPrint } from "./orders/auto-kitchen-print";
 import { kitchenOrderIdentity } from "@/src/application/pos/kitchen-slip";
@@ -51,7 +52,7 @@ export default async function PosPage({
   const selectedCustomerId =
     typeof params.customer === "string" ? params.customer : null;
 
-  const [catalog, customers, saved, canCancel, cash, openOrders, canOverrideStock] = await Promise.all([
+  const [catalog, customers, saved, canCancel, cash, openOrders, canOverrideStock, extrasOptions] = await Promise.all([
     getPosCatalog(employee.organizationId),
     getPosCustomers(employee.organizationId),
     savedId
@@ -65,6 +66,7 @@ export default async function PosPage({
     getCashState(employee.organizationId, employee.homeStoreId),
     getOpenPosOrders(employee.organizationId,employee.homeStoreId),
     employeeHasPermission(employee.id,"inventory.adjust",employee.homeStoreId),
+    getPosExtraCatalog(employee.organizationId),
   ]);
   const liveTickets=openOrders.filter(order=>order.mode==="LIVE");
   const selectedTicket=liveEnabled&&selectedTicketId
@@ -85,7 +87,7 @@ export default async function PosPage({
            orderNote:selectedTicket.note,
            lines:selectedTicket.lines.map(line=>({
              id:line.id,name:line.name,category:line.category,
-             quantity:Number(line.quantity),note:line.note,
+             quantity:Number(line.quantity),note:preparationNote(line.note,line.expectedConsumption),
              serviceMode:typeof line.expectedConsumption?.serviceMode==="string"
                ?line.expectedConsumption.serviceMode:null,
              roundId:typeof line.expectedConsumption?.roundId==="string"
@@ -303,6 +305,7 @@ export default async function PosPage({
       )}
 
       <PosClient
+        extrasOptions={extrasOptions}
         key={selectedTicket?selectedTicket.id+":"+(typeof params.savedRound==="string"?params.savedRound:"open"):"NEW_TICKET"}
         catalog={catalog.filter(item=>!pilotItem || item.name.toLocaleUpperCase("es-MX")===pilotItem.toLocaleUpperCase("es-MX")).map((item) => ({
           id: item.id,
