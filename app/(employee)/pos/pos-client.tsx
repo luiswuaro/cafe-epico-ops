@@ -369,14 +369,14 @@ export function PosClient({
           <input type="hidden" name="tableLabel" value={tableLabel}/>
           <input type="hidden" name="note" value={orderNote}/>
           {monetaryDue>0?<label>Forma de pago
-            <select name="paymentMethod" value={paymentMethod}
+            <select value={paymentMethod}
               onChange={e=>setPaymentMethod(e.target.value as "CASH"|"CARD"|"TRANSFER")}>
               <option value="CASH" disabled={!cashOpen}>Efectivo{cashOpen?"":" · abre caja"}</option>
               <option value="CARD">Tarjeta · cobrar primero en la terminal</option>
               <option value="TRANSFER">Transferencia · confirmar depósito</option>
             </select>
           </label>:<div className="status-ok">Cubierta al 100% con puntos. No se realiza cargo monetario.</div>}
-          <input type="hidden" name="checkoutPaymentMethod"
+          <input type="hidden" name="paymentMethod"
             value={monetaryDue===0?"POINTS":paymentMethod}/>
           {monetaryDue>0&&paymentMethod==="CASH"?<div className="stack">
             <label>Efectivo recibido
