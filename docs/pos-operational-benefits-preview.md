@@ -32,6 +32,34 @@ en la pantalla de cobro habitual, sin reconstruir el ticket:
 - Ejecutar pruebas E2E contra una base de datos **aislada**, con dos cajas concurrentes.
 - Confirmar tratamiento fiscal con contabilidad y conciliación con saldos Loyverse.
 
+## Alta rápida de cliente en ambas pantallas
+
+- **POS / carrito:** selector con búsqueda y “Registrar cliente nuevo aquí” antes de
+  guardar o cobrar. Conserva todas las líneas, notas, presentación y extras.
+- **Cobrar:** el mismo formulario de cliente y puntos sigue disponible.
+- **Espejo / preview:** alta simulada en memoria; no se escribe a `pos_customers`,
+  ni se asigna un identificador simulado a una orden escrita.
+- **LIVE:** alta transaccional autenticada en la organización, con auditoría,
+  sin navegación ni pérdida del carrito.
+- Al registrar desde POS se conserva el cliente elegido al entrar a cobrar.
+
+## Consumo de Azucena: política y primera validación visual
+
+- Beneficio aprobado: **1 bebida incluida por jornada** y **10% de descuento**
+  en bebidas adicionales. Se registra como consumo del personal (beneficiaria Azucena),
+  distinto del programa de puntos.
+- El selector aparece en la pantalla de **Simular cobro**; no existe una
+  página extra. En espejo calcula cortesía sobre el precio base y deja los extras
+  monetarios aparte. En una bebida adicional calcula 10% sobre base.
+- Solo permite cotizar un ticket de **una bebida**; no combina termo propio
+  ni puntos de cliente ni alimentos. Estas son restricciones conservadoras del
+  prototipo, sujetas a validación operativa.
+- El beneficio todavía NO se ejecuta en LIVE: falta registro de consumo por
+  beneficiaria + fecha de trabajo, idempotencia, control concurrente, afectación
+  completa de inventario/COGS, separación contable y reversas por cancelación.
+- **No habilitar LIVE para personal** hasta completar pruebas contra PostgreSQL
+  aislada. La simulación no registra ni inventario, ni nómina, ni ingresos.
+
 ## Casos de negocio
 
 | Caso | Frontend | Backend LIVE requerido |
