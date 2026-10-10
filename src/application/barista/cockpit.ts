@@ -7,9 +7,13 @@ import {
   isNull,
 } from "drizzle-orm";
 import { getInventoryIntelligence } from "@/src/application/loyverse/inventory-intelligence";
+import { getPosReadiness } from "@/src/application/pos/readiness";
 import { getDb } from "@/src/infrastructure/db/client";
 import {
   espressoQualityChecks,
+  inventoryBalances,
+  inventoryItems,
+  loyverseInventoryMappings,
   loyverseCategories,
   loyverseItems,
   loyverseReceiptLines,
@@ -52,7 +56,57 @@ export async function getBaristaCockpit(employee: {
   if (!employee.homeStoreId) throw new Error("Employee has no home store");
 
   const db = getDb();
-  const inventory = await getInventoryIntelligence(employee.organizationId);
+  // Loyverse sólo alimenta las tendencias históricas. El stock vigente es OPS.
+  const [inventory, readiness, opsRows] = await Promise.all([
+    getInventoryIntelligence(employee.organizationId),
+    getPosReadiness(employee.organizationId, employee.homeStoreId),
+    db.select({
+      variantExternalId: loyverseInventoryMappings.loyverseVariantExternalId,
+      name: inventoryItems.name,
+      unit: inventoryItems.canonicalUnit,
+      factor: loyverseInventoryMappings.factorToCanonical,
+      minimumStock: inventoryItems.minimumStock,
+      quantity: inventoryBalances.theoreticalQuantity,
+    }).from(loyverseInventoryMappings)
+      .innerJoin(inventoryItems, and(
+        eq(inventoryItems.id, loyverseInventoryMappings.inventoryItemId),
+        eq(inventoryItems.organizationId, employee.organizationId),
+      ))
+      .leftJoin(inventoryBalances, and(
+        eq(inventoryBalances.organizationId, employee.organizationId),
+        eq(inventoryBalances.storeId, employee.homeStoreId),
+        eq(inventoryBalances.locationId, loyverseInventoryMappings.locationId),
+        eq(inventoryBalances.inventoryItemId, loyverseInventoryMappings.inventoryItemId),
+      ))
+      .where(and(
+        eq(loyverseInventoryMappings.organizationId, employee.organizationId),
+        eq(loyverseInventoryMappings.storeId, employee.homeStoreId),
+        eq(loyverseInventoryMappings.isActive, true),
+        eq(inventoryItems.isActive, true),
+        eq(inventoryItems.trackingType, "QUANTITY"),
+      )),
+  ]);
+  const byVariantRows = new Map<string, typeof opsRows>();
+  for (const row of opsRows) {
+    const matches = byVariantRows.get(row.variantExternalId) ?? [];
+    matches.push(row);
+    byVariantRows.set(row.variantExternalId, matches);
+  }
+  // Una equivalencia duplicada o sin balance se atiende en auditoría de POS,
+  // no generando alertas de inventario basadas en saldos obsoletos.
+  const opsByVariant = new Map([...byVariantRows].flatMap(([id, rows]) => {
+    if (rows.length !== 1 || rows[0].quantity == null) return [];
+    const row = rows[0];
+    return [[id, {
+      variantExternalId: id,
+      name: row.name,
+      unit: row.unit,
+      quantity: Number(row.quantity),
+      factor: Number(row.factor),
+      minimumStock: row.minimumStock == null ? null : Number(row.minimumStock),
+    }] as const];
+  }));
+
   const local = localParts();
   const dayStart = new Date(local.date + "T00:00:00-06:00");
   const loyverseStoreExternalId = inventory.selectedStore?.externalId ?? "";
@@ -277,6 +331,7 @@ export async function getBaristaCockpit(employee: {
   for (const event of barEventsToday) {
     if (
       event.eventType === "STOCK_COUNT" &&
+      event.note?.startsWith("Conteo físico OPS") &&
       event.variantExternalId &&
       !latestCountByVariant.has(event.variantExternalId)
     ) {
@@ -284,39 +339,59 @@ export async function getBaristaCockpit(employee: {
     }
   }
 
-  const shiftRisks = inventory.shift.risks.map((risk) => ({
-    ...risk,
-    countedToday: latestCountByVariant.has(risk.variantExternalId),
-  }));
+  const shiftRisks = inventory.smartRows.flatMap((row) => {
+    const stock = opsByVariant.get(row.variantExternalId);
+    if (!stock) return []; // Jamás usar el saldo de Loyverse como respaldo.
+    const expectedNative = currentShift === "MORNING"
+      ? row.expectedTodayMorning : row.expectedTodayAfternoon;
+    const expected = expectedNative * stock.factor;
+    if (expected <= 0) return [];
+    const available = Math.max(0, stock.quantity);
+    const ratio = available / expected;
+    if (ratio >= 1.25 && stock.quantity >= 0) return [];
+    return [{
+      variantExternalId: row.variantExternalId,
+      itemName: stock.name,
+      unitLabel: stock.unit,
+      displayUnit: stock.unit,
+      displayFactor: 1,
+      inStock: stock.quantity,
+      operationalStock: available,
+      inventoryNeedsCorrection: stock.quantity < 0,
+      expectedShift: expected,
+      shortage: Math.max(0, expected - available),
+      coverageRatio: ratio,
+      status: (stock.quantity < 0 || ratio < 1 ? "ACTION" : "WATCH") as "ACTION" | "WATCH",
+      countedToday: latestCountByVariant.has(row.variantExternalId),
+    }];
+  }).sort((a, b) =>
+    (a.status === "ACTION" ? 0 : 1) - (b.status === "ACTION" ? 0 : 1)
+      || b.expectedShift - a.expectedShift
+  ).slice(0, 12);
 
-  const shiftIngredients = inventory.smartRows
-    .map((row) => {
-      const expected =
-        currentShift === "MORNING"
-          ? row.expectedTodayMorning
-          : row.expectedTodayAfternoon;
-      const factor = row.displayFactor ?? 1;
-      return {
-        variantExternalId: row.variantExternalId,
-        itemName: row.itemName,
-        unitLabel: displayUnit(row),
-        soldByWeight: row.soldByWeight,
-        inStock: displayQuantity(row, Math.max(0, row.inStock)),
-        sourceInStock: displayQuantity(row, row.inStock),
-        expected: expected * factor,
-        prepQuantity: row.soldByWeight
-          ? expected * factor
-          : Math.ceil(expected * factor),
-        remainingAfterForecast:
-          (Math.max(0, row.inStock) - expected) * factor,
-        inventoryNeedsCorrection: row.inStock < 0,
-        countedToday: latestCountByVariant.has(row.variantExternalId),
-        status: row.status,
-      };
-    })
-    .filter((row) => row.expected > 0.0005)
-    .sort((a, b) => b.expected - a.expected)
-    .slice(0, 20);
+  const shiftIngredients = inventory.smartRows.flatMap((row) => {
+    const stock = opsByVariant.get(row.variantExternalId);
+    if (!stock) return [];
+    const expectedNative = currentShift === "MORNING"
+      ? row.expectedTodayMorning : row.expectedTodayAfternoon;
+    const expected = expectedNative * stock.factor;
+    if (expected <= 0.0005) return [];
+    const available = Math.max(0, stock.quantity);
+    return [{
+      variantExternalId: row.variantExternalId,
+      itemName: stock.name,
+      unitLabel: stock.unit,
+      soldByWeight: stock.unit !== "pz",
+      inStock: available,
+      sourceInStock: stock.quantity,
+      expected,
+      prepQuantity: stock.unit === "pz" ? Math.ceil(expected) : expected,
+      remainingAfterForecast: available - expected,
+      inventoryNeedsCorrection: stock.quantity < 0,
+      countedToday: latestCountByVariant.has(row.variantExternalId),
+      status: row.status,
+    }];
+  }).sort((a, b) => b.expected - a.expected).slice(0, 20);
 
   const wasteOptions = inventory.smartRows
     .filter((row) => row.inStock > 0 || row.avgDailyUsage14 > 0)
@@ -333,46 +408,28 @@ export async function getBaristaCockpit(employee: {
       displayFactor: row.displayFactor ?? 1,
     }));
 
-  const countOptions = inventory.smartRows
-    .map((row) => {
-      const factor = row.displayFactor ?? 1;
-      const latestCount = latestCountByVariant.get(row.variantExternalId);
-      return {
-        variantExternalId: row.variantExternalId,
-        itemName: row.itemName,
-        unitLabel: displayUnit(row),
-        soldByWeight: row.soldByWeight,
-        sourceQuantity: row.inStock * factor,
-        countedToday: Boolean(latestCount),
-        latestCountQuantity:
-          latestCount?.displayQuantity == null
-            ? null
-            : Number(latestCount.displayQuantity),
-        pendingAdmin:
-          latestCount != null && latestCount.resolvedAt == null,
-        status: row.status,
-      };
-    })
-    .sort((a, b) => {
-      const aRank =
-        a.sourceQuantity < 0
-          ? 0
-          : a.status === "CRITICAL"
-            ? 1
-            : a.status === "WATCH"
-              ? 2
-              : 3;
-      const bRank =
-        b.sourceQuantity < 0
-          ? 0
-          : b.status === "CRITICAL"
-            ? 1
-            : b.status === "WATCH"
-              ? 2
-              : 3;
-      return aRank - bRank || a.itemName.localeCompare(b.itemName, "es");
-    })
-    .slice(0, 80);
+  // Contar sólo los insumos confirmados en OPS. No sugerir la leche de
+  // almendras, que aún no está dada de alta en este inventario.
+  const countOptions = [...opsByVariant.values()].map((stock) => {
+    const latestCount = latestCountByVariant.get(stock.variantExternalId);
+    return {
+      variantExternalId: stock.variantExternalId,
+      itemName: stock.name,
+      unitLabel: stock.unit,
+      soldByWeight: stock.unit !== "pz",
+      sourceQuantity: stock.quantity,
+      countedToday: Boolean(latestCount),
+      latestCountQuantity: latestCount?.displayQuantity == null
+        ? null : Number(latestCount.displayQuantity),
+      pendingAdmin: latestCount != null && latestCount.resolvedAt == null,
+      status: stock.quantity <= 0 ? "CRITICAL"
+        : stock.minimumStock !== null && stock.quantity < stock.minimumStock
+          ? "WATCH" : "OK",
+    };
+  }).sort((a,b) => {
+    const rank = (status:string) => status === "CRITICAL" ? 0 : status === "WATCH" ? 1 : 2;
+    return rank(a.status)-rank(b.status) || a.itemName.localeCompare(b.itemName,"es");
+  });
 
   const lossEvents = barEventsToday.filter(
     (event) => event.eventType === "WASTE" || event.eventType === "REMAKE",
@@ -486,23 +543,16 @@ export async function getBaristaCockpit(employee: {
 
   const stockCountsToday = [...latestCountByVariant.values()]
     .map((event) => {
-      const row = event.variantExternalId
-        ? smartByVariant.get(event.variantExternalId)
-        : null;
-      const factor = row?.displayFactor ?? 1;
-      const currentSource =
-        row == null ? null : row.inStock * factor;
-      const physical =
-        event.displayQuantity == null
-          ? null
-          : Number(event.displayQuantity);
+      const stock = event.variantExternalId
+        ? opsByVariant.get(event.variantExternalId) : null;
+      const currentSource = stock?.quantity ?? null;
+      const physical = event.displayQuantity == null
+        ? null : Number(event.displayQuantity);
       return {
         id: event.id,
         variantExternalId: event.variantExternalId,
-        itemName: event.itemName ?? "Insumo",
-        displayUnit:
-          event.displayUnit ??
-          (row ? displayUnit(row) : event.unitLabel ?? "u."),
+        itemName: stock?.name ?? event.itemName ?? "Insumo",
+        displayUnit: stock?.unit ?? event.displayUnit ?? event.unitLabel ?? "u.",
         physicalQuantity: physical,
         sourceQuantity: currentSource,
         difference:
@@ -516,8 +566,8 @@ export async function getBaristaCockpit(employee: {
     .sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime())
     .slice(0, 8);
 
-  const negativeRows = inventory.smartRows.filter(
-    (row) => row.inStock < 0,
+  const negativeRows = [...opsByVariant.values()].filter(
+    (row) => row.quantity < 0,
   );
   const inventoryCorrectionPending = negativeRows.filter(
     (row) => !latestCountByVariant.has(row.variantExternalId),
@@ -571,7 +621,19 @@ export async function getBaristaCockpit(employee: {
       .filter((row) => row.soldByWeight)
       .sort((a, b) => b.expected - a.expected)
       .slice(0, 8),
-    unavailableProducts: inventory.unavailableProducts,
+    unavailableProducts: readiness.products.flatMap((product) => {
+      const blockers = [...new Set(product.recipes.flatMap(recipe =>
+        recipe.errors
+          .filter(error => /^(Sin existencias:|Sin saldo inicial:|Sin equivalencia:|Equivalencia duplicada:)/.test(error))
+          .map(error => error.replace(/^[^:]+:\s*/, ""))
+      ))];
+      return blockers.length ? [{
+        variantExternalId: product.id,
+        itemName: product.name,
+        blockers,
+        recentQty: 0,
+      }] : [];
+    }),
     activeRoast: activeRoast
       ? {
           ...activeRoast,

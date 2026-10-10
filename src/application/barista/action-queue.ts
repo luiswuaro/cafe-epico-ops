@@ -148,7 +148,7 @@ export function buildBaristaActionQueue(input: {
         input.inventoryCorrectionCount +
         " insumo(s) con inventario negativo",
       detail:
-        "Loyverse reporta una cantidad menor a cero. Confirma la existencia física antes de tratarla como faltante real.",
+        "OPS registra una cantidad menor a cero. Verifica el movimiento y confirma el saldo antes de ajustarlo.",
       href: "/today?action=count#conteo-rapido",
       rank: 30,
     });
@@ -183,7 +183,7 @@ export function buildBaristaActionQueue(input: {
               " para cubrir el turno."
             : "La cobertura es insuficiente para el turno y la unidad operativa todavía no está configurada. Revísala en Inventario."
           : "La cobertura está cerca del consumo esperado del turno."),
-      href: "/inventory",
+      href: "/inventory/ops",
       rank: risk.status === "ACTION" ? 35 : 55,
     });
   }
