@@ -2506,3 +2506,147 @@ details[open]>.ops-chevron,details[open]>summary>.ops-chevron{transform:rotate(1
     color:var(--epic-fg);
   }
 }
+
+
+/* ======================================================
+   MAQUILA · TECHNICAL CONTRACT ROASTING
+   Uses the same light/dark/automatic tokens as OPS.
+   ====================================================== */
+.ops-contract-page{max-width:1240px;display:grid;gap:1rem;padding-bottom:5rem}
+.ops-contract-hero{
+  padding:clamp(1.15rem,3vw,2rem);
+  border:1px solid var(--epic-border);border-radius:22px;
+  background:linear-gradient(135deg,#243d30,#18271f);color:#f4f2e8;
+}
+.ops-contract-hero .eyebrow,.ops-contract-hero .muted{color:#c2dbcb}
+.ops-contract-hero h1{font-size:clamp(2.15rem,5vw,3.5rem);letter-spacing:-.06em}
+.ops-contract-hero p{max-width:700px;line-height:1.5;color:#d9e6db}
+.ops-contract-hero a{color:#c7ead1;text-underline-offset:4px}
+.ops-contract-metrics,.ops-contract-balance{
+  display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.65rem
+}
+.ops-contract-metrics>article,.ops-contract-balance>div{
+  display:grid;gap:.45rem;min-width:0;border:1px solid var(--epic-border);
+  background:var(--epic-card);border-radius:16px;padding:1.05rem
+}
+.ops-contract-metrics span,.ops-contract-balance span{
+  color:var(--epic-secondary);font-size:.79rem;font-weight:700;line-height:1.35
+}
+.ops-contract-metrics strong,.ops-contract-balance strong{
+  color:var(--epic-fg);font-size:clamp(1.12rem,2.5vw,1.62rem);
+  letter-spacing:-.045em;font-variant-numeric:tabular-nums
+}
+.ops-contract-metrics small{color:var(--epic-secondary);font-size:.72rem}
+.ops-contract-setup{display:grid;grid-template-columns:1fr 1fr;gap:.8rem;align-items:start}
+.ops-contract-panel{
+  background:var(--epic-card);border:1px solid var(--epic-border);
+  border-radius:18px;min-width:0;overflow:hidden
+}
+.ops-contract-panel>summary{list-style:none;display:flex;align-items:flex-start;
+  justify-content:space-between;flex-direction:column;gap:.2rem;padding:1rem;
+  cursor:pointer;min-height:64px
+}
+.ops-contract-panel>summary::-webkit-details-marker{display:none}
+.ops-contract-panel>summary strong{font-size:1rem;color:var(--epic-fg)}
+.ops-contract-panel>summary small{font-size:.79rem;color:var(--epic-secondary)}
+.ops-contract-panel[open]>summary{border-bottom:1px solid var(--epic-border)}
+.ops-contract-panel>form,.ops-contract-batch-panel>.stack{padding:1rem}
+.ops-contract-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.7rem;align-items:end}
+.ops-contract-fields label,.ops-contract-panel label,.ops-contract-lot label{
+  display:grid;gap:.3rem;min-width:0;font-size:.84rem;
+  font-weight:710;color:var(--epic-fg)
+}
+.ops-contract-fields input,.ops-contract-fields select,.ops-contract-panel input,
+.ops-contract-panel select,.ops-contract-panel textarea,
+.ops-contract-lot input,.ops-contract-lot select,.ops-contract-lot textarea{
+  width:100%;min-width:0;min-height:45px;border-radius:11px;font-size:16px;
+  color:var(--epic-fg);background:var(--epic-field);border:1px solid var(--epic-border);
+  padding:.64rem .75rem
+}
+.ops-contract-fields select,.ops-contract-panel select{padding-right:1.65rem}
+.ops-contract-setup button,.ops-contract-lot button,.ops-contract-filter button{
+  min-height:46px;border-radius:11px
+}
+.ops-contract-filter .section-heading{margin:0}
+.ops-contract-filter .button{display:grid;place-items:center;
+  min-height:46px;background:var(--epic-soft);border:1px solid var(--epic-border);
+  border-radius:11px;color:var(--epic-fg);font-weight:800}
+.ops-contract-lot{display:grid;gap:.9rem}
+.ops-contract-lot-heading{display:flex;gap:.7rem;align-items:center;justify-content:space-between}
+.ops-contract-lot-heading h2{margin:.2rem 0;font-size:clamp(1.3rem,3vw,2rem)}
+.ops-contract-lot-heading p:not(.eyebrow){color:var(--epic-secondary);font-size:.85rem;margin:.1rem 0}
+.ops-contract-lot-heading .ops-action-soft,.ops-contract-panel .ops-action-soft{
+  background:var(--epic-soft);color:var(--epic-fg);border:1px solid var(--epic-border)
+}
+.ops-contract-meta{margin:0;color:var(--epic-secondary);font-size:.84rem;line-height:1.55}
+.ops-contract-batch-panel{border-style:dashed}
+.ops-contract-batch-panel>summary{background:var(--epic-soft)}
+.ops-contract-batch-form{gap:.9rem}
+.ops-contract-qc{border:1px solid var(--epic-border);background:var(--epic-soft);
+  border-radius:13px;padding:.9rem;display:grid;gap:.75rem}
+.ops-contract-qc summary{list-style:none;cursor:pointer;
+  font-weight:850;font-size:1rem;padding:.2rem 0}
+.ops-contract-qc summary::-webkit-details-marker{display:none}
+.ops-contract-qc p{font-size:.83rem;line-height:1.55}
+.ops-contract-defects{display:grid;gap:.7rem}
+.ops-contract-defect-row{border:1px solid var(--epic-border);
+  background:var(--epic-card);border-radius:11px;padding:.6rem;
+  display:grid;grid-template-columns:2fr 1.15fr .75fr .8fr auto;gap:.45rem;align-items:end}
+.ops-contract-defect-row label{font-size:.75rem}
+.ops-contract-defect-row button{min-height:43px;font-size:.78rem}
+.ops-contract-result{background:var(--epic-card);border:1px solid var(--epic-border);
+  padding:.7rem;border-radius:10px;font-weight:750}
+.ops-contract-batch-list{display:grid;gap:.55rem}
+.ops-contract-batch-entry{border:1px solid var(--epic-border);border-radius:14px;
+  background:var(--epic-card);overflow:hidden}
+.ops-contract-batch-entry>summary{cursor:pointer;list-style:none;
+  display:flex;flex-wrap:wrap;gap:.7rem;justify-content:space-between;
+  align-items:center;padding:.85rem 1rem}
+.ops-contract-batch-entry>summary::-webkit-details-marker{display:none}
+.ops-contract-code{font-weight:900;color:var(--epic-fg)}
+.ops-contract-pill{background:var(--epic-success-bg);color:var(--epic-success-ink);
+  border-radius:99px;padding:.33rem .55rem;font-size:.78rem;font-weight:800}
+.ops-contract-batch-entry>.stack{border-top:1px solid var(--epic-border);padding:1rem}
+.ops-contract-batch-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.5rem}
+.ops-contract-batch-kpis>div{display:grid;gap:.3rem;padding:.7rem;
+  border:1px solid var(--epic-border);background:var(--epic-soft);border-radius:12px}
+.ops-contract-batch-kpis span{font-size:.76rem;color:var(--epic-secondary)}
+.ops-contract-batch-kpis strong{font-variant-numeric:tabular-nums;color:var(--epic-fg)}
+.ops-contract-defect-summary{padding:.85rem;border:1px solid var(--epic-border);
+  border-radius:12px;background:var(--epic-soft)}
+.ops-contract-defect-summary p{margin:.25rem 0;font-size:.83rem;color:var(--epic-secondary)}
+.ops-contract-deliver-form{display:grid;grid-template-columns:1fr 1fr auto;gap:.5rem;align-items:end}
+.ops-contract-report{padding:1rem;border:1px solid var(--epic-border);
+  border-radius:16px;background:var(--epic-soft)}
+.ops-contract-report h3{margin:.1rem 0 .5rem;letter-spacing:-.03em}
+.ops-contract-report p{line-height:1.48;font-size:.85rem}
+.ops-contract-report-select{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.45rem}
+.ops-contract-report-select label{display:flex;gap:.6rem;align-items:center;
+  font-size:.81rem;padding:.6rem;border-radius:10px;
+  border:1px solid var(--epic-border);background:var(--epic-card)}
+.ops-contract-report-select input{flex:none;width:19px;height:19px;min-height:19px;accent-color:var(--epic-accent)}
+@media(max-width:950px){
+  .ops-contract-metrics,.ops-contract-balance,.ops-contract-batch-kpis{
+    grid-template-columns:repeat(2,minmax(0,1fr))}
+  .ops-contract-setup{grid-template-columns:1fr}
+  .ops-contract-defect-row{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .ops-contract-defect-row label:first-child{grid-column:1/-1}
+  .ops-contract-defect-row button{grid-column:1/-1}
+}
+@media(max-width:650px){
+  .ops-contract-page{padding-left:.72rem;padding-right:.72rem}
+  .ops-contract-hero{border-radius:16px}
+  .ops-contract-metrics,.ops-contract-balance{gap:.45rem}
+  .ops-contract-metrics>article,.ops-contract-balance>div{padding:.76rem}
+  .ops-contract-metrics strong,.ops-contract-balance strong{font-size:1.22rem}
+  .ops-contract-fields{grid-template-columns:1fr}
+  .ops-contract-lot-heading{align-items:flex-start;flex-direction:column}
+  .ops-contract-lot-heading form button{width:100%}
+  .ops-contract-report-select{grid-template-columns:1fr}
+  .ops-contract-batch-entry>summary{gap:.4rem}
+  .ops-contract-batch-kpis{gap:.4rem}
+  .ops-contract-deliver-form{grid-template-columns:1fr}
+  .ops-contract-batch-entry>.stack{padding:.7rem}
+  .ops-contract-report{padding:.8rem}
+}
+@media print{.ops-contract-setup,.ops-contract-filter{display:none}}
