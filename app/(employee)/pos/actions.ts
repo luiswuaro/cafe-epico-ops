@@ -8,6 +8,7 @@ import { z } from "zod";
 import { getPosCatalog, type PosServiceMode } from "@/src/application/pos/catalog";
 import {priceExtras} from "@/src/application/pos/extras";
 import {getPosExtraCatalog} from "@/src/application/pos/extra-catalog";
+import {dailyTakeawayTicketLabel,effectiveOrderServiceMode,validateTicketLabel} from "@/src/application/pos/ticket-names";
 import { cancelLiveOrder } from "@/src/application/pos/live-cancellation";
 import { checkoutLiveOrder, isPosLiveEnabled } from "@/src/application/pos/live";
 import { getPosReadiness } from "@/src/application/pos/readiness";
@@ -140,9 +141,10 @@ async function buildOrderInput(
     if (!customer) throw new Error("Cliente no válido");
   }
 
+  const finalServiceMode=effectiveOrderServiceMode(serviceMode,lines.map(line=>({serviceMode:line.lineMode})));
   return {
-    serviceMode:lines.some(line=>line.lineMode==="DINE_IN")?"DINE_IN" as const:"TAKEAWAY" as const,
-    tableLabel,
+    serviceMode:finalServiceMode,
+    tableLabel:validateTicketLabel(finalServiceMode,tableLabel),
     note,
     customerId,
     lines,
@@ -175,9 +177,6 @@ async function createShadowOrder(
   }
   const input = await buildOrderInput(formData, employee.organizationId, orderMode);
   if(orderMode==="LIVE"){
-    if(!input.tableLabel){
-      throw new Error("Ponle un nombre al ticket guardado (por ejemplo Mesa 1 o Balcón 2).");
-    }
     const pilot=process.env.POS_LIVE_PILOT_ITEM?.trim().toLocaleUpperCase("es-MX");
     if(pilot && input.lines.some(line=>line.item.name.toLocaleUpperCase("es-MX")!==pilot)){
       throw new Error("Piloto limitado a "+pilot);
@@ -222,15 +221,30 @@ async function createShadowOrder(
   }
 
   const order = await db.transaction(async (tx) => {
-    if(orderMode==="LIVE"&&status==="SENT"){
+    // La numeración de los tickets para llevar se asigna dentro de la transacción
+    // y bajo el candado de la sucursal; incluye pedidos cobrados y guardados.
+    if((orderMode==="LIVE"&&status==="SENT")||
+      (input.serviceMode==="TAKEAWAY"&&!input.tableLabel)){
       await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${employee.homeStoreId!}))`);
+    }
+    let assignedLabel=input.tableLabel;
+    if(!assignedLabel&&input.serviceMode==="TAKEAWAY"){
+      const [daily]=await tx.select({count:sql<number>`count(*)::int`})
+        .from(posOrders).where(and(
+          eq(posOrders.organizationId,employee.organizationId),
+          eq(posOrders.storeId,employee.homeStoreId!),
+          eq(posOrders.businessDate,businessDate(now)),
+        ));
+      assignedLabel=dailyTakeawayTicketLabel(Number(daily?.count??0)+1);
+    }
+    if(orderMode==="LIVE"&&status==="SENT"){
       const [duplicateTable]=await tx.select({id:posOrders.id})
         .from(posOrders).where(and(
           eq(posOrders.organizationId,employee.organizationId),
           eq(posOrders.storeId,employee.homeStoreId!),
           eq(posOrders.mode,"LIVE"),
           sql`${posOrders.status} in ('SENT','PREPARING','READY','PARTIALLY_PAID')`,
-          sql`lower(trim(${posOrders.tableLabel})) = lower(trim(${input.tableLabel}))`
+          sql`lower(trim(${posOrders.tableLabel})) = lower(trim(${assignedLabel}))`
         )).limit(1);
       if(duplicateTable)throw new Error("Ya existe un ticket guardado con ese nombre. Reabre esa mesa desde Tickets guardados.");
     }
@@ -244,7 +258,7 @@ async function createShadowOrder(
         mode: orderMode,
         status,
         serviceMode: input.serviceMode,
-        tableLabel: input.tableLabel,
+        tableLabel: assignedLabel,
         employeeId: employee.id,
         customerId: input.customerId,
         businessDate: businessDate(now),
