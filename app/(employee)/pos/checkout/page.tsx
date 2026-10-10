@@ -4,6 +4,7 @@ import {getDb} from "@/src/infrastructure/db/client";
 import {posOrders} from "@/src/infrastructure/db/schema";
 import { getOpenPosOrders } from "@/src/application/pos/orders";
 import { getCashState } from "@/src/application/pos/cash";
+import {getPosCustomers} from "@/src/application/pos/customers";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
 import { assertEmployeePermission, employeeHasPermission } from "@/src/infrastructure/auth/permissions";
 import { CheckoutPaymentForm } from "./payment-form";
@@ -20,10 +21,11 @@ export default async function PosCheckoutPage({searchParams}:{
   const {employee}=await getCurrentEmployee();
   if(!employee.homeStoreId)throw new Error("Sin sucursal asignada.");
   await assertEmployeePermission(employee.id,"pos.sell",employee.homeStoreId);
-  const [orders,cash,canOverrideStock]=await Promise.all([
+  const [orders,cash,canOverrideStock,customers]=await Promise.all([
     getOpenPosOrders(employee.organizationId,employee.homeStoreId),
     getCashState(employee.organizationId,employee.homeStoreId),
     employeeHasPermission(employee.id,"inventory.adjust",employee.homeStoreId),
+    getPosCustomers(employee.organizationId),
   ]);
   const order=orders.find(o=>o.id===orderId&&o.mode==="LIVE");
   // Las cuentas que otro dispositivo acaba de cobrar salen de getOpenPosOrders.
@@ -96,6 +98,8 @@ export default async function PosCheckoutPage({searchParams}:{
       </section>
       <CheckoutPaymentForm key={order.id} orderId={order.id}
         total={Number(order.total)}
+        customers={customers.map(c=>({id:c.id,name:c.name,pointsBalance:Number(c.pointsBalance)}))}
+        initialCustomerId={order.customerId}
         cashOpen={Boolean(cash.session)}
         canOverrideStock={canOverrideStock}
         partialPaid={order.status==="PARTIALLY_PAID"}/>
