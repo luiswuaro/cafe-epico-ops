@@ -1,5 +1,5 @@
 import {planInventoryReversals} from "./reversal-plan";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "@/src/infrastructure/db/client";
 import {
   auditEvents, inventoryBalances, inventoryMovements,
@@ -35,13 +35,13 @@ export async function cancelLiveOrder(input:{
         eq(inventoryMovements.sourceId,order.id),
       )),
       tx.select().from(posLoyaltyEntries).where(and(
-        eq(posLoyaltyEntries.orderId,order.id),eq(posLoyaltyEntries.entryType,"EARN"),
+        eq(posLoyaltyEntries.orderId,order.id),inArray(posLoyaltyEntries.entryType,["EARN","REDEEM"]),
       )),
       tx.select().from(posPayments).where(eq(posPayments.orderId,order.id)),
     ]);
     // Una comanda dividida se revierte completa: todos los movimientos de inventario,
     // efectivo y puntos vinculados al folio, nunca sólo el último cobro.
-    if(payments.some(payment=>payment.method!=="CASH")) {
+    if(payments.some(payment=>payment.method!=="CASH" && payment.method!=="POINTS")) {
       throw new Error("Los pagos por tarjeta o transferencia requieren confirmar el reembolso externo con administración.");
     }
     if(order.inventoryEffectApplied && inventoryMovementsApplied.length===0){
@@ -90,7 +90,7 @@ export async function cancelLiveOrder(input:{
       const refund=-Number(entry.points);
       await tx.insert(posLoyaltyEntries).values({
         organizationId:input.organizationId,customerId:entry.customerId,orderId:order.id,
-        entryType:"REVERSAL",points:refund.toFixed(2),note:"Cancelación "+order.folio,
+        entryType:"REVERSAL",points:refund.toFixed(2),note:"Cancelación "+order.folio+" · "+entry.entryType,
       });
       await tx.update(posCustomers).set({
         pointsBalance:sql`${posCustomers.pointsBalance} + ${refund}`,updatedAt:now,
