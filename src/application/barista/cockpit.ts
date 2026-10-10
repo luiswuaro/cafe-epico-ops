@@ -338,39 +338,59 @@ export async function getBaristaCockpit(employee: {
     }
   }
 
-  const shiftRisks = inventory.shift.risks.map((risk) => ({
-    ...risk,
-    countedToday: latestCountByVariant.has(risk.variantExternalId),
-  }));
+  const shiftRisks = inventory.smartRows.flatMap((row) => {
+    const stock = opsByVariant.get(row.variantExternalId);
+    if (!stock) return []; // Jamás usar el saldo de Loyverse como respaldo.
+    const expectedNative = currentShift === "MORNING"
+      ? row.expectedTodayMorning : row.expectedTodayAfternoon;
+    const expected = expectedNative * stock.factor;
+    if (expected <= 0) return [];
+    const available = Math.max(0, stock.quantity);
+    const ratio = available / expected;
+    if (ratio >= 1.25 && stock.quantity >= 0) return [];
+    return [{
+      variantExternalId: row.variantExternalId,
+      itemName: stock.name,
+      unitLabel: stock.unit,
+      displayUnit: stock.unit,
+      displayFactor: 1,
+      inStock: stock.quantity,
+      operationalStock: available,
+      inventoryNeedsCorrection: stock.quantity < 0,
+      expectedShift: expected,
+      shortage: Math.max(0, expected - available),
+      coverageRatio: ratio,
+      status: (stock.quantity < 0 || ratio < 1 ? "ACTION" : "WATCH") as "ACTION" | "WATCH",
+      countedToday: latestCountByVariant.has(row.variantExternalId),
+    }];
+  }).sort((a, b) =>
+    (a.status === "ACTION" ? 0 : 1) - (b.status === "ACTION" ? 0 : 1)
+      || b.expectedShift - a.expectedShift
+  ).slice(0, 12);
 
-  const shiftIngredients = inventory.smartRows
-    .map((row) => {
-      const expected =
-        currentShift === "MORNING"
-          ? row.expectedTodayMorning
-          : row.expectedTodayAfternoon;
-      const factor = row.displayFactor ?? 1;
-      return {
-        variantExternalId: row.variantExternalId,
-        itemName: row.itemName,
-        unitLabel: displayUnit(row),
-        soldByWeight: row.soldByWeight,
-        inStock: displayQuantity(row, Math.max(0, row.inStock)),
-        sourceInStock: displayQuantity(row, row.inStock),
-        expected: expected * factor,
-        prepQuantity: row.soldByWeight
-          ? expected * factor
-          : Math.ceil(expected * factor),
-        remainingAfterForecast:
-          (Math.max(0, row.inStock) - expected) * factor,
-        inventoryNeedsCorrection: row.inStock < 0,
-        countedToday: latestCountByVariant.has(row.variantExternalId),
-        status: row.status,
-      };
-    })
-    .filter((row) => row.expected > 0.0005)
-    .sort((a, b) => b.expected - a.expected)
-    .slice(0, 20);
+  const shiftIngredients = inventory.smartRows.flatMap((row) => {
+    const stock = opsByVariant.get(row.variantExternalId);
+    if (!stock) return [];
+    const expectedNative = currentShift === "MORNING"
+      ? row.expectedTodayMorning : row.expectedTodayAfternoon;
+    const expected = expectedNative * stock.factor;
+    if (expected <= 0.0005) return [];
+    const available = Math.max(0, stock.quantity);
+    return [{
+      variantExternalId: row.variantExternalId,
+      itemName: stock.name,
+      unitLabel: stock.unit,
+      soldByWeight: stock.unit !== "pz",
+      inStock: available,
+      sourceInStock: stock.quantity,
+      expected,
+      prepQuantity: stock.unit === "pz" ? Math.ceil(expected) : expected,
+      remainingAfterForecast: available - expected,
+      inventoryNeedsCorrection: stock.quantity < 0,
+      countedToday: latestCountByVariant.has(row.variantExternalId),
+      status: row.status,
+    }];
+  }).sort((a, b) => b.expected - a.expected).slice(0, 20);
 
   const wasteOptions = inventory.smartRows
     .filter((row) => row.inStock > 0 || row.avgDailyUsage14 > 0)
