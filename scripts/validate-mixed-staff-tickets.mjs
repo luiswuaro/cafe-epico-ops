@@ -14,11 +14,11 @@ try{
   const {calculateStaffTicket:quote,calculateMixedTicketSettlement:settle}=
     createRequire(path.join(dir,"run.cjs"))("./ticket.cjs");
   const customer={key:"a",name:"Latte cliente",category:"CALIENTES",basePrice:70,extrasPrice:0,
-    ownThermos:false,staffBenefit:"NONE",employeeId:null};
+    ownThermos:false,serviceMode:"DINE_IN",staffBenefit:"NONE",employeeId:null};
   const free={key:"b",name:"Latte personal",category:"CALIENTES",basePrice:60,extrasPrice:0,
-    ownThermos:false,staffBenefit:"INCLUDED_DRINK",employeeId:"azucena"};
+    ownThermos:false,serviceMode:"DINE_IN",staffBenefit:"INCLUDED_DRINK",employeeId:"azucena"};
   const additional={key:"c",name:"Moka trabajador",category:"FRÍAS",basePrice:80,extrasPrice:10,
-    ownThermos:false,staffBenefit:"ADDITIONAL_10",employeeId:"otro"};
+    ownThermos:false,serviceMode:"DINE_IN",staffBenefit:"ADDITIONAL_10",employeeId:"otro"};
   let t=quote([customer,free]);
   assert.equal(t.valid,true);
   assert.equal(t.listedTotal,130);
@@ -34,6 +34,27 @@ try{
   assert.equal(t.customerEligibleTotal,70);
   assert.deepEqual(settle(t,20),{customerDue:50,staffDue:82,totalDue:132,earnedPoints:2.5});
   assert.throws(()=>settle(t,80),/cliente/);
+  // Cliente seleccionado y dos bebidas de personal: no hay puntos para el cliente.
+  t=quote([free,additional]);
+  assert.equal(t.customerEligibleTotal,0);
+  assert.equal(t.staffPayable,82);
+  assert.deepEqual(settle(t,0),{customerDue:0,staffDue:82,totalDue:82,earnedPoints:0});
+  assert.throws(()=>settle(t,1),/cliente/);
+  // Azucena: bebida gratis sólo para aquí, se cobra si está para llevar.
+  t=quote([{...free,serviceMode:"TAKEAWAY"}]);
+  assert.equal(t.valid,false);
+  assert.equal(t.staffDiscount,0);
+  assert.ok(t.warnings.some(w=>w.includes("solo para consumir aquí")));
+  // 10% de descuento sí se aplica para llevar, con empaque normal.
+  t=quote([{...additional,employeeId:"azucena",serviceMode:"TAKEAWAY"}]);
+  assert.equal(t.valid,true);
+  assert.equal(t.staffDiscount,8);
+  assert.equal(t.staffPayable,82);
+  // Mezcla normal: cliente para llevar + cortesía de personal aquí.
+  t=quote([{...customer,serviceMode:"TAKEAWAY"},free]);
+  assert.equal(t.valid,true);
+  assert.equal(t.customerEligibleTotal,70);
+  assert.equal(settle(t,20).earnedPoints,2.5);
   t=quote([free,{...free,key:"d",employeeId:"otro"}]);
   assert.equal(t.valid,true); // Dos empleados distintos, ambos con bebida incluida.
   assert.equal(t.staffDiscount,120);
