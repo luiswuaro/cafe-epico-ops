@@ -6,8 +6,8 @@ import { addProductsToLiveCommand } from "./orders/live-actions";
 import {
   createPosCustomer,
   saveLiveCommand,
-  createShadowCommand,
-  createShadowSale,
+  submitShadowSale,
+  submitShadowCommand,
 } from "./actions";
 import { submitLiveSale } from "./live-actions";
 import type {ExtraOption} from "@/src/application/pos/extra-catalog";
@@ -97,6 +97,8 @@ export function PosClient({
   const [orderNote,setOrderNote]=useState("");
   const [checkoutState,checkoutAction,checkoutPending]=useActionState(submitLiveSale,{error:null});
   const [saveState,saveAction,savePending]=useActionState(saveLiveCommand,{error:null});
+  const [shadowState,shadowAction]=useActionState(submitShadowSale,{error:null});
+  const [shadowSaveState,shadowSaveAction,shadowSavePending]=useActionState(submitShadowCommand,{error:null});
 
   const catalogById = useMemo(
     () => new Map(catalog.map((item) => [item.id, item])),
@@ -246,6 +248,71 @@ export function PosClient({
     setCart((current) =>
       current.map((line) => (line.key === key ? { ...line, note } : line)),
     );
+  }
+
+  if(checkoutOpen&&!liveEnabled&&!savedTicket){
+    const cashPaid=tendered.trim()!==""?Number(tendered):NaN;
+    const cashSufficient=Number.isFinite(cashPaid)&&cashPaid>=total;
+    const cashChange=cashSufficient
+      ?Math.round((cashPaid-total+Number.EPSILON)*100)/100:0;
+    return <div className="pos-layout" style={{gridTemplateColumns:"minmax(0,1fr)"}}>
+      <section className="card stack" style={{maxWidth:780,margin:"0 auto",width:"100%"}}>
+        <p className="eyebrow">POS · PREVIEW · SIMULACIÓN SEGURA</p>
+        <h2>Probar cobro sin registrar venta</h2>
+        <p className="status-warn" role="status">
+          Este preview está en modo espejo. El simulador NO cobra, no crea tickets,
+          no registra ventas, no modifica caja ni descuenta inventario.
+        </p>
+        <p className="muted">Pedido: <strong>{ticketNamePreview}</strong>
+          {" · "}{ticketServiceMode==="TAKEAWAY"?"Para llevar":"Aquí"}
+        </p>
+        <div className="stack">
+          {cartLines.map((line,index)=><div key={line.key} className="pos-cart-line"
+            style={{display:"flex",justifyContent:"space-between",gap:12}}>
+            <div>
+              <strong>{index+1}. {line.item.name}</strong>
+              <p className="muted" style={{margin:0}}>
+                {line.customerContainer
+                  ?"Termo propio · descuento de "+money.format(OWN_CONTAINER_DISCOUNT_MXN)+" · sin desechables"
+                  :line.serviceMode==="TAKEAWAY"?"Para llevar · con empaque":"Aquí"}
+              </p>
+              {line.extras.length>0&&<small className="muted">
+                Extras · +{money.format(extraCharge(line))}
+              </small>}
+            </div>
+            <strong>{money.format(unitPrice(line))}</strong>
+          </div>)}
+        </div>
+        <div className="pos-total"><strong>TOTAL SIMULADO</strong>
+          <strong>{money.format(total)}</strong></div>
+        <label>Método de pago (simulado)
+          <select value={paymentMethod}
+            onChange={e=>setPaymentMethod(e.target.value as "CASH"|"CARD"|"TRANSFER")}>
+            <option value="CASH">Efectivo</option>
+            <option value="CARD">Tarjeta</option>
+            <option value="TRANSFER">Transferencia</option>
+          </select>
+        </label>
+        {paymentMethod==="CASH"&&<div className="stack">
+          <label>Importe recibido (simulado)
+            <input type="number" min="0" step=".01" inputMode="decimal"
+              value={tendered} onChange={e=>setTendered(e.target.value)}
+              placeholder="Ej. 100"/>
+          </label>
+          <p className={cashSufficient?"status-ok":"status-warn"} role="status">
+            {cashSufficient
+              ?"Cambio a entregar: "+money.format(cashChange)
+              :"Ingresa una cantidad al menos igual al total para calcular el cambio."}
+          </p>
+        </div>}
+        <p className="muted">El descuento y la receta se calculan en el servidor cuando
+          el cobro LIVE está habilitado. Esta pantalla es una prueba visual;
+          no confirma una transacción real.</p>
+        <button type="button" className="button" onClick={()=>setCheckoutOpen(false)}>
+          ← Volver a editar el pedido
+        </button>
+      </section>
+    </div>;
   }
 
   if(checkoutOpen&&liveEnabled&&!savedTicket){
@@ -480,8 +547,9 @@ export function PosClient({
             </div>
           </section>
         )}
-        {saveState.error&&<p className="status-bad" role="alert">
-          Comanda no guardada: {saveState.error}. Los productos y notas siguen en el carrito.
+        {(saveState.error||shadowSaveState.error||shadowState.error)&&<p className="status-bad" role="alert">
+          {saveState.error||shadowSaveState.error||shadowState.error}
+          {" "}Los productos y notas siguen en el carrito.
         </p>}
         <div className="pos-cart-lines">
           {cartLines.length === 0 ? (
@@ -625,7 +693,7 @@ export function PosClient({
           </details>
         </section>}
 
-        <form id="pos-order-command-form" action={savedTicket?addProductsToLiveCommand:liveEnabled?saveAction:createShadowSale} className="stack pos-checkout">
+        <form id="pos-order-command-form" action={savedTicket?addProductsToLiveCommand:liveEnabled?saveAction:shadowAction} className="stack pos-checkout">
           {savedTicket&&<>
             <input type="hidden" name="orderId" value={savedTicket.id}/>
             <input type="hidden" name="requestId" value={additionRequestId}/>
@@ -736,7 +804,7 @@ export function PosClient({
             </>:<>
             <button
               type="submit"
-              formAction={liveEnabled ? saveAction : createShadowCommand}
+              formAction={liveEnabled ? saveAction : shadowSaveAction}
               formNoValidate
               className="pos-command-button"
               disabled={cartLines.length === 0 || savePending || missingTable}
@@ -744,12 +812,12 @@ export function PosClient({
               Enviar comanda · cobrar después
             </button>
             <button
-              type={liveEnabled?"button":"submit"}
+              type="button"
               className="pos-pay-button"
-              onClick={liveEnabled?()=>{setMobileCartOpen(false);setCheckoutOpen(true);}:undefined}
+              onClick={()=>{setMobileCartOpen(false);setCheckoutOpen(true);}}
               disabled={cartLines.length===0||missingTable}
             >
-              {liveEnabled?"Ir a cobrar":"Registrar espejo"} · {money.format(total)}
+              {liveEnabled?"Ir a cobrar":"Simular cobro"} · {money.format(total)}
             </button>
             </>}
           </div>
@@ -776,7 +844,7 @@ export function PosClient({
               </>
             :<>
               <button type="submit" form="pos-order-command-form" formNoValidate
-                formAction={liveEnabled?saveAction:createShadowCommand}
+                formAction={liveEnabled?saveAction:shadowSaveAction}
                 className="pos-command-button"
                 disabled={cartLines.length===0||savePending||missingTable}>
                 {savePending?"Guardando…":"Guardar ticket"}
