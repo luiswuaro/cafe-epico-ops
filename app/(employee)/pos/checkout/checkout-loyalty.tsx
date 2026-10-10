@@ -9,7 +9,8 @@ const money=(n:number)=>new Intl.NumberFormat("es-MX",{style:"currency",currency
 export function redeemAmount(value:string,balance:number,total:number){
   const parsed=Number(value);
   const valid=value.trim()!==""&&Number.isFinite(parsed)&&parsed>=0&&
-    Math.round(parsed*100)===parsed*100&&parsed<=balance&&parsed<=total;
+    Math.abs(Math.round(parsed*100)-parsed*100)<0.000001&&
+    parsed<=balance+0.000001&&parsed<=total+0.000001;
   const points=valid?Math.round(parsed*100)/100:0;
   return {points,valid,remaining:Math.round((total-points)*100)/100};
 }
@@ -27,11 +28,12 @@ export function CheckoutLoyalty({
     registerCheckoutCustomer,{error:null,customer:null} as CheckoutCustomerResult,
   );
   useEffect(()=>{
-    if(registration.customer && registration.customer.id!==selectedId){
+    if(registration.customer){
       onSelect(registration.customer.id,registration.customer);
     }
   },[registration.customer,onSelect]);
-  const customer=customers.find(x=>x.id===selectedId)??registration.customer;
+  const customer=customers.find(x=>x.id===selectedId)??
+    (registration.customer?.id===selectedId?registration.customer:null);
   const pointsBalance=customer?.pointsBalance??0;
   const {points,valid,remaining}=redeemAmount(redeemPoints,pointsBalance,total);
   const visible=customers.filter(x=>x.id===selectedId||x.name.toLocaleLowerCase("es-MX")
