@@ -27,6 +27,8 @@ export type DirectReceiptPayload = {
   }>;
   total: string;
   payment: string;
+  cashTendered?: string | null;
+  cashChange?: string | null;
   customer?: string | null;
   pointsEarned?: string | null;
   pointsBalance?: string | null;
@@ -419,6 +421,14 @@ async function buildRasterTicket(
       y, "900 18px Arial, Helvetica, sans-serif", 23);
   } else {
     y = drawPair(context, "Método(s) de pago", ticket.payment || "—", y);
+    if (ticket.cashTendered && ticket.cashChange) {
+      const suffix = ticket.status === "CANCELLED" ? " (original)" : "";
+      y = drawPair(context, "Efectivo recibido" + suffix, ticket.cashTendered, y);
+      y = drawPair(context, "Cambio entregado" + suffix, ticket.cashChange, y, {
+        font: "900 23px Arial, Helvetica, sans-serif",
+        lineHeight: 29,
+      });
+    }
   }
   if (ticket.status === "CANCELLED") {
     y += 5;
