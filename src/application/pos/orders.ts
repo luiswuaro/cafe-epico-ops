@@ -50,6 +50,7 @@ export async function getOpenPosOrders(
       id: posOrderLines.id,
       orderId: posOrderLines.orderId,
       name: posOrderLines.nameSnapshot,
+      category: posOrderLines.categorySnapshot,
       unitPrice: posOrderLines.unitPrice,
       lineTotal: posOrderLines.lineTotal,
       quantity: posOrderLines.quantity,
