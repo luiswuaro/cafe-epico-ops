@@ -1245,3 +1245,74 @@ export const posCashMovements = pgTable("pos_cash_movements", {
   index("pos_cash_movements_session_idx").on(t.sessionId, t.createdAt),
   index("pos_cash_movements_order_idx").on(t.orderId),
 ]);
+
+
+/**
+ * Contract roasting / maquila: third-party coffee in custody.
+ * Separate from own inventory tables and HiBean posting by design.
+ * All read/write paths must require roast.manage + organization scope.
+ */
+export const roastContractClients = pgTable("roast_contract_clients", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id").notNull().references(() => organizations.id, {onDelete:"cascade"}),
+  name: text("name").notNull(),
+  contact: text("contact"),
+  phone: text("phone"),
+  email: text("email"),
+  notes: text("notes"),
+  ...timestamps,
+}, t=>[index("roast_contract_clients_org_idx").on(t.organizationId)]);
+
+export const roastContractLots = pgTable("roast_contract_lots", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id").notNull().references(() => organizations.id, {onDelete:"cascade"}),
+  clientId: uuid("client_id").notNull().references(() => roastContractClients.id, {onDelete:"restrict"}),
+  coffeeName: text("coffee_name").notNull(),
+  origin: text("origin"),
+  producer: text("producer"),
+  variety: text("variety"),
+  process: text("process"),
+  greenReceivedG: numeric("green_received_g", {precision:12,scale:2}).notNull(),
+  feePerKgGreen: numeric("fee_per_kg_green", {precision:12,scale:2}).notNull().default("0"),
+  status: varchar("status", {length:20}).notNull().default("OPEN"),
+  notes: text("notes"),
+  ...timestamps,
+},t=>[index("roast_contract_lots_org_client_idx").on(t.organizationId,t.clientId)]);
+
+export type RoastContractDefect = { type:string; severity:"PRIMARY"|"SECONDARY"|"OTHER"; count:number; grams:number };
+
+export const roastContractBatches = pgTable("roast_contract_batches", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id").notNull().references(() => organizations.id, {onDelete:"cascade"}),
+  lotId: uuid("lot_id").notNull().references(() => roastContractLots.id, {onDelete:"restrict"}),
+  batchCode: varchar("batch_code", {length:100}).notNull(),
+  roastedAt: timestamp("roasted_at",{withTimezone:true}).notNull().defaultNow(),
+  greenG: numeric("green_g", {precision:12,scale:2}).notNull(),
+  roastedG: numeric("roasted_g", {precision:12,scale:2}).notNull(),
+  profile: text("profile"),
+  firstCrackC: numeric("first_crack_c", {precision:7,scale:2}),
+  dropC: numeric("drop_c", {precision:7,scale:2}),
+  durationS: integer("duration_s"),
+  dtrPct: numeric("dtr_pct", {precision:7,scale:3}),
+  greenDefectSampleG: numeric("green_defect_sample_g", {precision:10,scale:2}),
+  defects: jsonb("defects").$type<RoastContractDefect[]>().notNull().default([]),
+  sensoryNotes: text("sensory_notes"),
+  qualityNotes: text("quality_notes"),
+  sourceBatchId: uuid("source_batch_id").references(() => roastBatches.id, {onDelete:"set null"}),
+  ...timestamps,
+},t=>[
+  index("roast_contract_batches_lot_date_idx").on(t.lotId,t.roastedAt),
+  uniqueIndex("roast_contract_batches_code_uidx").on(t.lotId,t.batchCode),
+  uniqueIndex("roast_contract_batches_source_uidx").on(t.sourceBatchId),
+]);
+
+export const roastContractDeliveries = pgTable("roast_contract_deliveries", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id").notNull().references(() => organizations.id, {onDelete:"cascade"}),
+  batchId: uuid("batch_id").notNull().references(() => roastContractBatches.id, {onDelete:"restrict"}),
+  grams: numeric("grams", {precision:12,scale:2}).notNull(),
+  deliveredAt: timestamp("delivered_at", {withTimezone:true}).notNull().defaultNow(),
+  recipient: text("recipient"),
+  notes: text("notes"),
+  ...timestamps,
+},t=>[index("roast_contract_deliveries_batch_idx").on(t.batchId)]);
