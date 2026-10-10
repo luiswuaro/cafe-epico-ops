@@ -4,9 +4,8 @@ param(
 $ErrorActionPreference = "Stop"
 
 $taskName = if ($Instance -eq "Barra") { "CafeEpicoOps-PrintBridge-Barra" } else { "CafeEpicoOps-PrintBridge" }
-$configPath = Join-Path (Join-Path $env:LOCALAPPDATA "CafeEpicoOps") (
-  if ($Instance -eq "Barra") { "print-bridge-barra.json" } else { "print-bridge.json" }
-)
+$configFile = if ($Instance -eq "Barra") { "print-bridge-barra.json" } else { "print-bridge.json" }
+$configPath = Join-Path (Join-Path $env:LOCALAPPDATA "CafeEpicoOps") $configFile
 
 if (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) {
   Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
