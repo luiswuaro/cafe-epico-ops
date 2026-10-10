@@ -212,7 +212,7 @@ export function PosClient({
   const mixedSettlement=staffTicket.valid&&redemption.valid
     ?calculateMixedTicketSettlement(staffTicket,redemption.points):null;
   const monetaryDue=mixedSettlement?.totalDue??staffTicket.totalBeforePoints;
-  const pointsEarned=mixedSettlement?.earnedPoints??0;
+  const pointsEarned=selectedCustomer?(mixedSettlement?.earnedPoints??0):0;
   const pointCheckout=!staffTicket.valid || !redemption.valid ||
     (redemption.points>0&&!selectedCustomer);
   const loyaltyControl=<CheckoutLoyalty customers={createdCustomer
