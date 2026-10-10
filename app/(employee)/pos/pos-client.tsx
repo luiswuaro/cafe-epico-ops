@@ -202,6 +202,7 @@ export function PosClient({
     key:line.key,name:line.item.name,
     category:line.item.category,basePrice:line.item.price,
     extrasPrice:extraCharge(line),ownThermos:line.customerContainer,
+    serviceMode:line.serviceMode,
     staffBenefit:lineBenefits[line.key]?.kind??"NONE",
     employeeId:lineBenefits[line.key]?.employeeId||null,
   })));
@@ -239,10 +240,12 @@ export function PosClient({
           <select value={assigned.kind}
             onChange={e=>assignLineBenefit(line.key,{kind:e.target.value as StaffBenefitKind})}>
             <option value="NONE">Cliente / venta normal</option>
-            <option value="INCLUDED_DRINK">Personal · bebida incluida</option>
+<option value="INCLUDED_DRINK" disabled={line.serviceMode!=="DINE_IN"}>Personal · bebida incluida (solo aquí)</option>
             <option value="ADDITIONAL_10">Personal · bebida adicional −10%</option>
           </select>
         </label>
+        {assigned.kind==="INCLUDED_DRINK"&&<small className="muted">Cortesía incluida: solo se permite consumir aquí. Si está para llevar, cambia la preparación en el carrito.</small>}
+        {assigned.kind==="ADDITIONAL_10"&&<small className="muted">10% adicional: permitido aquí y para llevar. No se acumula con descuento de termo propio en la misma bebida.</small>}
         {assigned.kind!=="NONE"&&<label>¿Qué trabajador la consume?
           <select value={assigned.employeeId}
             onChange={e=>assignLineBenefit(line.key,{employeeId:e.target.value})}>
@@ -265,7 +268,8 @@ export function PosClient({
       <span>Beneficio de personal</span><strong>−{money.format(staffTicket.staffDiscount)}</strong>
     </div>}
     <div style={{display:"flex",justifyContent:"space-between"}}>
-      <span>Productos de cliente</span><strong>{money.format(staffTicket.customerEligibleTotal)}</strong>
+      <span>Bebidas del cliente {selectedCustomer?"· "+selectedCustomer.name:""}</span>
+      <strong>{money.format(staffTicket.customerEligibleTotal)}</strong>
     </div>
     <div style={{display:"flex",justifyContent:"space-between"}}>
       <span>Consumo de personal por pagar</span><strong>{money.format(staffTicket.staffPayable)}</strong>
@@ -278,6 +282,10 @@ export function PosClient({
     </div>
     <p className="muted">Puntos nuevos del cliente: +{pointsEarned.toFixed(2)} pts.
       Los consumos de personal no acumulan puntos.</p>
+    {selectedCustomer&&staffTicket.customerEligibleTotal===0&&
+      <p className="muted">El cliente {selectedCustomer.name} permanece identificado en el pedido, pero todas las bebidas están asignadas al personal. No hay puntos canjeables ni puntos nuevos para el cliente.</p>}
+    {selectedCustomer&&staffTicket.customerEligibleTotal>0&&staffSelected&&
+      <p className="muted">Los puntos de {selectedCustomer.name} aplican exclusivamente a los productos marcados «Cliente / venta normal».</p>}
   </div>;
 
   const productCount = (id: string) =>
@@ -370,7 +378,12 @@ export function PosClient({
         <div className="pos-total"><strong>Consumo a precio vigente</strong>
           <strong>{money.format(total)}</strong></div>
         {assignBenefits}
-        {staffTicket.customerEligibleTotal>0&&loyaltyControl}
+        <CheckoutLoyalty customers={createdCustomer
+          ?[...customers.filter(c=>c.id!==createdCustomer.id),createdCustomer]:customers}
+          selectedId={customerId} onSelect={checkoutCustomerChange}
+          redeemPoints={redeemPoints} onRedeemChange={setRedeemPoints}
+          total={staffTicket.customerEligibleTotal} liveEnabled={liveEnabled}
+          identityOnly={staffTicket.customerEligibleTotal===0}/>
         {breakdown}
         {previewDue>0?<label>Método de pago (simulado)
           <select value={paymentMethod}
@@ -415,7 +428,12 @@ export function PosClient({
         <div className="pos-total"><strong>Consumo a precio vigente</strong>
           <strong>{money.format(total)}</strong></div>
         {assignBenefits}
-        {staffTicket.customerEligibleTotal>0&&loyaltyControl}
+        <CheckoutLoyalty customers={createdCustomer
+          ?[...customers.filter(c=>c.id!==createdCustomer.id),createdCustomer]:customers}
+          selectedId={customerId} onSelect={checkoutCustomerChange}
+          redeemPoints={redeemPoints} onRedeemChange={setRedeemPoints}
+          total={staffTicket.customerEligibleTotal} liveEnabled={liveEnabled}
+          identityOnly={staffTicket.customerEligibleTotal===0}/>
         {breakdown}
         {staffSelected&&<p className="status-warn" role="alert">
           Consumo de personal todavía en validación. El cobro LIVE de este
