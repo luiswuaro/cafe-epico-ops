@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { createContractBatch } from "./actions";
-import { defectTypes } from "@/src/application/roasting/contracts";
+import { defectTypes } from "@/src/application/roasting/contract-utils";
 
 type Row={key:number;type:string;severity:"PRIMARY"|"SECONDARY"|"OTHER";count:string;grams:string};
 const primary=new Set(["Negro completo","Agrio completo","Materia extraña"]);
