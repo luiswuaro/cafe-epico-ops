@@ -3,13 +3,14 @@
 import { useEffect, useRef, useState } from "react";
 import { printKitchenSlip } from "./kitchen-print-button";
 import { type KitchenSlip } from "@/src/application/pos/kitchen-slip";
+import {autoKitchenModes,type KitchenAutoEvent} from "@/src/domain/pos/kitchen-auto-policy";
 import {
   AUTO_KITCHEN_DINE_IN_KEY,
   AUTO_KITCHEN_TAKEAWAY_KEY,
   AUTO_KITCHEN_ATTEMPT_PREFIX,
 } from "./kitchen-print-settings";
 
-export type AutoKitchenEvent = "saved"|"paid"|"paid-direct";
+export type AutoKitchenEvent = KitchenAutoEvent;
 
 export function AutoKitchenPrint({
   slip,event,eventId,roundId,
@@ -33,17 +34,10 @@ export function AutoKitchenPrint({
     const autoDineIn=window.localStorage.getItem(AUTO_KITCHEN_DINE_IN_KEY)==="1";
     const autoTakeaway=window.localStorage.getItem(AUTO_KITCHEN_TAKEAWAY_KEY)==="1";
 
-    // Mesa guardada: sólo AQUÍ y sólo la ronda recién guardada.
-    // Mesa ya guardada cobrada: sólo PARA LLEVAR (AQUÍ ya se envió).
-    // Cobro directo: ambos servicios son nuevos; respetar ambos ON/OFF y
-    // enviarlos en una sola comanda cuando las dos opciones estén activas.
-    const selectedModes:Array<"DINE_IN"|"TAKEAWAY">=event==="saved"
-      ?(autoDineIn?["DINE_IN"]:[])
-      :event==="paid"?(autoTakeaway?["TAKEAWAY"]:[])
-      :[
-        ...(autoDineIn?["DINE_IN" as const]:[]),
-        ...(autoTakeaway?["TAKEAWAY" as const]:[]),
-      ];
+    // GUARDADO (aquí o para llevar): imprimir exclusivamente la nueva ronda.
+    // DIRECTO: imprimir la orden nueva después de confirmar cobro.
+    // PAGO POSTERIOR de una comanda guardada: no reimprimirla jamás.
+    const selectedModes=autoKitchenModes(event,autoDineIn,autoTakeaway);
     if(!selectedModes.length)return;
     const eligible=slip.lines.some(line=>
       selectedModes.some(mode=>line.serviceMode===mode)&&
