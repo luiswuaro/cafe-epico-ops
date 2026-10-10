@@ -79,7 +79,7 @@ export default async function PosOrdersPage({
   const previewShadowPrint=process.env.VERCEL_ENV==="preview";
   const autoOrder=params.autoKitchen==="saved"&&autoId
     ?orders.find(order=>order.id===autoId&&(
-      order.mode==="LIVE"||(previewShadowPrint&&order.mode==="SHADOW")
+      order.mode==="LIVE"||order.mode==="SHADOW"
     ))
     :null;
   const autoRoundId=autoOrder
@@ -262,7 +262,7 @@ export default async function PosOrdersPage({
                   </div>
                 )}
 
-                {(order.mode==="LIVE"||(previewShadowPrint&&order.mode==="SHADOW"))&&
+                {(order.mode==="LIVE"||order.mode==="SHADOW")&&
                   <KitchenPrintButton
                     slip={{
                       folio:order.folio,
