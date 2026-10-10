@@ -445,7 +445,12 @@ export async function payLiveCommand(formData:FormData) {
   await assertEmployeePermission(employee.id,"pos.sell",employee.homeStoreId);
   if(!isPosLiveEnabled())throw new Error("POS LIVE deshabilitado.");
   const orderId=z.string().uuid().parse(String(formData.get("orderId")??""));
-  const paymentMethod=paymentSchema.parse(String(formData.get("paymentMethod")??""));
+  const paymentMethod=z.enum(["CASH","CARD","TRANSFER","POINTS"])
+    .parse(String(formData.get("paymentMethod")??""));
+  const customerId=z.union([z.string().uuid(),z.literal("")])
+    .parse(String(formData.get("customerId")??""));
+  const redeemPoints=z.coerce.number().min(0)
+    .parse(String(formData.get("redeemPoints")??"0"));
   const tenderedRaw=String(formData.get("tenderedAmount")??"").trim();
   const tenderedAmount=paymentMethod==="CASH" && tenderedRaw!==""?Number(tenderedRaw):null;
   const db=getDb();
@@ -476,7 +481,8 @@ export async function payLiveCommand(formData:FormData) {
       quantity:Number(line.quantity),note:line.note,
       serviceMode:line.expectedConsumption?.serviceMode==="TAKEAWAY"?"TAKEAWAY":"DINE_IN",
     })),
-    customerId:order.customerId,
+    customerId:customerId||null,
+    redeemPoints,
     serviceMode:order.serviceMode as PosServiceMode,
     paymentMethod,tenderedAmount,
     tableLabel:order.tableLabel,note:order.note,
