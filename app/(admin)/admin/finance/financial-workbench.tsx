@@ -6,23 +6,22 @@ import {afterTaxRevenueRatio, estimateTaxesOnGrossSales, IVA_RATE_PERCENT, ISR_R
 
 type Data = Awaited<ReturnType<typeof getFinancialPreview>>;
 const money = new Intl.NumberFormat("es-MX", {style:"currency",currency:"MXN",maximumFractionDigits:2});
-const number = (x:number) => Number.isFinite(x) ? x : 0;
 const round = (x:number) => Math.round(x*100)/100;
 type Expense = {
   id:string;
   name:string;
-  amount:number;
+  amount:string;
   recurrence:"MONTHLY"|"ONE_OFF";
   classification:"FIXED"|"VARIABLE";
   month:string;
   status:"ESTIMATED"|"PAID";
 };
 const expenseDefaults:Expense[] = [
-  {id:"nomina",name:"Nómina estructural",amount:8000,recurrence:"MONTHLY",classification:"FIXED",month:"",status:"ESTIMATED"},
-  {id:"renta",name:"Renta del local",amount:4000,recurrence:"MONTHLY",classification:"FIXED",month:"",status:"ESTIMATED"},
-  {id:"electricidad",name:"Electricidad",amount:700,recurrence:"MONTHLY",classification:"FIXED",month:"",status:"ESTIMATED"},
-  {id:"internet",name:"Internet",amount:500,recurrence:"MONTHLY",classification:"FIXED",month:"",status:"ESTIMATED"},
-  {id:"contadora",name:"Honorarios contables",amount:1000,recurrence:"MONTHLY",classification:"FIXED",month:"",status:"ESTIMATED"},
+  {id:"nomina",name:"Nómina estructural",amount:"8000",recurrence:"MONTHLY",classification:"FIXED",month:"",status:"ESTIMATED"},
+  {id:"renta",name:"Renta del local",amount:"4000",recurrence:"MONTHLY",classification:"FIXED",month:"",status:"ESTIMATED"},
+  {id:"electricidad",name:"Electricidad",amount:"700",recurrence:"MONTHLY",classification:"FIXED",month:"",status:"ESTIMATED"},
+  {id:"internet",name:"Internet",amount:"500",recurrence:"MONTHLY",classification:"FIXED",month:"",status:"ESTIMATED"},
+  {id:"contadora",name:"Honorarios contables",amount:"1000",recurrence:"MONTHLY",classification:"FIXED",month:"",status:"ESTIMATED"},
 ];
 const validMoney=(amount:unknown)=>Number.isFinite(Number(amount))
   ?Math.max(0,Math.min(100000000,Math.round(Number(amount)*100)/100)):0;
@@ -30,10 +29,10 @@ function restoreExpenses(raw:unknown):Expense[]|null{
   if(!Array.isArray(raw))return null;
   return raw.filter((value):value is Record<string,unknown>=>
     Boolean(value)&&typeof value==="object"&&!Array.isArray(value))
-    .slice(0,120).map((e,index)=>({
+    .map((e,index)=>({
       id:typeof e.id==="string"&&e.id.length>0?e.id:"restored-"+index,
       name:typeof e.name==="string"?e.name.slice(0,100):"Sin concepto",
-      amount:validMoney(e.amount),
+      amount:String(validMoney(e.amount)),
       recurrence:e.recurrence==="ONE_OFF"?"ONE_OFF":"MONTHLY",
       classification:e.classification==="VARIABLE"?"VARIABLE":"FIXED",
       month:typeof e.month==="string"&&/^\d{4}-\d{2}$/.test(e.month)?e.month:"",
@@ -75,16 +74,16 @@ export function FinancialWorkbench({data}:{data:Data}){
           // Migrar el presupuesto previo para no perder gastos escritos por el propietario.
           const old=JSON.parse(window.localStorage.getItem("epico-finance-sandbox-v1")||"{}");
           const priorFixed=old.fixed&&typeof old.fixed==="object"?old.fixed:{};
-          const migrated=expenseDefaults.map(e=>({...e,amount:validMoney(priorFixed[e.id]??e.amount)}));
+          const migrated=expenseDefaults.map(e=>({...e,amount:String(validMoney(priorFixed[e.id]??e.amount))}));
           const historicExtra=validMoney(old.extraCost);
           if(historicExtra>0)migrated.push({
-            id:"gasto-previo-adicional",name:"Extraordinarios anteriores",amount:historicExtra,
+            id:"gasto-previo-adicional",name:"Extraordinarios anteriores",amount:String(historicExtra),
             recurrence:"ONE_OFF",classification:"VARIABLE",month:data.month,status:"ESTIMATED"
           });
           for(const key of ["mantenimiento","otros"]){
             if(validMoney(priorFixed[key])>0)migrated.push({
               id:key,name:key==="mantenimiento"?"Mantenimiento y reparaciones":"Otros gastos corrientes",
-              amount:validMoney(priorFixed[key]),recurrence:"MONTHLY",
+              amount:String(validMoney(priorFixed[key])),recurrence:"MONTHLY",
               classification:"FIXED",month:"",status:"ESTIMATED"
             });
           }
@@ -109,7 +108,7 @@ export function FinancialWorkbench({data}:{data:Data}){
   const updateExpense=(id:string,patch:Partial<Expense>)=>
     setExpenses(rows=>rows.map(e=>e.id===id?{...e,...patch}:e));
   const addExpense=()=>setExpenses(rows=>[...rows,{
-    id:crypto.randomUUID(),name:"Nuevo gasto",amount:0,
+    id:crypto.randomUUID(),name:"Nuevo gasto",amount:"0",
     recurrence:"ONE_OFF",classification:"VARIABLE",month:data.month,status:"ESTIMATED"
   }]);
 
@@ -124,19 +123,19 @@ export function FinancialWorkbench({data}:{data:Data}){
   const recurring=currentExpenses.filter(e=>e.recurrence==="MONTHLY");
   const oneTime=currentExpenses.filter(e=>e.recurrence==="ONE_OFF");
   const fixedMonthly=round(recurring.filter(e=>e.classification==="FIXED")
-    .reduce((sum,e)=>sum+e.amount,0));
+    .reduce((sum,e)=>sum+validMoney(e.amount),0));
   const variableMonthly=round(recurring.filter(e=>e.classification==="VARIABLE")
-    .reduce((sum,e)=>sum+e.amount,0));
+    .reduce((sum,e)=>sum+validMoney(e.amount),0));
   const totalMonthly=round(fixedMonthly+variableMonthly);
-  const oneTimeExpense=round(oneTime.reduce((sum,e)=>sum+e.amount,0));
+  const oneTimeExpense=round(oneTime.reduce((sum,e)=>sum+validMoney(e.amount),0));
   const totalDays=monthDays(data.month);
   const currentDay=Math.min(totalDays,Number(new Intl.DateTimeFormat("en-US",{
     timeZone:"America/Mexico_City",day:"numeric"
   }).format(new Date())));
   const proratedMonthly=round(totalMonthly*currentDay/totalDays);
   const expenseCharge=round(proratedMonthly+oneTimeExpense);
-  const confirmedExpenses=round(currentExpenses.filter(e=>e.status==="PAID")
-    .reduce((sum,e)=>sum+e.amount,0));
+  const confirmedExpenses=round(currentExpenses.filter(e=>e.status==="PAID"&&e.month===data.month)
+    .reduce((sum,e)=>sum+validMoney(e.amount),0));
   const cardSales=data.payments.CARD??0;
   const cardCost=round(cardSales*cardRate/100);
   // En OPS el precio de venta es público, por tanto IVA está contenido en el cobro.
@@ -244,7 +243,7 @@ export function FinancialWorkbench({data}:{data:Data}){
           <p className="eyebrow">CONTROL DE GASTOS · EDITABLE</p>
           <h2>Gastos corrientes, fijos y extraordinarios</h2>
         </div>
-        <button type="button" onClick={addExpense} disabled={expenses.length>=120}>+ Añadir gasto</button>
+        <button type="button" onClick={addExpense}>+ Añadir gasto</button>
       </div>
       <p className="muted">Puedes modificar los conceptos iniciales, añadir cuantos gastos necesites y eliminarlos. Mensual: se prorratea hasta hoy; puntual: se descuenta completo sólo en {data.month}. Los datos quedan guardados únicamente en este navegador en la versión de pruebas.</p>
       <div className="table-scroll"><table>
@@ -262,9 +261,12 @@ export function FinancialWorkbench({data}:{data:Data}){
               <option value="MONTHLY">Mensual</option><option value="ONE_OFF">Sólo este mes</option>
             </select></td>
             <td><input aria-label={"Importe de "+e.name} type="number" min="0" max="100000000" step="0.01"
-              value={e.amount} onChange={event=>updateExpense(e.id,{amount:validMoney(event.target.value)})}/></td>
-            <td><select aria-label={"Estado de "+e.name} value={e.status}
-              onChange={event=>updateExpense(e.id,{status:event.target.value as Expense["status"]})}>
+              value={e.amount} onChange={event=>updateExpense(e.id,{amount:event.target.value})}/></td>
+            <td><select aria-label={"Estado de "+e.name} value={e.status==="PAID"&&e.month===data.month?"PAID":"ESTIMATED"}
+              onChange={event=>updateExpense(e.id,{
+                status:event.target.value as Expense["status"],
+                month:e.recurrence==="ONE_OFF"||event.target.value==="PAID"?data.month:""
+              })}>
               <option value="ESTIMATED">Estimado</option><option value="PAID">Pagado (manual)</option>
             </select></td>
             <td><button type="button" onClick={()=>setExpenses(rows=>rows.filter(x=>x.id!==e.id))}
@@ -272,7 +274,7 @@ export function FinancialWorkbench({data}:{data:Data}){
           </tr>)}
         </tbody>
       </table></div>
-      <button type="button" className="button" onClick={addExpense} disabled={expenses.length>=120}>+ Añadir otro gasto</button>
+      <button type="button" className="button" onClick={addExpense}>+ Añadir otro gasto</button>
       <div className="grid">
         <article className="card"><p className="eyebrow">FIJOS MENSUALES</p><div className="metric">{money.format(fixedMonthly)}</div></article>
         <article className="card"><p className="eyebrow">VARIABLES MENSUALES</p><div className="metric">{money.format(variableMonthly)}</div></article>
