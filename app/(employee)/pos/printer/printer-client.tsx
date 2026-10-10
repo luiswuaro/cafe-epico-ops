@@ -62,6 +62,7 @@ async function requestBridge(
     graphics?: boolean;
     fullTicketRaster?: boolean;
     version?: string;
+    rasterBands?: boolean;
   };
 
   if (!response.ok || !data.ok) {
@@ -181,7 +182,10 @@ export function PrinterBridgeSetup() {
       setStatus(
         "Conectado · " +
           (data.printer || "impresora térmica") +
-          (data.fullTicketRaster ? " · ticket gráfico OK" : " · gráficos OK"),
+          " · puente v"+(data.version||"desconocida")+
+          (data.rasterBands
+            ?" · impresión gráfica por bandas lista"
+            :" · ACTUALIZACIÓN REQUERIDA para comandas (v1.3.0)"),
       );
     } catch (error) {
       setPrinter(null);
@@ -196,6 +200,9 @@ export function PrinterBridgeSetup() {
     setStatus("Renderizando prueba con acentos…");
 
     try {
+      const bridge=await requestBridge(url,token,"/status");
+      if(!bridge.rasterBands)
+        throw new Error("Actualiza el puente a v1.3.0 para imprimir gráficos de forma segura.");
       const raster = buildAccentTestRaster();
       const data = await requestBridge(url, token, "/print", {
         method: "POST",
@@ -316,6 +323,8 @@ export function KitchenPrinterSetup() {
     }
     try{
       const result=await requestBridge(shownUrl,shownToken,"/status");
+      if(!result.rasterBands)
+        throw new Error("Actualiza el puente de barra a v1.3.0 antes de activarlo.");
       window.localStorage.setItem(KITCHEN_BRIDGE_KEY,JSON.stringify({
         url:shownUrl.replace(/\/$/,""),token:shownToken,
       } satisfies StoredConfig));
