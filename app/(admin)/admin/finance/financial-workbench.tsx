@@ -2,27 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { getFinancialPreview } from "@/src/application/finance/preview";
+import { saveSharedFinancialBudget } from "./actions";
+import { defaultExpenses, type FinancialExpense as Expense, type FinancialBudgetSnapshot, type FinancialBudgetPayload } from "@/src/domain/finance/budget";
 import {afterTaxRevenueRatio, estimateTaxesOnGrossSales, IVA_RATE_PERCENT, ISR_RESICO_ASSUMED_RATE_PERCENT} from "@/src/domain/finance/taxes";
 
 type Data = Awaited<ReturnType<typeof getFinancialPreview>>;
 const money = new Intl.NumberFormat("es-MX", {style:"currency",currency:"MXN",maximumFractionDigits:2});
 const round = (x:number) => Math.round(x*100)/100;
-type Expense = {
-  id:string;
-  name:string;
-  amount:string;
-  recurrence:"MONTHLY"|"ONE_OFF";
-  classification:"FIXED"|"VARIABLE";
-  month:string;
-  status:"ESTIMATED"|"PAID";
-};
-const expenseDefaults:Expense[] = [
-  {id:"nomina",name:"Nómina estructural",amount:"8000",recurrence:"MONTHLY",classification:"FIXED",month:"",status:"ESTIMATED"},
-  {id:"renta",name:"Renta del local",amount:"4000",recurrence:"MONTHLY",classification:"FIXED",month:"",status:"ESTIMATED"},
-  {id:"electricidad",name:"Electricidad",amount:"700",recurrence:"MONTHLY",classification:"FIXED",month:"",status:"ESTIMATED"},
-  {id:"internet",name:"Internet",amount:"500",recurrence:"MONTHLY",classification:"FIXED",month:"",status:"ESTIMATED"},
-  {id:"contadora",name:"Honorarios contables",amount:"1000",recurrence:"MONTHLY",classification:"FIXED",month:"",status:"ESTIMATED"},
-];
 const validMoney=(amount:unknown)=>Number.isFinite(Number(amount))
   ?Math.max(0,Math.min(100000000,Math.round(Number(amount)*100)/100)):0;
 function restoreExpenses(raw:unknown):Expense[]|null{
@@ -49,24 +35,47 @@ function verdict(cost:{known:number;unpriced:string[]}) {
   return cost.unpriced.length===0 ? "COGS cubierto" : "Sin precio: "+cost.unpriced.join(", ");
 }
 
-export function FinancialWorkbench({data}:{data:Data}){
-  const [expenses,setExpenses]=useState<Expense[]>(expenseDefaults);
-  const [variableRatio,setVariableRatio]=useState(30);
-  const [cardRate,setCardRate]=useState(3.5);
+export function FinancialWorkbench({data,sharedBudget}:{
+  data:Data;sharedBudget:FinancialBudgetSnapshot|null;
+}){
+  const [expenses,setExpenses]=useState<Expense[]>(sharedBudget?.expenses??defaultExpenses);
+  const [variableRatio,setVariableRatio]=useState(sharedBudget?.variableRatio??30);
+  const [cardRate,setCardRate]=useState(sharedBudget?.cardRate??3.5);
+  const [revision,setRevision]=useState(sharedBudget?.revision??0);
+  const [savedAt,setSavedAt]=useState(sharedBudget?.updatedAt??"");
+  const [saving,setSaving]=useState(false);
+  const [dirty,setDirty]=useState(false);
+  const [saveMessage,setSaveMessage]=useState("");
+  const [localBackup,setLocalBackup]=useState<FinancialBudgetPayload|null>(null);
   const [legacyTaxWarning,setLegacyTaxWarning]=useState(false);
   const [productId,setProductId]=useState(data.menu[0]?.id??"");
   const [service,setService]=useState<Mode>("DINE_IN");
   const [promo,setPromo]=useState<Promo>("NONE");
   const [filter,setFilter]=useState("");
   const [hydrated,setHydrated]=useState(false);
-  // Preview: datos privados del escenario en el navegador. No escribe en Supabase,
-  // ni registra movimientos contables ni modifica la caja de producción.
+  // Explicit save is required to update shared OPS scenario. Local drafts stay
+  // local; neither save path creates bank/payment or fiscal transactions.
   useEffect(()=>{
     const timeout=window.setTimeout(()=>{
       try{
         const savedV2=JSON.parse(window.localStorage.getItem("epico-finance-sandbox-v2")||"null");
         const restored=restoreExpenses(savedV2?.expenses);
-        if(restored){
+        if(sharedBudget){
+          // Don't overwrite the shared budget silently with an old local scenario.
+          // Offer to recover different unsaved local estimates manually.
+          if(restored){
+            const backup:FinancialBudgetPayload={
+              expenses:restored,
+              variableRatio:typeof savedV2.variableRatio==="number"?savedV2.variableRatio:30,
+              cardRate:typeof savedV2.cardRate==="number"?savedV2.cardRate:3.5,
+            };
+            const shared:FinancialBudgetPayload={
+              expenses:sharedBudget.expenses,variableRatio:sharedBudget.variableRatio,
+              cardRate:sharedBudget.cardRate,
+            };
+            if(JSON.stringify(backup)!==JSON.stringify(shared))setLocalBackup(backup);
+          }
+        }else if(restored){
           setExpenses(restored);
           if(typeof savedV2.variableRatio==="number")setVariableRatio(savedV2.variableRatio);
           if(typeof savedV2.cardRate==="number")setCardRate(savedV2.cardRate);
@@ -74,7 +83,7 @@ export function FinancialWorkbench({data}:{data:Data}){
           // Migrar el presupuesto previo para no perder gastos escritos por el propietario.
           const old=JSON.parse(window.localStorage.getItem("epico-finance-sandbox-v1")||"{}");
           const priorFixed=old.fixed&&typeof old.fixed==="object"?old.fixed:{};
-          const migrated=expenseDefaults.map(e=>({...e,amount:String(validMoney(priorFixed[e.id]??e.amount))}));
+          const migrated=defaultExpenses.map(e=>({...e,amount:String(validMoney(priorFixed[e.id]??e.amount))}));
           const historicExtra=validMoney(old.extraCost);
           if(historicExtra>0)migrated.push({
             id:"gasto-previo-adicional",name:"Extraordinarios anteriores",amount:String(historicExtra),
@@ -97,20 +106,49 @@ export function FinancialWorkbench({data}:{data:Data}){
       setHydrated(true);
     },0);
     return ()=>window.clearTimeout(timeout);
-  },[data.month]);
+  },[data.month,sharedBudget]);
   useEffect(()=>{
-    if(!hydrated)return;
+    if(!hydrated||(!dirty&&sharedBudget))return;
     try{window.localStorage.setItem("epico-finance-sandbox-v2",JSON.stringify(
       {expenses,variableRatio,cardRate}
-    ));}catch{/* El preview funciona sin almacenamiento. */}
-  },[expenses,variableRatio,cardRate,hydrated]);
+    ));}catch{/* Local draft storage is best effort. */}
+  },[expenses,variableRatio,cardRate,hydrated,dirty,sharedBudget]);
 
-  const updateExpense=(id:string,patch:Partial<Expense>)=>
+  const updateExpense=(id:string,patch:Partial<Expense>)=>{
+    setDirty(true);setSaveMessage("");
     setExpenses(rows=>rows.map(e=>e.id===id?{...e,...patch}:e));
-  const addExpense=()=>setExpenses(rows=>[...rows,{
-    id:crypto.randomUUID(),name:"Nuevo gasto",amount:"0",
-    recurrence:"ONE_OFF",classification:"VARIABLE",month:data.month,status:"ESTIMATED"
-  }]);
+  };
+  const addExpense=()=>{
+    setDirty(true);setSaveMessage("");
+    setExpenses(rows=>[...rows,{
+      id:crypto.randomUUID(),name:"Nuevo gasto",amount:"0",
+      recurrence:"ONE_OFF",classification:"VARIABLE",month:data.month,status:"ESTIMATED"
+    }]);
+  };
+  async function saveBudget(){
+    if(saving)return;
+    setSaving(true);setSaveMessage("");
+    try{
+      const result=await saveSharedFinancialBudget(
+        {expenses,variableRatio,cardRate},revision,
+      );
+      if(result.ok){
+        setRevision(result.revision);setSavedAt(result.updatedAt);
+        setDirty(false);setLocalBackup(null);
+        setSaveMessage("Presupuesto guardado en OPS. Ya puedes abrirlo desde otro dispositivo.");
+      }else setSaveMessage(result.message);
+    }catch{
+      setSaveMessage("No se pudo confirmar el guardado. Revisa tu conexión antes de volver a intentarlo.");
+    }finally{setSaving(false);}
+  }
+  function recoverLocalBackup(){
+    if(!localBackup)return;
+    setExpenses(localBackup.expenses);
+    setVariableRatio(localBackup.variableRatio);
+    setCardRate(localBackup.cardRate);
+    setLocalBackup(null);setDirty(true);
+    setSaveMessage("Borrador recuperado. Revisa los importes antes de guardarlo en OPS.");
+  }
 
   const knownCogs=data.lines.reduce((s,l)=>s+l.cost.known,0);
   const counted=data.lines.reduce((s,l)=>s+l.cost.components,0);
@@ -245,7 +283,27 @@ export function FinancialWorkbench({data}:{data:Data}){
         </div>
         <button type="button" onClick={addExpense}>+ Añadir gasto</button>
       </div>
-      <p className="muted">Puedes modificar los conceptos iniciales, añadir cuantos gastos necesites y eliminarlos. Mensual: se prorratea hasta hoy; puntual: se descuenta completo sólo en {data.month}. Los datos quedan guardados únicamente en este navegador en la versión de pruebas.</p>
+      <div className="ops-budget-save-panel">
+        <div>
+          <strong>{dirty?"Cambios sin guardar en OPS":revision>0?"Presupuesto compartido en OPS":"Presupuesto sin publicar"}</strong>
+          <p className="muted">
+            {revision>0?"Versión "+revision+" · Último guardado "+new Date(savedAt).toLocaleString("es-MX",{timeZone:"America/Mexico_City"}):
+              "El presupuesto actual no está guardado en el servidor."}
+            {" "}Los registros marcados como pagados son manuales, sin conciliación bancaria.
+          </p>
+        </div>
+        <button type="button" onClick={()=>void saveBudget()} disabled={saving}>
+          {saving?"Guardando…":"Guardar presupuesto en OPS"}
+        </button>
+      </div>
+      {localBackup&&<div className="ops-inline-notice">
+        Se encontró un presupuesto anterior en este navegador. El compartido tiene prioridad.
+        <button type="button" className="ops-action-soft" onClick={recoverLocalBackup}>
+          Recuperar borrador local
+        </button>
+      </div>}
+      {saveMessage&&<p role="status" className={dirty?"status-warn":"status-ok"}>{saveMessage}</p>}
+      <p className="muted">Puedes modificar conceptos, añadir gastos y eliminarlos. Mensual: se prorratea hasta hoy; puntual: se descuenta completo sólo en {data.month}. Para compartir cambios con otros dispositivos pulsa «Guardar presupuesto en OPS».</p>
       <div className="table-scroll ops-finance-expenses"><table>
         <thead><tr><th>Concepto</th><th>Tipo</th><th>Periodicidad</th><th>Importe MXN</th><th>Registro</th><th>Acción</th></tr></thead>
         <tbody>
@@ -269,7 +327,7 @@ export function FinancialWorkbench({data}:{data:Data}){
               })}>
               <option value="ESTIMATED">Estimado</option><option value="PAID">Pagado (manual)</option>
             </select></td>
-            <td><button type="button" onClick={()=>setExpenses(rows=>rows.filter(x=>x.id!==e.id))}
+            <td><button type="button" onClick={()=>{setDirty(true);setExpenses(rows=>rows.filter(x=>x.id!==e.id));}}
               aria-label={"Eliminar "+e.name}>Quitar</button></td>
           </tr>)}
         </tbody>
@@ -284,7 +342,7 @@ export function FinancialWorkbench({data}:{data:Data}){
       </div>
       <label>Comisión tarjeta estimada (% cobrado en tarjeta)
         <input type="number" min="0" max="30" step="0.1" value={cardRate}
-          onChange={e=>setCardRate(Math.max(0,Math.min(30,Number(e.target.value)||0)))}/></label>
+          onChange={e=>{setDirty(true);setCardRate(Math.max(0,Math.min(30,Number(e.target.value)||0)));}}/></label>
       <p className="muted">No captures nuevamente IVA o ISR como gasto: se calculan automáticamente arriba. Evita duplicar comisiones si ya las incluyes como un gasto manual. El porcentaje variable para punto de equilibrio representa COGS y otros costos ligados directamente a la venta.</p>
     </section>
 
@@ -292,7 +350,7 @@ export function FinancialWorkbench({data}:{data:Data}){
       <article className="card stack">
         <h2>Punto de equilibrio mensual</h2>
         <label>Costo variable asumido (% de ventas; escenario, no dato real)
-          <input type="range" min="10" max="75" step="1" value={variableRatio} onChange={e=>setVariableRatio(Number(e.target.value))}/>
+          <input type="range" min="10" max="75" step="1" value={variableRatio} onChange={e=>{setDirty(true);setVariableRatio(Number(e.target.value));}}/>
           <strong>{variableRatio}% sobre ventas con IVA + tasa efectiva de tarjeta + IVA/ISR</strong>
         </label>
         <div className="metric">{breakEven===null?"Sin equilibrio":money.format(breakEven)}</div>

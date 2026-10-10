@@ -2650,3 +2650,24 @@ details[open]>.ops-chevron,details[open]>summary>.ops-chevron{transform:rotate(1
   .ops-contract-report{padding:.8rem}
 }
 @media print{.ops-contract-setup,.ops-contract-filter{display:none}}
+
+
+/* Financial shared budget controls: light, dark and touch-friendly. */
+.ops-budget-save-panel{
+  display:flex;align-items:center;justify-content:space-between;gap:1rem;
+  padding:1rem;border-radius:16px;border:1px solid var(--epic-border);
+  background:var(--epic-soft);
+}
+.ops-budget-save-panel strong{display:block;color:var(--epic-fg);font-size:1.02rem}
+.ops-budget-save-panel .muted{color:var(--epic-secondary);margin:.35rem 0 0;font-size:.82rem;line-height:1.5}
+.ops-budget-save-panel button{flex:none;min-height:49px;padding:.7rem 1.1rem;
+  border-radius:12px;font-size:.9rem;font-weight:850}
+.ops-finance-workbench .ops-inline-notice button.ops-action-soft{
+  display:inline-block;min-height:42px;margin:.6rem 0 0;padding:.5rem .9rem;
+  background:var(--epic-card);color:var(--epic-fg);border:1px solid var(--epic-border);
+  border-radius:10px
+}
+@media(max-width:760px){
+  .ops-budget-save-panel{flex-direction:column;align-items:stretch;padding:.85rem}
+  .ops-budget-save-panel button{width:100%}
+}
