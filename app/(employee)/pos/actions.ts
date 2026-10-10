@@ -369,7 +369,7 @@ export async function submitShadowSale(
   }catch(error){
     return {error:safeShadowError(error)};
   }
-  redirect("/pos/receipt/"+orderId);
+  redirect("/pos/receipt/"+orderId+"?autoKitchen=paid-direct");
 }
 
 export async function submitShadowCommand(
@@ -382,7 +382,7 @@ export async function submitShadowCommand(
     return {error:safeShadowError(error)};
   }
   redirect("/pos/orders?created="+orderId+
-    (process.env.VERCEL_ENV==="preview"?"&autoKitchen=saved":""));
+    "&autoKitchen=saved");
 }
 
 export async function createShadowSale(formData: FormData) {
@@ -394,13 +394,13 @@ export async function createShadowSale(formData: FormData) {
     "PAID",
     paymentMethod,
   );
-  redirect("/pos/receipt/" + orderId);
+  redirect("/pos/receipt/" + orderId + "?autoKitchen=paid-direct");
 }
 
 export async function createShadowCommand(formData: FormData) {
   const orderId = await createShadowOrder(formData, "SENT");
   redirect("/pos/orders?created=" + orderId +
-    (process.env.VERCEL_ENV==="preview"?"&autoKitchen=saved":""));
+    "&autoKitchen=saved");
 }
 
 export async function saveLiveCommand(_previous:{error:string|null},formData:FormData):Promise<{error:string|null}> {

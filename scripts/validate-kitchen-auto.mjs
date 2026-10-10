@@ -36,7 +36,9 @@ try{
   assert.match(receipt,/query\.autoKitchen==="paid-direct"/);
   assert.doesNotMatch(receipt,/query\.autoKitchen==="paid"/);
   assert.match(direct,/autoKitchen=paid-direct/);
-  assert.doesNotMatch(actions,/autoKitchen=paid/);
+  // Se permite paid-direct sólo para una venta cobrada sin guardarse.
+  // El evento plain paid de una comanda ya guardada sigue prohibido.
+  assert.doesNotMatch(actions,/autoKitchen=paid(?!-direct)/);
   assert.doesNotMatch(split,/autoKitchen=paid/);
 
   // Saved tickets and additional rounds already receive a saved-only trigger.
@@ -47,13 +49,15 @@ try{
   assert.match(auto,/event==="saved"\?"latest":"all"/);
   assert.match(auto,/AUTO_KITCHEN_ATTEMPT_PREFIX/);
   assert.match(printer,/Para llevar · al guardar o al cobrar directo/);
-  // Las pruebas en espejo sólo imprimen papel en Vercel preview.
-  assert.match(actions,/process\.env\.VERCEL_ENV==="preview"\?"&autoKitchen=saved":""/);
-  assert.match(orders,/const previewShadowPrint=process\.env\.VERCEL_ENV==="preview"/);
-  assert.match(orders,/previewShadowPrint&&order\.mode==="SHADOW"/);
-  const printablePreview=read("app/(employee)/pos/orders/[id]/kitchen/page.tsx");
-  assert.match(printablePreview,/process\.env\.VERCEL_ENV==="preview"/);
-  assert.match(orders,/Prueba de impresión en preview/);
+  // El usuario comprobó físicamente la impresión ESPEJO en preview.
+  // En producción debe funcionar también si el navegador habilita impresión.
+  assert.doesNotMatch(actions,/process\.env\.VERCEL_ENV==="preview"\?"&autoKitchen=saved":""/);
+  assert.match(actions,/redirect\("\/pos\/orders\?created="\+orderId\+\s*"&autoKitchen=saved"\)/);
+  assert.match(orders,/order\.mode==="LIVE"\|\|order\.mode==="SHADOW"/);
+  assert.doesNotMatch(orders,/previewShadowPrint&&order\.mode==="SHADOW"/);
+  const printable=read("app/(employee)/pos/orders/[id]/kitchen/page.tsx");
+  assert.match(printable,/state\.order\.mode!=="LIVE"&&state\.order\.mode!=="SHADOW"/);
+  assert.doesNotMatch(printable,/process\.env\.VERCEL_ENV/);
   assert.match(orders,/Imprimir comanda/);
   console.log("POS kitchen print: PASS (guardado, cobro directo, sin segunda impresión en pago posterior)");
 }finally{

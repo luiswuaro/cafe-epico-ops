@@ -243,7 +243,7 @@ export default async function ReceiptPage({
   return (
     <main className="receipt-shell">
       {query.autoKitchen==="paid-direct"&&
-        order.order.mode==="LIVE"&&
+        (order.order.mode==="LIVE"||order.order.mode==="SHADOW")&&
         order.order.status!=="CANCELLED"&&
         (split?split.status==="PAID":order.order.status==="PAID")&&
         <AutoKitchenPrint event="paid-direct"

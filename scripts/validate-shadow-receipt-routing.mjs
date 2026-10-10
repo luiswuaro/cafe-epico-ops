@@ -17,12 +17,17 @@ for(const [name,body] of Object.entries(sections)){
     name+" must send paid SHADOW order directly to receipt");
   assert.doesNotMatch(body,/redirect\("\/pos\?saved=/,
     name+" cannot send cashier back to Loyverse comparison after payment");
-  assert.doesNotMatch(body,/autoKitchen=paid/,
-    name+" must not reprint kitchen order upon checkout");
+  if(name==="saved"){
+    assert.doesNotMatch(body,/autoKitchen=paid/,
+      "Paying a previously SAVED order must not reprint its kitchen slip");
+  }else{
+    assert.match(body,/autoKitchen=paid-direct/,
+      "Direct SHADOW checkout prints kitchen slip once, even in production");
+  }
 }
 assert.match(receipt,/simulation: order\.order\.mode==="SHADOW"/);
 assert.match(receipt,/PRUEBA · PAGO SIMULADO/);
 assert.match(receipt,/query\.autoKitchen==="paid-direct"&&/);
-assert.match(receipt,/order\.order\.mode==="LIVE"&&/);
+assert.match(receipt,/order\.order\.mode==="LIVE"\|\|order\.order\.mode==="SHADOW"/);
 assert.match(printer,/ticket\.simulation \? "COMPROBANTE DE PRUEBA"/);
-console.log("POS SHADOW receipt routing: PASS (3 routes, receipt label, no extra kitchen slip)");
+console.log("POS SHADOW receipt routing: PASS (3 routes, receipt label, no duplicate saved slip, direct prints kitchen slip)");
