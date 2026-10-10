@@ -277,3 +277,78 @@ export function PrinterBridgeSetup() {
 }
 
 export const printerBridgeStorageKey = STORAGE_KEY;
+
+const KITCHEN_BRIDGE_KEY="cafe-epico-kitchen-printer-bridge-v1";
+const KITCHEN_ROUTE_KEY="cafe-epico-kitchen-route-v1";
+
+function readKitchenRoute() {
+  return window.localStorage.getItem(KITCHEN_ROUTE_KEY) || "tickets";
+}
+function readKitchenBridge() {
+  return window.localStorage.getItem(KITCHEN_BRIDGE_KEY) ?? "";
+}
+
+export function KitchenPrinterSetup() {
+  const route=useSyncExternalStore(
+    subscribeToStoredConfig,readKitchenRoute,()=>"tickets",
+  );
+  const stored=useSyncExternalStore(
+    subscribeToStoredConfig,readKitchenBridge,()=>"");
+  const config=parseStoredConfig(stored);
+  const [url,setUrl]=useState<string|null>(null);
+  const [token,setToken]=useState<string|null>(null);
+  const [status,setStatus]=useState("");
+  const shownUrl=url??config?.url??"http://127.0.0.1:9138";
+  const shownToken=token??config?.token??"";
+  const notify=()=>window.dispatchEvent(new Event(STORAGE_EVENT));
+
+  function selectTickets(){
+    window.localStorage.setItem(KITCHEN_ROUTE_KEY,"tickets");
+    notify();
+    setStatus("Las comandas se imprimirán en la misma impresora de tickets.");
+  }
+  async function activateSeparate(){
+    setStatus("Validando segunda impresora…");
+    if(!/^http:\/\/(127\.0\.0\.1|localhost):\d{2,5}\/?$/.test(shownUrl)) {
+      setStatus("Usa una dirección local del puente, por ejemplo http://127.0.0.1:9138");
+      return;
+    }
+    try{
+      const result=await requestBridge(shownUrl,shownToken,"/status");
+      window.localStorage.setItem(KITCHEN_BRIDGE_KEY,JSON.stringify({
+        url:shownUrl.replace(/\/$/,""),token:shownToken,
+      } satisfies StoredConfig));
+      window.localStorage.setItem(KITCHEN_ROUTE_KEY,"separate");
+      notify();
+      setUrl(null);setToken(null);
+      setStatus("Impresora de barra vinculada: "+(result.printer??"térmica"));
+    }catch(e){
+      setStatus("No se activó: "+(e instanceof Error?e.message:"sin respuesta del puente"));
+    }
+  }
+  return <div className="stack kitchen-printer-setup">
+    <p><strong>Destino actual: {route==="separate"?"Impresora exclusiva de barra":"Misma impresora de tickets"}</strong></p>
+    <p className="muted">La selección se guarda sólo en este navegador. Ninguna configuración de impresión afecta las recetas ni la caja.</p>
+    <label className="kitchen-printer-route">
+      <input type="radio" name="kitchenPrintDestination" checked={route!=="separate"}
+        onChange={selectTickets}/>
+      <span><strong>Usar impresora de tickets</strong><small className="muted">Usa el puerto 9137 y el token que ya configuraste.</small></span>
+    </label>
+    <div className="card stack">
+      <strong>Otra impresora de comandas (opcional)</strong>
+      <p className="muted">Instala el puente Barra en Windows con puerto 9138 e introduce su token local. La opción quedará activa sólo después de conectarse correctamente.</p>
+      <label>URL del puente de barra
+        <input type="url" value={shownUrl} onChange={e=>setUrl(e.target.value)}
+          inputMode="url" autoComplete="off"/>
+      </label>
+      <label>Token de barra
+        <input type="password" value={shownToken} onChange={e=>setToken(e.target.value)}
+          autoComplete="off"/>
+      </label>
+      <button type="button" disabled={!shownToken.trim()} onClick={activateSeparate}>
+        Probar y usar impresora de barra
+      </button>
+    </div>
+    {status&&<p role="status" className="printer-bridge-status">{status}</p>}
+  </div>;
+}
