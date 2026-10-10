@@ -101,6 +101,7 @@ export default async function PosPage({
           <p className="eyebrow">{liveEnabled ? "POS · LIVE" : "POS V0.1 · MODO ESPEJO"}</p>
           <h1>Tomar orden</h1>
           <p><Link href="/inventory/ops">Consultar inventario OPS y registrar reabastos</Link> · <Link href="/pos/launch-check">Validación para activar POS LIVE</Link></p>
+          <p><Link href="/pos/beneficios-preview" className="button">Probar beneficios y canjes (solo preview)</Link></p>
           {pilotItem && <p className="status-warn">
             PILOTO LIVE · Únicamente {pilotItem}. Cada cobro sí modificará inventario, caja y puntos reales de OPS.
           </p>}
