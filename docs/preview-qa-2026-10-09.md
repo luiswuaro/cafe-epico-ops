@@ -156,3 +156,14 @@ La ejecución de GitHub Actions prueba estructura, tipos, lint y compilación, *
 - Se verificó saldo actual 10.000 g, comanda `SENT`, 0 pagos; en producción no hay movimientos de proveedor `OPS_QA_TEST`.
 - **Próximo paso:** el operador intenta pagar **sin marcar autorización de diferencia de inventario**. Debe mostrar faltante 8.9 g, comanda sin pago, caja e inventario intactos; no repetir si muestra estado inesperado.
 - **PENDIENTE OBLIGATORIO:** una vez auditado el intento fallido, restablecer la existencia QA con un movimiento compensatorio positivo y guardar evidencia en auditoría. No restablecer mediante borrado del evento.
+
+
+## QA-07 — INSUFICIENCIA DE CAFÉ: error controlado y reversa de ajuste, APROBADO (2026-10-10 UTC)
+
+- Ticket `SH-261009181706-7E62`, id `06a97045-4f45-44bf-9300-879bd7ce6652`, $40, `LIVE/SENT`, Americano QA caliente (18.9 g).
+- Stock simulado: 5,848.800→10.000 g; faltante calculado **8.9 g**.
+- El operador intentó cobrar $40 en efectivo sin autorización de faltante. La pantalla mostró `No se cobró: Falta Café en grano QA: hay 10 g, se requieren 18.9 g (faltan 8.9 g)`.
+- Auditoría PostgreSQL posterior: el folio continuó `SENT`, `paid_at=NULL`, `inventory_effect_applied=false`, **0 pagos, 0 movimientos de venta y 0 movimientos de caja**. El stock siguió en 10.000 g. Prueba de rechazo **aprobada**.
+- Se restableció el stock ficticio mediante segundo `MANUAL_ADJUSTMENT +5,838.800 g`, proveedor `OPS_QA_TEST`, clave única `QA07-RESTORE-20261009`, y evento `QA_INVENTORY_SHORTAGE_RESTORED`. Stock resultante verificado **5,848.800 g**, ticket aún `SENT`, 0 pagos. El ajuste original negativo se conserva para auditoría.
+- Siguiente fase: cobrar una sola vez el mismo folio por $40 en efectivo; validar que el inventario quede en **5,829.900 g**, con un pago y movimiento de caja de $40. Caja acumulada previa: $770 esperados; posterior estimado $810.
+- **Pendiente de validar:** retry con existencia corregida, doble cobro desde dos dispositivos y falta de stock durante pago de una cuenta dividida.
