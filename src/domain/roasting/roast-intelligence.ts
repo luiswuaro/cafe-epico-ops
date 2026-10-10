@@ -28,7 +28,7 @@ export function inspectAdvancedRoast(input:{
   const yellow=ev.yellowing?.tS??null;
   const fc=ev.firstCrack?.tS??null;
   const roastSeconds=drop===null?null:drop-charge;
-  const dtr=roastSeconds && fc!==null && fc>=charge && fc<=drop!
+  const dtr=drop!==null && roastSeconds!==null && roastSeconds>0 && fc!==null && fc>=charge && fc<=drop
     ?100*(drop-fc)/roastSeconds:null;
   function temp(time:number|null){
     if(time===null)return null;
