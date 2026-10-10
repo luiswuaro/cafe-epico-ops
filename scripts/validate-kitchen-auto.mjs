@@ -36,7 +36,9 @@ try{
   assert.match(receipt,/query\.autoKitchen==="paid-direct"/);
   assert.doesNotMatch(receipt,/query\.autoKitchen==="paid"/);
   assert.match(direct,/autoKitchen=paid-direct/);
-  assert.doesNotMatch(actions,/autoKitchen=paid/);
+  // Se permite paid-direct sólo para una venta cobrada sin guardarse.
+  // El evento plain paid de una comanda ya guardada sigue prohibido.
+  assert.doesNotMatch(actions,/autoKitchen=paid(?!-direct)/);
   assert.doesNotMatch(split,/autoKitchen=paid/);
 
   // Saved tickets and additional rounds already receive a saved-only trigger.
