@@ -1,7 +1,7 @@
 # Paquete operativo POS: beneficios y canjes — SOLO PREVIEW
 
 **Estado**: primer bloque del PR #74. El calculador no cobra ni escribe datos.
-**Regla confirmada**: 1 punto acumulado vale $1.00 MXN cuando se canjea (10/oct/2026). Tasa no editable por cajeros.
+**Reglas confirmadas**: 1 punto acumulado vale $1.00 MXN cuando se canjea (10/oct/2026). Tasa no editable por cajeros. El cliente acumula 5% exclusivamente sobre efectivo, tarjeta o transferencia efectivamente cobrados; los puntos redimidos no acreditan puntos nuevos.
 **Integración**: preparado a partir del PR #73. El presupuesto compartido del PR #72
 se integrará tras resolver diferencias en `financial-workbench.tsx` y `globals.css`.
 
@@ -21,7 +21,7 @@ se integrará tras resolver diferencias en `financial-workbench.tsx` y `globals.
 ## Pendientes de aprobación del propietario
 
 - [x] Valor de canje autorizado por propietario: **1 punto = $1 MXN**, conversión fija en dominio y pantalla (10/10/2026).
-- [ ] Qué compras acreditan el 5% cuando se usan puntos o descuentos.
+- [x] **5% solo sobre importe monetario realmente cobrado**: efectivo, tarjeta o transferencia, después de descuentos y puntos redimidos (confirmado el 10/10/2026). Compra pagada 100% con puntos genera 0 puntos nuevos.
 - [ ] Si los puntos y el descuento por termo pueden combinarse.
 - [ ] Definir si cortesía de personal cubre extras y si puede aplicarse a termo.
 - [ ] Quién autoriza descuentos excepcionales y límites de importe/porcentaje.
@@ -53,6 +53,10 @@ se integrará tras resolver diferencias en `financial-workbench.tsx` y `globals.
 - [ ] Puntos por una bebida: solo aplica a esa línea; saldo de puntos disminuye.
 - [ ] Puntos por cuenta: saldo suficiente, insuficiente y canje exacto.
 - [ ] Full puntos: 0 MXN monetario y sin movimiento falso de caja.
+- [ ] Compra $150, redimir 50 puntos y cobrar $100 por cualquier medio monetario: 5 puntos nuevos.
+- [ ] Pago mixto $25 efectivo + $45 tarjeta + $30 transferencia: 5 puntos nuevos.
+- [ ] Una compra que use $150 en puntos y $0 reales genera 0 puntos nuevos.
+- [ ] Aplicar descuentos antes de determinar la base de acumulación, nunca el precio de lista.
 - [ ] Canje parcial + efectivo: caja solo por efectivo y cambio correcto.
 - [ ] Canje parcial + tarjeta: terminal solo por importe monetario.
 - [ ] Ticket guardado / ronda adicional: conserva beneficio congelado al cobrar.
