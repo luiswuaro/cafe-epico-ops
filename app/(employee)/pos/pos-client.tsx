@@ -662,6 +662,14 @@ export function PosClient({
           <strong>{money.format(total)}</strong>
         </div>
 
+        {!savedTicket&&<CheckoutLoyalty
+          identityOnly
+          customers={createdCustomer
+            ?[...customers.filter(c=>c.id!==createdCustomer.id),createdCustomer]:customers}
+          selectedId={customerId} onSelect={checkoutCustomerChange}
+          redeemPoints={redeemPoints} onRedeemChange={setRedeemPoints}
+          total={total} liveEnabled={liveEnabled}/>}
+
         <form id="pos-order-command-form" action={savedTicket?addProductsToLiveCommand:liveEnabled?saveAction:shadowAction} className="stack pos-checkout">
           {savedTicket&&<>
             <input type="hidden" name="orderId" value={savedTicket.id}/>
