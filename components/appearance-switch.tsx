@@ -21,14 +21,14 @@ export function AppearanceSwitch({compact=false}:{compact?:boolean}){
       if(value==="light"||value==="dark"||value==="system")saved=value;
     } catch { /* Keep system appearance. */ }
     // Defer setting React state until after hydration; avoids server/client mismatch.
-    document.documentElement.dataset.theme=saved;
+    document.documentElement.setAttribute("data-theme",saved);
     const task=window.setTimeout(()=>setTheme(saved),0);
     return ()=>window.clearTimeout(task);
   },[]);
 
   function change(next:Theme){
     setTheme(next);
-    document.documentElement.dataset.theme=next;
+    document.documentElement.setAttribute("data-theme",next);
     try{window.localStorage.setItem(KEY,next);}catch{/* Persistent storage optional. */}
   }
 
