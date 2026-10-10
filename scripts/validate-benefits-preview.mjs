@@ -16,7 +16,7 @@ try {
   const taro={id:"b",name:"Taro frío",category:"FRÍAS",basePrice:70,extras:0,ownThermos:false};
   const input=(kind,other={})=>({
     kind,scope:"LINE",lineId:"a",value:0,reason:"Atención de servicio",
-    availablePoints:20,mxnPerPoint:1,staffFreeAlreadyUsed:false,...other,
+    availablePoints:20,customerSelected:true,staffFreeAlreadyUsed:false,...other,
   });
   let r=calc([latte],input("STAFF_10"));
   assert.equal(r.valid,true);
@@ -33,11 +33,30 @@ try {
   assert.equal(r.valid,true);
   assert.equal(r.redeemedPoints,10);
   assert.equal(r.due,50);
-  r=calc([latte],input("POINTS",{value:20,mxnPerPoint:0}));
+  r=calc([latte],input("POINTS",{value:20,customerSelected:false}));
   assert.equal(r.valid,false);
+  assert.equal(r.redeemedPoints,0);
+  r=calc([latte],input("POINTS",{value:0}));
+  assert.equal(r.valid,false);
+  r=calc([latte],input("POINTS",{value:20}));
+  assert.equal(r.valid,true);
+  assert.equal(r.due,40);
+  assert.equal(r.perLine[0].redeemedValue,20);
   r=calc([latte],input("POINTS",{value:21}));
   assert.equal(r.valid,false);
   assert.equal(r.redeemedPoints,0);
+  r=calc([latte,taro],input("POINTS",{scope:"LINE",lineId:"b",value:20}));
+  assert.equal(r.valid,true);
+  assert.equal(r.due,110);
+  assert.equal(r.perLine[0].redeemedValue,0);
+  assert.equal(r.perLine[1].redeemedValue,20);
+  r=calc([latte,taro],input("POINTS",{scope:"TICKET",value:20}));
+  assert.equal(r.valid,true);
+  assert.equal(r.perLine.reduce((n,x)=>n+x.redeemedValue,0),20);
+  r=calc([latte],input("POINTS",{scope:"TICKET",value:60,availablePoints:60}));
+  assert.equal(r.valid,true);
+  assert.equal(r.due,0);
+  assert.equal(r.earnablePoints,0);
   r=calc([latte,taro],input("MANUAL_FIXED",{scope:"TICKET",value:5}));
   assert.equal(r.valid,true);
   assert.equal(r.ordinaryDiscount,5);
