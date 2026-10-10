@@ -1821,3 +1821,47 @@ th, td { vertical-align: top; }
     display:none;
   }
 }
+
+
+/* POS printing: a prebill is a consultation, not a paid sale receipt. */
+.receipt-document-type {
+  margin:.6rem 0 !important;
+  padding:.5rem 0;
+  border-top:2px solid currentColor;
+  border-bottom:2px solid currentColor;
+  font-size:13px;
+  font-weight:900;
+  text-align:center;
+  letter-spacing:.025em;
+}
+.receipt-prebill-warning {
+  padding:.45rem .15rem;
+  border:1px dashed #111;
+  font-size:12px;
+  font-weight:900;
+  text-align:center;
+}
+.pos-prebill-link {
+  background:#fffaf2;
+  color:var(--ink);
+  border:2px solid var(--ink);
+}
+.pos-prebill-link:hover { background:#efe5d7 }
+@media(max-width:760px) {
+  .pos-cart-open .pos-mobile-cart-footer .pos-mobile-footer-prebill {
+    grid-column:1 / -1;
+    color:var(--ink);
+    background:#efe8dc;
+    border:1px solid var(--ink);
+    min-height:44px;
+  }
+  .receipt-toolbar {
+    flex-wrap:wrap;
+  }
+}
+@media print {
+  .receipt-document-type,.receipt-prebill-warning {
+    color:#000 !important;
+    print-color-adjust:exact;
+  }
+}
