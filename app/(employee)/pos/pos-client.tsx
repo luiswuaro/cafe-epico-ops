@@ -11,6 +11,7 @@ import {
 } from "./actions";
 import { submitLiveSale } from "./live-actions";
 import type {ExtraOption} from "@/src/application/pos/extra-catalog";
+import {OWN_CONTAINER_DISCOUNT_MXN,canUseOwnContainer,ownContainerUnitPrice} from "@/src/domain/pos/own-container";
 import {
   DINE_IN_TICKET_PRESETS,TAKEAWAY_TICKET_PRESETS,
   effectiveOrderServiceMode,
@@ -33,7 +34,7 @@ type Customer = {
 
 type ServiceMode="DINE_IN"|"TAKEAWAY";
 type CartLine = {
-  key:string;externalId:string;note:string;serviceMode:ServiceMode;extras:Array<{id:string;quantity:number}>;
+  key:string;externalId:string;note:string;serviceMode:ServiceMode;customerContainer:boolean;extras:Array<{id:string;quantity:number}>;
 };
 type SavedTicket={
   id:string;folio:string;name:string;total:number;customerId:string|null;
@@ -120,7 +121,7 @@ export function PosClient({
   const extraById=new Map(extrasOptions.map(option=>[option.id,option]));
   const extraCharge=(line:CartLine)=>line.extras.reduce((sum,e)=>
     sum+(extraById.get(e.id)?.price??0)*e.quantity,0);
-  const unitPrice=(line:typeof cartLines[number])=>line.item.price+extraCharge(line);
+  const unitPrice=(line:typeof cartLines[number])=>ownContainerUnitPrice(line.item.price,extraCharge(line),line.customerContainer);
   const newSubtotal=cartLines.reduce((sum,line)=>sum+unitPrice(line),0);
   const total=(savedTicket?.total??0)+newSubtotal;
   const units=(savedTicket?.lines.reduce((sum,line)=>sum+line.quantity,0)??0)+cartLines.length;
@@ -190,7 +191,7 @@ export function PosClient({
         key: globalThis.crypto.randomUUID(),
         externalId,
         note: "",
-        serviceMode,extras:[],
+        serviceMode,customerContainer:false,extras:[],
       },
     ]);
   }
@@ -206,13 +207,13 @@ export function PosClient({
         key: globalThis.crypto.randomUUID(),
         externalId: line.externalId,
         note: "",
-        serviceMode:line.serviceMode,extras:line.extras.map(e=>({...e})),
+        serviceMode:line.serviceMode,customerContainer:line.customerContainer,extras:line.extras.map(e=>({...e})),
       },
     ]);
   }
 
   function updateServiceMode(key:string,next:ServiceMode){
-    setCart(current=>current.map(line=>line.key===key?{...line,serviceMode:next}:line));
+    setCart(current=>current.map(line=>line.key===key?{...line,serviceMode:next,customerContainer:next==="TAKEAWAY"&&line.customerContainer}:line));
     // Ante un cambio a modo mixto, el selector se recalcula automáticamente.
   }
 
@@ -220,9 +221,17 @@ export function PosClient({
     setServiceMode(next);
     // El botón Aquí/Para llevar es para toda la cuenta; las líneas
     // pueden corregirse por separado después.
-    setCart(current=>current.map(line=>({...line,serviceMode:next})));
+    setCart(current=>current.map(line=>({...line,serviceMode:next,customerContainer:next==="TAKEAWAY"&&line.customerContainer})));
     setTicketNameOption(next==="TAKEAWAY"?"AUTO":"");
     setCustomTicketName("");
+  }
+
+  function updateOwnContainer(key:string,enabled:boolean){
+    setCart(current=>current.map(line=>{
+      if(line.key!==key)return line;
+      const item=catalogById.get(line.externalId);
+      return {...line,customerContainer:Boolean(enabled&&item&&canUseOwnContainer(item,line.serviceMode))};
+    }));
   }
 
   function updateExtraQuantity(key:string,id:string,quantity:number){
@@ -253,7 +262,7 @@ export function PosClient({
           {cartLines.map((line,index)=><div key={line.key} style={{display:"flex",justifyContent:"space-between",gap:12}}>
             <div>
               <strong>{index+1}. {line.item.name}</strong>
-              <p className="muted">{line.serviceMode==="DINE_IN"?"Aquí":"Para llevar"}{line.note?" · "+line.note:""}</p>
+              <p className="muted">{line.serviceMode==="DINE_IN"?"Aquí":line.customerContainer?"Para llevar · termo propio (-$5)":"Para llevar"}{line.note?" · "+line.note:""}</p>
             </div>
             <div style={{textAlign:"right"}}>
               <strong>{money.format(unitPrice(line))}</strong>
@@ -268,7 +277,7 @@ export function PosClient({
           <input type="hidden" name="clientOrderId" value={liveClientOrderId}/>
           <input type="hidden" name="cart" value={JSON.stringify(cartLines.map(line=>({
             externalId:line.externalId,quantity:1,note:line.note.trim()||null,
-            serviceMode:line.serviceMode,
+            serviceMode:line.serviceMode,customerContainer:line.customerContainer,
             extras:line.extras
           })))}/>
           <input type="hidden" name="serviceMode" value={ticketServiceMode}/>
@@ -497,6 +506,15 @@ export function PosClient({
                       <option value="TAKEAWAY">Para llevar · con vaso y tapa</option>
                     </select>
                   </label>
+                  {canUseOwnContainer(line.item,line.serviceMode)&&<label className="pos-own-thermos-control">
+                    <input type="checkbox" checked={line.customerContainer}
+                      onChange={event=>updateOwnContainer(line.key,event.target.checked)}
+                      aria-label={"Termo propio, descuento de 5 pesos para "+line.item.name}/>
+                    <span>
+                      <strong>Termo propio · −{money.format(OWN_CONTAINER_DISCOUNT_MXN)}</strong>
+                      <small>Para llevar sin vaso, tapa, popote ni desechables</small>
+                    </span>
+                  </label>}
                   {line.item.category!=="ALIMENTOS"&&<details
                     className="pos-cancel-panel" style={{marginTop:8,padding:"6px 10px"}}>
                     <summary style={{cursor:"pointer",fontWeight:700}}>
@@ -622,7 +640,7 @@ export function PosClient({
                 externalId: line.externalId,
                 quantity: 1,
                 note: line.note.trim() || null,
-                serviceMode:line.serviceMode,
+                serviceMode:line.serviceMode,customerContainer:line.customerContainer,
                 extras:line.extras,
               })),
             )}
