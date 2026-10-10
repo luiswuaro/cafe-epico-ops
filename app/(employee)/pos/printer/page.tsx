@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { PrinterBridgeSetup } from "./printer-client";
+import { PrinterBridgeSetup, KitchenPrinterSetup, AutoKitchenPrintSettings } from "./printer-client";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
 import { assertEmployeePermission } from "@/src/infrastructure/auth/permissions";
 
@@ -60,6 +60,21 @@ export default async function PosPrinterPage() {
         <p className="eyebrow">2 · VINCULAR ESTA COMPUTADORA</p>
         <h2>Conectar OPS con la POS-58</h2>
         <PrinterBridgeSetup />
+      </section>
+
+      <section className="card stack">
+        <p className="eyebrow">3 · IMPRESIÓN DE COMANDAS</p>
+        <h2>Destino de las comandas de barra</h2>
+        <p className="muted">Por defecto, las comandas salen en la misma POS-58. Si más adelante agregas una segunda impresora, conéctala a esta computadora e instala otro puente con puerto y token independientes.</p>
+        <KitchenPrinterSetup />
+        <hr/>
+        <AutoKitchenPrintSettings />
+        <details>
+          <summary>Instalar segunda impresora en Windows (opcional)</summary>
+          <p>Desde la raíz del proyecto, sustituye el nombre por el que aparece exactamente en «Impresoras y escáneres» de Windows:</p>
+          <pre className="code-block">{String.raw`powershell -ExecutionPolicy Bypass -File .\tools\print-bridge\Install-CafeEpicoPrintBridge.ps1 -Instance Barra -PrinterName "NOMBRE DE IMPRESORA"`}</pre>
+          <p className="muted">El puente de comandas usa 127.0.0.1:9138 y un token nuevo. La impresora de tickets continúa en 9137 sin cambios. Si reinstalas la impresora de barra, se conserva su token salvo que uses -ResetToken.</p>
+        </details>
       </section>
 
       <section className="card">

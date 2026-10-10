@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { CommandBoardAutoRefresh } from "./auto-refresh";
+import { KitchenPrintButton } from "./kitchen-print-button";
+import { AutoKitchenPrint } from "./auto-kitchen-print";
 import { AddLiveProducts } from "./add-live-products";
 import { createLiveCommandCustomer, setLiveCommandCustomer } from "./live-actions";
 import { getPosCatalog } from "@/src/application/pos/catalog";
@@ -65,8 +67,39 @@ export default async function PosOrdersPage({
     getPosCustomers(employee.organizationId),
   ]);
 
+  // Sólo acciones de guardado confirmadas incluyen autoKitchen=saved.
+  // Nunca iniciar una impresión al abrir / refrescar Comandas normalmente.
+  const autoId=typeof params.created==="string"?params.created
+    :typeof params.added==="string"?params.added:null;
+  const autoOrder=params.autoKitchen==="saved"&&autoId
+    ?orders.find(order=>order.id===autoId&&order.mode==="LIVE")
+    :null;
+  const autoRoundId=autoOrder
+    ?typeof params.round==="string"?params.round:"INITIAL"
+    :null;
+
   return (
     <main className="shell pos-shell">
+      {autoOrder&&autoRoundId&&autoOrder.lines.some(line=>
+        (line.expectedConsumption?.roundId||"INITIAL")===autoRoundId
+      )&&<AutoKitchenPrint
+        event="saved"
+        eventId={autoOrder.id+":"+autoRoundId}
+        roundId={autoRoundId}
+        slip={{
+          folio:autoOrder.folio,
+          table:autoOrder.tableLabel||(autoOrder.serviceMode==="TAKEAWAY"?"Para llevar":"Aquí"),
+          orderNote:autoOrder.note,
+          lines:autoOrder.lines.map(line=>({
+            id:line.id,name:line.name,category:line.category,
+            quantity:Number(line.quantity),note:line.note,
+            serviceMode:typeof line.expectedConsumption?.serviceMode==="string"
+              ?line.expectedConsumption.serviceMode:null,
+            roundId:typeof line.expectedConsumption?.roundId==="string"
+              ?line.expectedConsumption.roundId:null,
+          })),
+        }}
+      />}
       <CommandBoardAutoRefresh />
       {error && <section className="card status-bad" role="alert">
         Comanda no cobrada: {error}
@@ -203,6 +236,30 @@ export default async function PosOrdersPage({
                   </div>
                 )}
 
+                {order.mode==="LIVE"&&
+                  <KitchenPrintButton
+                    slip={{
+                      folio:order.folio,
+                      table:order.tableLabel||(order.serviceMode==="TAKEAWAY"?"Para llevar":"Aquí"),
+                      orderNote:order.note,
+                      lines:order.lines.map(line=>({
+                        id:line.id,
+                        name:line.name,
+                        category:line.category,
+                        quantity:Number(line.quantity),
+                        note:line.note,
+                        serviceMode:typeof line.expectedConsumption?.serviceMode==="string"
+                          ?line.expectedConsumption.serviceMode:null,
+                        roundId:typeof line.expectedConsumption?.roundId==="string"
+                          ?line.expectedConsumption.roundId:null,
+                      })),
+                    }}
+                    viewUrl={"/pos/orders/"+order.id+"/kitchen"}
+                  />}
+                {order.mode==="LIVE"&&
+                  <Link className="button pos-prebill-link" href={"/pos/orders/"+order.id+"/prebill"}>
+                    Imprimir precuenta · {order.tableLabel??"mesa"}
+                  </Link>}
                 {(
                   <Link
                     href={"/pos/orders/" + order.id + "/split"}

@@ -2,9 +2,11 @@ import {randomUUID} from "node:crypto";
 import {deliverExtraPackaging} from "./packaging-action";
 import Image from "next/image";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { and, eq } from "drizzle-orm";
 import { DirectPrintTicketButton } from "./direct-print-button";
 import { PrintTicketButton } from "./print-button";
+import { AutoKitchenPrint } from "../../orders/auto-kitchen-print";
 import { getPosPrintSettings } from "@/src/application/pos/print-settings";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
 import {
@@ -104,6 +106,12 @@ export default async function ReceiptPage({
   if (requestedSplitId && !split) {
     throw new Error("Cuenta dividida no encontrada");
   }
+  // La precuenta y el comprobante final no pueden confundirse: una
+  // comanda abierta o un split pendiente jamás imprimen un recibo pagado.
+  if (order.order.status!=="CANCELLED" &&
+      (split ? split.status!=="PAID" : order.order.status!=="PAID")) {
+    redirect("/pos/orders/"+id+"/prebill"+(split?"?split="+split.id:""));
+  }
 
   const lines = split
     ? await db
@@ -111,6 +119,7 @@ export default async function ReceiptPage({
           id: posOrderSplitLines.id,
           quantity: posOrderSplitLines.quantity,
           nameSnapshot: posOrderLines.nameSnapshot,
+          categorySnapshot:posOrderLines.categorySnapshot,
           lineTotal: posOrderSplitLines.lineTotal,
           note: posOrderLines.note,
           expectedConsumption: posOrderLines.expectedConsumption,
@@ -126,6 +135,7 @@ export default async function ReceiptPage({
           id: posOrderLines.id,
           quantity: posOrderLines.quantity,
           nameSnapshot: posOrderLines.nameSnapshot,
+          categorySnapshot:posOrderLines.categorySnapshot,
           lineTotal: posOrderLines.lineTotal,
           note: posOrderLines.note,
           expectedConsumption: posOrderLines.expectedConsumption,
@@ -204,6 +214,28 @@ export default async function ReceiptPage({
 
   return (
     <main className="receipt-shell">
+      {query.autoKitchen==="paid"&&
+        order.order.mode==="LIVE"&&
+        order.order.status!=="CANCELLED"&&
+        (split?split.status==="PAID":order.order.status==="PAID")&&
+        <AutoKitchenPrint event="paid"
+          eventId={order.order.id+(split?"-"+split.id:"")}
+          slip={{
+            folio:order.order.folio,
+            table:order.order.tableLabel||
+              (order.order.serviceMode==="TAKEAWAY"?"Para llevar":"Aquí"),
+            orderNote:order.order.note,
+            lines:lines.map(line=>({
+              id:line.id,name:line.nameSnapshot,category:line.categorySnapshot,
+              quantity:Number(line.quantity),note:line.note,
+              serviceMode:typeof line.expectedConsumption?.serviceMode==="string"
+                ?line.expectedConsumption.serviceMode:order.order.serviceMode,
+              roundId:typeof line.expectedConsumption?.roundId==="string"
+                ?line.expectedConsumption.roundId:null,
+            })),
+          }}
+        />}
+
       <div className="receipt-toolbar no-print">
         <Link
           href={
@@ -219,6 +251,7 @@ export default async function ReceiptPage({
         <DirectPrintTicketButton
           ticket={{
             folio: order.order.folio,
+            kind: "RECEIPT",
             status: order.order.status,
             cancelReason: order.order.cancelReason,
             date: ticketDate,
@@ -327,6 +360,9 @@ export default async function ReceiptPage({
           {printSettings.headerMessage && (
             <p>{printSettings.headerMessage}</p>
           )}
+          <p className="receipt-document-type">
+            {order.order.status==="CANCELLED"?"TICKET CANCELADO":"TICKET DE VENTA · PAGADO"}
+          </p>
           {split && <p><strong>{split.label} · ticket separado</strong></p>}
         </header>
 

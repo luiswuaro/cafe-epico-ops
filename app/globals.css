@@ -1821,3 +1821,91 @@ th, td { vertical-align: top; }
     display:none;
   }
 }
+
+
+/* POS printing: a prebill is a consultation, not a paid sale receipt. */
+.receipt-document-type {
+  margin:.6rem 0 !important;
+  padding:.5rem 0;
+  border-top:2px solid currentColor;
+  border-bottom:2px solid currentColor;
+  font-size:13px;
+  font-weight:900;
+  text-align:center;
+  letter-spacing:.025em;
+}
+.receipt-prebill-warning {
+  padding:.45rem .15rem;
+  border:1px dashed #111;
+  font-size:12px;
+  font-weight:900;
+  text-align:center;
+}
+.pos-prebill-link {
+  background:#fffaf2;
+  color:var(--ink);
+  border:2px solid var(--ink);
+}
+.pos-prebill-link:hover { background:#efe5d7 }
+@media(max-width:760px) {
+  .pos-cart-open .pos-mobile-cart-footer .pos-mobile-footer-prebill {
+    grid-column:1 / -1;
+    color:var(--ink);
+    background:#efe8dc;
+    border:1px solid var(--ink);
+    min-height:44px;
+  }
+  .receipt-toolbar {
+    flex-wrap:wrap;
+  }
+}
+@media print {
+  .receipt-document-type,.receipt-prebill-warning {
+    color:#000 !important;
+    print-color-adjust:exact;
+  }
+}
+
+
+/* Barra: comanda muy corta, sin importes ni información de cobro. */
+.kitchen-print-actions{display:grid;gap:.3rem}
+.kitchen-print-controls{display:flex;flex-wrap:wrap;gap:.4rem;align-items:center}
+.kitchen-print-controls button{flex:1 1 165px;min-height:46px}
+.kitchen-print-controls .button{font-size:.82rem;padding:.65rem .75rem;flex:0 1 auto}
+.kitchen-print-controls select{
+  width:auto;max-width:100%;min-height:46px;
+  border:1px solid var(--line);border-radius:10px;
+  padding:.55rem;background:#fff;
+}
+.kitchen-printer-route{display:flex;align-items:center;gap:.65rem}
+.kitchen-printer-route input{width:auto;margin:0}
+.kitchen-printer-route span{display:grid;gap:.2rem}
+.kitchen-printer-route small{display:block}
+.kitchen-printer-setup .card{box-shadow:none}
+.kitchen-slip-paper{font-size:12px;line-height:1.22}
+.kitchen-slip-heading{font-size:12px;font-weight:900}
+.kitchen-slip-table{font-size:22px!important;overflow-wrap:anywhere}
+.kitchen-slip-items{border-top:1px dashed #000;border-bottom:1px dashed #000;padding:.35rem 0}
+.kitchen-slip-item{padding:.22rem 0}
+.kitchen-slip-category{display:block;font-size:11px;font-weight:900;margin:.35rem 0 .15rem}
+.kitchen-slip-name{font-weight:900;font-size:13.5px;overflow-wrap:anywhere}
+.kitchen-slip-note{font-weight:850;font-size:12px;white-space:normal;overflow-wrap:anywhere}
+.kitchen-slip-general-note{padding-top:.3rem;font-weight:850}
+.kitchen-slip-folio{font-size:9px;font-weight:650}
+@media(max-width:760px){
+  .kitchen-print-controls .button{flex:1 1 120px}
+  .kitchen-print-controls select{flex:1 1 130px}
+}
+@media print{
+  .kitchen-slip-paper{
+    width:48mm!important;
+    padding:1.5mm 1.5mm!important;
+    border:0!important;
+    font-size:12px!important;
+    line-height:1.2!important;
+  }
+  .kitchen-slip-paper header,.kitchen-slip-paper footer{text-align:center}
+  .kitchen-slip-heading{margin:0!important}
+  .kitchen-slip-table{margin:0!important}
+  .kitchen-slip-folio{margin:0!important}
+}
