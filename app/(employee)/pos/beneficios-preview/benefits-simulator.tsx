@@ -2,7 +2,9 @@
 
 import {useMemo,useState} from "react";
 import {
-  calculateBenefitPreview,POINT_REDEMPTION_MXN_PER_POINT,type BenefitKind,type BenefitLine,type Scope,
+  calculateBenefitPreview,calculateEarnedPointsFromMonetaryPayments,
+  POINT_REDEMPTION_MXN_PER_POINT,type MonetaryPaymentMethod,type MonetaryPayment,
+  type BenefitKind,type BenefitLine,type Scope,
 } from "@/src/domain/pos/benefits-preview";
 
 type Item={id:string;name:string;category:"CALIENTES"|"FRÍAS"|"ALIMENTOS";price:number};
@@ -19,6 +21,9 @@ export function BenefitsPreview({catalog,customers}:{catalog:Item[];customers:Cu
   const [reason,setReason]=useState("");
   const [customerId,setCustomerId]=useState("");
   const [staffFreeUsed,setStaffFreeUsed]=useState(false);
+  const [paymentMode,setPaymentMode]=useState<MonetaryPaymentMethod|"MIXED">("CASH");
+  const [mixedCash,setMixedCash]=useState("0");
+  const [mixedCard,setMixedCard]=useState("0");
   const selectedCustomer=customers.find(x=>x.id===customerId);
   const candidate=catalog.find(x=>x.id===itemId);
   const result=useMemo(()=>calculateBenefitPreview(lines,{
@@ -27,6 +32,23 @@ export function BenefitsPreview({catalog,customers}:{catalog:Item[];customers:Cu
     customerSelected:Boolean(selectedCustomer),
     staffFreeAlreadyUsed:staffFreeUsed,
   }),[lines,kind,scope,lineId,value,reason,selectedCustomer?.pointsBalance,staffFreeUsed]);
+
+  // Solo se acreditan puntos sobre el dinero realmente cobrado.
+  // El simulador no procesa pagos; reparte el saldo pendiente entre los métodos.
+  const rawCash=Number(mixedCash),rawCard=Number(mixedCard);
+  const transferRemaining=Math.round((result.due-rawCash-rawCard)*100)/100;
+  const invalidMixed=paymentMode==="MIXED" && (
+    !Number.isFinite(rawCash)||!Number.isFinite(rawCard)||
+    rawCash<0||rawCard<0||transferRemaining<0
+  );
+  const payments:MonetaryPayment[]=paymentMode==="MIXED"
+    ?invalidMixed?[]:[
+      {method:"CASH",amount:rawCash},{method:"CARD",amount:rawCard},
+      {method:"TRANSFER",amount:transferRemaining},
+    ]
+    :[{method:paymentMode,amount:result.due}];
+  const earnedByPayments=result.valid&&!invalidMixed
+    ?calculateEarnedPointsFromMonetaryPayments(payments).earnedPoints:0;
 
   function add(){
     if(!candidate)return;
@@ -130,8 +152,33 @@ export function BenefitsPreview({catalog,customers}:{catalog:Item[];customers:Cu
       <div style={{display:"flex",justifyContent:"space-between"}}><span>Descuento por termo</span><strong>−{mxn(result.thermosSavings)}</strong></div>
       <div style={{display:"flex",justifyContent:"space-between"}}><span>Otro descuento</span><strong>−{mxn(result.ordinaryDiscount)}</strong></div>
       <div style={{display:"flex",justifyContent:"space-between"}}><span>Puntos aplicados ({result.redeemedPoints.toFixed(2)} pts)</span><strong>−{mxn(result.redeemedValue)}</strong></div>
-      <div className="pos-total"><strong>Total simulado a pagar</strong><strong>{mxn(result.due)}</strong></div>
-      <p className="muted">Puntos utilizados: {result.redeemedPoints.toFixed(2)} · Puntos estimados nuevos: +{result.earnablePoints.toFixed(2)} (hipótesis: 5% del importe pagado).</p>
+      <div className="pos-total"><strong>Dinero real a cobrar</strong><strong>{mxn(result.due)}</strong></div>
+      <label>¿Cómo paga el saldo restante? (simulación)
+        <select value={paymentMode}
+          onChange={e=>setPaymentMode(e.target.value as MonetaryPaymentMethod|"MIXED")}>
+          <option value="CASH">Efectivo</option>
+          <option value="CARD">Tarjeta</option>
+          <option value="TRANSFER">Transferencia</option>
+          <option value="MIXED">Pago mixto</option>
+        </select>
+      </label>
+      {paymentMode==="MIXED"&&<>
+        <label>Parte en efectivo (MXN)
+          <input type="number" min="0" step=".01" value={mixedCash}
+            onChange={e=>setMixedCash(e.target.value)}/>
+        </label>
+        <label>Parte con tarjeta (MXN)
+          <input type="number" min="0" step=".01" value={mixedCard}
+            onChange={e=>setMixedCard(e.target.value)}/>
+        </label>
+        <p className={invalidMixed?"status-warn":"muted"}>
+          Restante por transferencia: {invalidMixed?"Revisa los importes":mxn(transferRemaining)}
+        </p>
+      </>}
+      <p className="muted">Puntos canjeados: {result.redeemedPoints.toFixed(2)} pts.
+        El 5% se calcula únicamente sobre el dinero pagado (efectivo, tarjeta y transferencia).
+      </p>
+      <p className="status-ok">Puntos nuevos estimados: <strong>+{earnedByPayments.toFixed(2)} pts</strong></p>
       {result.warnings.map((warning,i)=><p key={i} className="status-warn" role="alert">{warning}</p>)}
       <p className="status-warn">Este módulo no registra descuentos, cortesías, canjes, movimientos de puntos ni ventas. Faltan autorización por rol, comprobación del turno y escritura/reversa atómica en PostgreSQL antes de permitir su uso en LIVE.</p>
     </section>
