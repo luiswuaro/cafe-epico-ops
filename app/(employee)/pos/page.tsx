@@ -1,5 +1,5 @@
 import Link from "next/link";
-import {and,eq,or,asc} from "drizzle-orm";
+import {and,eq,or,isNull,asc} from "drizzle-orm";
 import {getDb} from "@/src/infrastructure/db/client";
 import {employees} from "@/src/infrastructure/db/schema";
 import {extraLabels,preparationNote} from "@/src/application/pos/extras";
@@ -73,7 +73,7 @@ export default async function PosPage({
     getDb().select({id:employees.id,name:employees.name}).from(employees)
       .where(and(eq(employees.organizationId,employee.organizationId),
         eq(employees.isActive,true),
-        or(eq(employees.homeStoreId,employee.homeStoreId),eq(employees.id,employee.id))))
+        or(eq(employees.homeStoreId,employee.homeStoreId),isNull(employees.homeStoreId),eq(employees.id,employee.id))))
       .orderBy(asc(employees.name)),
   ]);
   const liveTickets=openOrders.filter(order=>order.mode==="LIVE");
