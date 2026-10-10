@@ -167,3 +167,13 @@ La ejecución de GitHub Actions prueba estructura, tipos, lint y compilación, *
 - Se restableció el stock ficticio mediante segundo `MANUAL_ADJUSTMENT +5,838.800 g`, proveedor `OPS_QA_TEST`, clave única `QA07-RESTORE-20261009`, y evento `QA_INVENTORY_SHORTAGE_RESTORED`. Stock resultante verificado **5,848.800 g**, ticket aún `SENT`, 0 pagos. El ajuste original negativo se conserva para auditoría.
 - Siguiente fase: cobrar una sola vez el mismo folio por $40 en efectivo; validar que el inventario quede en **5,829.900 g**, con un pago y movimiento de caja de $40. Caja acumulada previa: $770 esperados; posterior estimado $810.
 - **Pendiente de validar:** retry con existencia corregida, doble cobro desde dos dispositivos y falta de stock durante pago de una cuenta dividida.
+
+
+## QA-07 — COBRO TRAS RESTABLECER INVENTARIO: APROBADO (2026-10-10 UTC)
+
+- Folio `SH-261009181706-7E62`, orden `06a97045-4f45-44bf-9300-879bd7ce6652`. El primer intento de cobrar $40 con sólo 10 g de café fue rechazado sin movimientos de venta/pago/caja.
+- Ajuste QA restaurado: `MANUAL_ADJUSTMENT +5,838.800 g` con registro auditable `QA07-RESTORE-20261009`, saldos de café nuevamente en **5,848.800 g**.
+- El operador cobró desde la misma comanda, en modo `LIVE`. SQL confirmó `status=PAID`, un pago por **$40.00**, `inventory_effect_applied=true`, y un movimiento `POS_LIVE_ORDER / SALE` de café **−18.900 g**.
+- Existencia final `QA_CAFE_G`: **5,829.900 g**. Movimientos del experimento: simulación de faltante −5,838.800 g; compensación +5,838.800 g; venta −18.900 g.
+- La caja registra **$40.00** para el folio, y el neto acumulado de `pos_cash_movements` QA es **$310.00**. Con fondo de apertura de $500, el efectivo esperado es **$810.00**.
+- Se confirma integridad del cobro posterior al rechazo; sigue pendiente el ensayo concurrente QA-08 desde dos dispositivos, impresión ESC/POS física y demás escenarios críticos.
