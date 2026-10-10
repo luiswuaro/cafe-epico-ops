@@ -1797,7 +1797,7 @@ th, td { vertical-align: top; }
     grid-template-columns:1fr 1fr;
     gap:.55rem;
     flex:none;
-    padding:.7rem max(1rem,env(safe-area-inset-right)) calc(.75rem + env(safe-area-inset-bottom) / 4) max(1rem,env(safe-area-inset-left));
+    padding:.7rem max(1rem,env(safe-area-inset-right)) .75rem max(1rem,env(safe-area-inset-left));
     border-top:1px solid var(--line);
     background:#fffdfa;
     box-shadow:0 -5px 18px rgba(22,18,13,.09);
