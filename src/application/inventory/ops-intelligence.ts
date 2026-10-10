@@ -62,7 +62,7 @@ export async function getOpsInventoryIntelligence(organizationId:string,storeId:
     const afternoon=sampleDays?round3(Math.max(0,u.afternoon)/sampleDays):0;
     const status=stock<=0?"CRITICAL" as const:b.minimum!=null&&stock<Number(b.minimum)?"WATCH" as const:"OK" as const;
     return {variantExternalId:b.id,itemName:b.name,unitLabel:b.unit,displayUnit:b.unit,
-      displayFactor:1,soldByWeight:b.unit!=="pz",inStock:stock,avgDailyUsage14,
+      displayFactor:1,soldByWeight:b.unit!=="pz",inStock:stock,minimumStock:b.minimum==null?null:Number(b.minimum),avgDailyUsage14,
       expectedTodayMorning:morning,expectedTodayAfternoon:afternoon,
       expectedTomorrow:avgDailyUsage14,expectedTomorrowMorning:morning,
       expectedTomorrowAfternoon:afternoon,purchaseCost:null as number|null,status};
