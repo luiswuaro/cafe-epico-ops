@@ -114,3 +114,12 @@ La ejecución de GitHub Actions prueba estructura, tipos, lint y compilación, *
 - Al auditar, el ticket todavía tenía **0 pagos**, **0 movimientos de inventario**, **0 divisiones**. No se puede concluir que checkout respete el precio hasta que se cobre.
 - Organización comercial `cafe-epico`: 19 órdenes; QA: 5. Sin evidencia en esta consulta de mutación de pedidos comerciales.
 - **Siguiente paso:** cobrar el ticket a $30 y verificar 1 pago $30, 1 descuento 18.9 g; después crear otra venta a $35 para verificar que catálogo actualizado se aplique únicamente a nuevos tickets. Probar aparte nueva ronda dentro de la misma mesa con precios históricos distintos.
+
+## QA-05 — PRECIOS EN TICKET GUARDADO, COBRO Y NUEVA VENTA: aprobado (2026-10-10 UTC)
+
+- El Americano QA caliente del catálogo se cambió de $30.00 a $35.00. Los tres eventos `POS_CATALOG_PRICE_UPDATED` registrados durante la prueba documentan 30→35, 35→30 y 30→35. Precio final de catálogo: **$35.00**.
+- Ticket guardado `SH-261009175934-F061`, orden `3bb84c86-54cf-48a4-b262-a61d1b4ec94a`: línea congelada $30.00, total $30.00, estado final **PAID**, 1 pago `CASH $30.00`, movimiento de caja `SALE +$30.00` y un único consumo de `QA_CAFE_G -18.900 g`.
+- Nueva venta `OP-20261010000226-774A7`, orden `b576817b-e5f0-4a9b-acb8-b21a477a9cf3`: línea de catálogo $35.00, total $35.00, estado final **PAID**, 1 pago `CASH $35.00`, movimiento de caja `SALE +$35.00` y un único consumo de `QA_CAFE_G -18.900 g`.
+- **Conciliación:** $65.00 de ventas/caja de esta prueba, 37.800 g de café usados. Caja QA abierta: efectivo esperado **$695.00** (base $500 + neto acumulado $195). Café QA restante **5,886.600 g**.
+- Verificación de aislamiento desde 00:00 UTC: producción `cafe-epico` registró 0 órdenes, 0 pagos y 0 movimientos de inventario nuevos; `cafe-epico-qa` registró 1 orden nueva, 2 pagos (uno del ticket guardado anterior) y 2 movimientos de inventario.
+- **Conclusión:** el cobro de un ticket guardado usa el snapshot de precio original; una venta creada después usa el precio vigente. Pendiente: comprobar dos rondas en la misma mesa con precios distintos, split posterior, stock insuficiente y cobro simultáneo.
