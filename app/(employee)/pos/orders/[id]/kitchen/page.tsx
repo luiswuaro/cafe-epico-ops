@@ -1,6 +1,9 @@
 import Link from "next/link";
+import { and, eq } from "drizzle-orm";
+import { getDb } from "@/src/infrastructure/db/client";
+import { posCustomers } from "@/src/infrastructure/db/schema";
 import { getOrderSplitState } from "@/src/application/pos/splits";
-import { selectedKitchenSlip, kitchenCategoryLabel } from "@/src/application/pos/kitchen-slip";
+import { selectedKitchenSlip, kitchenCategoryLabel, kitchenOrderIdentity } from "@/src/application/pos/kitchen-slip";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
 import { assertEmployeePermission } from "@/src/infrastructure/auth/permissions";
 import { KitchenPrintButton } from "../../kitchen-print-button";
@@ -21,10 +24,18 @@ export default async function KitchenSlipPage({params,searchParams}:{
   const state=await getOrderSplitState(employee.organizationId,employee.homeStoreId,id);
   if(!state||state.order.mode!=="LIVE")throw new Error("Comanda no encontrada");
   if(state.order.status==="CANCELLED")throw new Error("No se imprimen comandas canceladas");
+  const client=state.order.customerId
+    ?(await getDb().select({name:posCustomers.name}).from(posCustomers)
+      .where(and(eq(posCustomers.id,state.order.customerId),
+        eq(posCustomers.organizationId,employee.organizationId))).limit(1))[0]
+    :null;
   const slip={
     folio:state.order.folio,
-    table:state.order.tableLabel||
-      (state.order.serviceMode==="TAKEAWAY"?"Para llevar":"Aquí"),
+    ...kitchenOrderIdentity({
+      ticketLabel:state.order.tableLabel,
+      customerName:client?.name,
+      folio:state.order.folio,
+    }),
     orderNote:state.order.note,
     lines:state.lines.map(row=>({
       id:row.id,name:row.nameSnapshot,category:row.categorySnapshot,
@@ -58,6 +69,7 @@ export default async function KitchenSlipPage({params,searchParams}:{
       <header>
         <p className="kitchen-slip-heading">COMANDA BARRA</p>
         <h1 className="kitchen-slip-table">{slip.table}</h1>
+        {slip.customerName&&<p><strong>CLIENTE: {slip.customerName}</strong></p>}
         <p><strong>{selected.roundLabel} · {now}</strong></p>
       </header>
       <div className="kitchen-slip-items">
