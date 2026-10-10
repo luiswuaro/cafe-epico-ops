@@ -1,14 +1,12 @@
 import Link from "next/link";
 import { PosClient } from "./pos-client";
+import { getShadowOrderMirror } from "@/src/application/pos/mirror";
 import { getPosCatalog } from "@/src/application/pos/catalog";
 import { isPosLiveEnabled } from "@/src/application/pos/live";
 import { getCashState } from "@/src/application/pos/cash";
 import { getPosCustomers } from "@/src/application/pos/customers";
 import { getOpenPosOrders } from "@/src/application/pos/orders";
-import {
-  getRecentShadowOrders,
-  getShadowOrderMirror,
-} from "@/src/application/pos/mirror";
+
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
 import {
   assertEmployeePermission,
@@ -23,15 +21,6 @@ const money = new Intl.NumberFormat("es-MX", {
   currency: "MXN",
   maximumFractionDigits: 2,
 });
-
-function time(date: Date | null) {
-  if (!date) return "—";
-  return date.toLocaleTimeString("es-MX", {
-    timeZone: "America/Mexico_City",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
 
 export default async function PosPage({
   searchParams,
@@ -59,14 +48,9 @@ export default async function PosPage({
   const selectedCustomerId =
     typeof params.customer === "string" ? params.customer : null;
 
-  const [catalog, customers, recent, saved, canCancel, cash, openOrders, canOverrideStock] = await Promise.all([
+  const [catalog, customers, saved, canCancel, cash, openOrders, canOverrideStock] = await Promise.all([
     getPosCatalog(employee.organizationId),
     getPosCustomers(employee.organizationId),
-    getRecentShadowOrders(
-      employee.organizationId,
-      employee.homeStoreId,
-      6,
-    ),
     savedId
       ? getShadowOrderMirror(employee.organizationId, savedId)
       : Promise.resolve(null),
@@ -331,40 +315,7 @@ export default async function PosPage({
         }:null}
       />
 
-      <section className="card pos-recent">
-        <div className="section-heading">
-          <div>
-            <p className="eyebrow">PRUEBAS RECIENTES</p>
-            <h2>Historial de órdenes espejo</h2>
-          </div>
-          <span className="pill">{recent.length}</span>
-        </div>
-        {recent.length === 0 ? (
-          <p className="muted">Todavía no hay ventas de prueba.</p>
-        ) : (
-          <div className="stack compact-stack">
-            {recent.map((order) => (
-              <Link
-                href={"/pos?saved=" + order.id}
-                className="task"
-                key={order.id}
-              >
-                <div style={{ flex: 1 }}>
-                  <strong>{order.folio}</strong>
-                  <div className="muted">
-                    {order.serviceMode === "TAKEAWAY"
-                      ? "Para llevar"
-                      : order.tableLabel || "Aquí"}
-                    {" · "}
-                    {time(order.paidAt)}
-                  </div>
-                </div>
-                <strong>{money.format(Number(order.total))}</strong>
-              </Link>
-            ))}
-          </div>
-        )}
-      </section>
+
     </main>
   );
 }
