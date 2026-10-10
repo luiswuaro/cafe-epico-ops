@@ -2245,3 +2245,56 @@ details[open]>.ops-chevron,details[open]>summary>.ops-chevron{transform:rotate(1
   .ops-mobile-tabs,.ops-appearance,.ops-roast-actions{display:none!important}
   body{background:white!important;color:black!important}
 }
+
+/* Contrast and compatibility polish for the existing OPS navigation. */
+.ops-drawer-list{min-height:0}
+.ops-nav-shell{gap:.45rem}
+.ops-drawer-close{color:var(--epic-fg);background:var(--epic-soft)}
+.ops-drawer-link:hover,.ops-drawer-link.is-active{background:var(--epic-soft);color:var(--epic-fg)}
+.ops-drawer-link.is-active{box-shadow:inset 3px 0 var(--epic-accent)}
+.ops-drawer-link.is-active .ops-nav-icon{color:var(--epic-fg)}
+.ops-menu-trigger{background:var(--epic-card);color:var(--epic-fg);border-color:var(--epic-border)}
+.ops-menu-trigger:hover{background:var(--epic-soft)}
+.ops-shortcut:hover,.ops-shortcut.is-active{background:var(--epic-soft);color:var(--epic-fg)}
+.ops-drawer-signout button{background:var(--epic-soft);color:var(--epic-fg)}
+@media(max-width:760px){
+  .ops-mobile-tabs .ops-shortcut.is-active,.ops-mobile-tabs button.is-active{
+    background:var(--epic-soft);color:var(--epic-fg)
+  }
+  .ops-mobile-tabs .ops-shortcut,.ops-mobile-tabs button{color:var(--epic-secondary)}
+}
+/* Auto theme must style legacy white surfaces exactly like explicit dark mode. */
+@media(prefers-color-scheme:dark){
+  :root:not([data-theme="light"]):not([data-theme="dark"])
+  :is(.pos-category-tabs button,.pos-service-toggle button,.pos-product-card,.pos-qty-control button,.quick-action-links a,.recipe-category-tabs a,.queue-action,.pos-mobile-cart-footer,.pos-mobile-cart-header,.pos-cart-body){
+    background:var(--epic-raised);color:var(--epic-fg);border-color:var(--epic-border);
+  }
+  :root:not([data-theme="light"]):not([data-theme="dark"])
+  :is(.pos-category-tabs button.active,.pos-service-toggle button.active){
+    background:#e6ddcd;color:#211d17;border-color:#e6ddcd;
+  }
+  :root:not([data-theme="light"]):not([data-theme="dark"])
+  :is(.pos-product-grid .pos-product-card,.quick-panel,.quick-panel[open]>summary,.handoff-note-preview,.pos-mirror-grid>div,.ops-drawer,.ops-drawer-head,.ops-mobile-tabs,.ops-nav-shell,.nav-popover){
+    background:var(--epic-card)!important;color:var(--epic-fg);border-color:var(--epic-border);
+  }
+  :root:not([data-theme="light"]):not([data-theme="dark"]) .pos-product-qty{
+    background:var(--epic-accent);color:var(--epic-accent-contrast)
+  }
+  :root:not([data-theme="light"]):not([data-theme="dark"])
+  :is(.ops-shortcut.is-active,.ops-drawer-link.is-active){
+    background:var(--epic-soft);color:var(--epic-fg)
+  }
+}
+/* Distinct and consistent display priorities in all modes. */
+.card h2{letter-spacing:-.035em;line-height:1.15}
+.metric{letter-spacing:-.05em;font-variant-numeric:tabular-nums}
+:where(.card,.ops-roast-stat,.ops-roast-batch) :is(input,select,textarea){
+  border-color:var(--epic-border);background:var(--epic-field);color:var(--epic-fg)
+}
+:where(.card,.ops-roast-stat,.ops-roast-batch) :is(input,select,textarea):focus{
+  border-color:var(--epic-accent);outline:2px solid color-mix(in srgb,var(--epic-accent) 20%,transparent)
+}
+:root[data-theme="dark"] .pos-cart-open .pos-mobile-cart-footer .pos-mobile-footer-secondary,
+:root[data-theme="dark"] .pos-cart-open .pos-mobile-cart-footer .pos-mobile-footer-prebill{
+  background:var(--epic-soft);color:var(--epic-fg);border-color:var(--epic-border)
+}
