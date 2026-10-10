@@ -376,6 +376,8 @@ export default async function RoastingPage({
         <RoastingSessionPlanner lots={data.lots.filter(l=>l.isActive).map(l=>({
           id:l.id,name:l.name,greenStockG:l.greenStockG,
           greenStockSource:l.greenStockSource,targetUse:l.targetUse,
+          hibeanGreenStockG:l.hibeanGreenStockG,
+          internalGreenStockG:l.internalGreenStockG,
         }))}/>
         <p><a href="#importar-hibean">Después de cada batch → Importar JSON y confirmar</a></p>
       </section>
@@ -641,8 +643,16 @@ export default async function RoastingPage({
                         <div className="muted">
                           {lot.greenStockSource === "HIBEAN_CONFIRMED"
                             ? "HiBean · confirmado en Ops"
-                            : "Inventario interno"}
+                            : "Inventario interno OPS"}
                         </div>
+                        {lot.greenStockSource === "INTERNAL" &&
+                          lot.hibeanGreenStockG != null &&
+                          Math.abs(lot.hibeanGreenStockG-lot.greenStockG)>1 && (
+                            <div className="status-warn">
+                              HiBean histórico: {number.format(lot.hibeanGreenStockG)} g ·
+                              pendiente de conciliación (sin cambiar existencias)
+                            </div>
+                          )}
                         {lot.greenStockSource === "HIBEAN_CONFIRMED" &&
                           lot.hibeanInventoryConfirmedAt && (
                             <div className="muted">
