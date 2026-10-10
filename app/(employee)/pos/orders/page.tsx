@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { CommandBoardAutoRefresh } from "./auto-refresh";
+import { KitchenPrintButton } from "./kitchen-print-button";
 import { AddLiveProducts } from "./add-live-products";
 import { createLiveCommandCustomer, setLiveCommandCustomer } from "./live-actions";
 import { getPosCatalog } from "@/src/application/pos/catalog";
@@ -203,6 +204,26 @@ export default async function PosOrdersPage({
                   </div>
                 )}
 
+                {order.mode==="LIVE"&&
+                  <KitchenPrintButton
+                    slip={{
+                      folio:order.folio,
+                      table:order.tableLabel||(order.serviceMode==="TAKEAWAY"?"Para llevar":"Aquí"),
+                      orderNote:order.note,
+                      lines:order.lines.map(line=>({
+                        id:line.id,
+                        name:line.name,
+                        category:line.category,
+                        quantity:Number(line.quantity),
+                        note:line.note,
+                        serviceMode:typeof line.expectedConsumption?.serviceMode==="string"
+                          ?line.expectedConsumption.serviceMode:null,
+                        roundId:typeof line.expectedConsumption?.roundId==="string"
+                          ?line.expectedConsumption.roundId:null,
+                      })),
+                    }}
+                    viewUrl={"/pos/orders/"+order.id+"/kitchen"}
+                  />}
                 {order.mode==="LIVE"&&
                   <Link className="button pos-prebill-link" href={"/pos/orders/"+order.id+"/prebill"}>
                     Imprimir precuenta · {order.tableLabel??"mesa"}
