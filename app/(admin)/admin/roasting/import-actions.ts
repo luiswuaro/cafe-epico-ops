@@ -1,7 +1,7 @@
 "use server";
 
 import { createHash } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { parseRoastCurveInput, type RoastCurveImport } from "@/src/domain/roasting/curve";
@@ -10,6 +10,8 @@ import { requirePermission } from "@/src/infrastructure/auth/permissions";
 import { getDb } from "@/src/infrastructure/db/client";
 import {
   auditEvents,
+  inventoryBalances,
+  inventoryMovements,
   roastBatches,
   roastCoffeeLots,
   roastGreenInventoryConfirmations,
@@ -643,6 +645,57 @@ export async function confirmHiBeanRoastImport(formData: FormData) {
       })
       .returning({ id: roastBatches.id });
 
+    // Importar un JSON no se limita a registrar la curva: si el lote
+    // tiene café verde vinculado en OPS, este batch consume su dosis verde
+    // exactamente una vez. El movimiento es trazable al batch y la llave
+    // externalProvider/externalId previene una segunda contabilización.
+    let inventoryPosted = false;
+    if (
+      existingLot?.greenInventoryItemId &&
+      settings?.defaultStoreId &&
+      settings.defaultLocationId
+    ) {
+      const [movement] = await tx.insert(inventoryMovements).values({
+        organizationId,
+        storeId: settings.defaultStoreId,
+        locationId: settings.defaultLocationId,
+        inventoryItemId: existingLot.greenInventoryItemId,
+        movementType: "PRODUCTION_CONSUMPTION",
+        quantityDelta: String(-greenWeightG),
+        sourceType: "ROAST_BATCH",
+        sourceId: createdBatch.id,
+        occurredAt: roastedAt,
+        employeeId,
+        note: "Consumo café verde HiBean para batch " + batchCode,
+        externalProvider: "ROASTING",
+        externalId: createdBatch.id + ":GREEN",
+      }).onConflictDoNothing().returning({ id: inventoryMovements.id });
+
+      if (movement) {
+        await tx.insert(inventoryBalances).values({
+          organizationId,
+          storeId: settings.defaultStoreId,
+          locationId: settings.defaultLocationId,
+          inventoryItemId: existingLot.greenInventoryItemId,
+          theoreticalQuantity: String(-greenWeightG),
+        }).onConflictDoUpdate({
+          target: [
+            inventoryBalances.storeId,
+            inventoryBalances.locationId,
+            inventoryBalances.inventoryItemId,
+          ],
+          set: {
+            theoreticalQuantity: sql`${inventoryBalances.theoreticalQuantity} - ${greenWeightG}`,
+            updatedAt: new Date(),
+          },
+        });
+      }
+      inventoryPosted = true;
+      await tx.update(roastBatches)
+        .set({ inventoryPosted: true, updatedAt: new Date() })
+        .where(eq(roastBatches.id, createdBatch.id));
+    }
+
     await tx.insert(roastGreenInventoryConfirmations).values({
       organizationId,
       coffeeLotId: lotId,
@@ -693,6 +746,8 @@ export async function confirmHiBeanRoastImport(formData: FormData) {
         hibeanBeanCloudId: beanCloudId,
         reportedInventoryG,
         confirmedInventoryG,
+        inventoryPosted,
+        greenInventoryConsumedG: inventoryPosted ? greenWeightG : 0,
         inventoryCorrected:
           reportedInventoryG == null ||
           Math.abs(reportedInventoryG - confirmedInventoryG) > 0.01,
@@ -707,6 +762,7 @@ export async function confirmHiBeanRoastImport(formData: FormData) {
   });
 
   revalidatePath("/admin/roasting");
+  revalidatePath("/inventory/ops");
   revalidatePath("/admin/decision-center");
   redirect(
     "/admin/roasting?batch=" +

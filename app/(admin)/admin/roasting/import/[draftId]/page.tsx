@@ -6,9 +6,11 @@ import { parseRoastCurveInput } from "@/src/domain/roasting/curve";
 import { requirePermission } from "@/src/infrastructure/auth/permissions";
 import { getDb } from "@/src/infrastructure/db/client";
 import {
+  inventoryBalances,
   roastCoffeeLots,
   roastImportDrafts,
   roastProfiles,
+  roastSettings,
 } from "@/src/infrastructure/db/schema";
 
 export const dynamic = "force-dynamic";
@@ -111,6 +113,30 @@ export default async function HiBeanImportPreviewPage({
   const matchedLot =
     lots.find((lot) => lot.id === draft.matchedCoffeeLotId) ?? null;
 
+  // El JSON puede conservar un saldo anterior al descuento del tostador.
+  // OPS proyecta el saldo posterior usando la dosis real del batch.
+  const [settings] = await db.select()
+    .from(roastSettings)
+    .where(eq(roastSettings.organizationId, organizationId))
+    .limit(1);
+  let currentOpsGreenG: number | null = null;
+  if (matchedLot?.greenInventoryItemId &&
+      settings?.defaultStoreId && settings.defaultLocationId) {
+    const [balance] = await db.select({
+      quantity: inventoryBalances.theoreticalQuantity,
+    }).from(inventoryBalances).where(and(
+      eq(inventoryBalances.organizationId, organizationId),
+      eq(inventoryBalances.storeId, settings.defaultStoreId),
+      eq(inventoryBalances.locationId, settings.defaultLocationId),
+      eq(inventoryBalances.inventoryItemId, matchedLot.greenInventoryItemId),
+    )).limit(1);
+    currentOpsGreenG = Number(balance?.quantity ?? 0);
+  }
+  const expectedAfterBatchG = currentOpsGreenG != null &&
+    metadata.greenWeightG != null
+      ? currentOpsGreenG - metadata.greenWeightG
+      : null;
+
   const developmentTimeS =
     events.firstCrack?.tS != null && events.drop?.tS != null
       ? events.drop.tS - events.firstCrack.tS
@@ -129,7 +155,8 @@ export default async function HiBeanImportPreviewPage({
         <h1>Confirma el batch y el inventario</h1>
         <p className="muted">
           HiBean propone los datos. Nada modifica el inventario verde de Ops
-          hasta que confirmes esta pantalla.
+          hasta que confirmes esta pantalla. Al confirmar, la carga verde se
+          descontará una sola vez del inventario OPS vinculado al lote.
         </p>
       </section>
 
@@ -315,7 +342,7 @@ export default async function HiBeanImportPreviewPage({
             />
           </label>
           <label>
-            Existencia que confirmarás en Ops (g)
+            Existencia verde después de este tueste (g)
             <input
               name="confirmedInventoryG"
               type="number"
@@ -323,18 +350,27 @@ export default async function HiBeanImportPreviewPage({
               step="0.1"
               required
               defaultValue={
-                reportedInventoryG == null
-                  ? ""
-                  : reportedInventoryG
+                expectedAfterBatchG != null
+                  ? Math.max(0, expectedAfterBatchG)
+                  : reportedInventoryG ?? ""
               }
             />
           </label>
         </div>
+        {expectedAfterBatchG != null && (
+          <p className="muted">
+            Inventario OPS actual: <strong>{fmtNumber(currentOpsGreenG, 0)} g</strong>.
+            Dosis verde del batch: <strong>{fmtNumber(metadata.greenWeightG, 0)} g</strong>.
+            Existencia posterior prevista: <strong>{fmtNumber(expectedAfterBatchG, 0)} g</strong>.
+            Verifica contra el conteo físico. El número importado de HiBean
+            es informativo y puede estar desactualizado.
+          </p>
+        )}
         <label>
           Nota de corrección de inventario
           <input
             name="inventoryNote"
-            placeholder="Solo si corregiste lo reportado por HiBean."
+            placeholder="Ej. Saldo HiBean del JSON desactualizado; se confirma saldo final."
           />
         </label>
         <label className="card">
@@ -345,8 +381,8 @@ export default async function HiBeanImportPreviewPage({
             required
           />{" "}
           <strong>
-            Confirmo que revisé la existencia de café verde antes de guardarla
-            en Ops.
+            Confirmo la existencia final de café verde, después de consumir
+            la carga de este tueste.
           </strong>
         </label>
 
