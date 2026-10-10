@@ -34,6 +34,8 @@ try{
   assert.deepEqual(rule.preparedOwnContainerComponents(recipe,false),recipe);
   assert.deepEqual(rule.preparedOwnContainerComponents(recipe,true).map(x=>x.name),
     ["CAFÉ EN GRANO","LECHE","JARABE"]);
+  assert.equal(rule.isOwnContainerDisposable({name:"Recipiente cliente",category:"EMPAQUES"}),true);
+  assert.equal(rule.isOwnContainerDisposable({name:"JARABE",category:"JARABES"}),false);
   assert.equal(rule.isOwnContainerSnapshot({customerContainer:true}),true);
   assert.equal(rule.isOwnContainerSnapshot({customerContainer:false}),false);
   assert.equal(rule.isOwnContainerSnapshot(null),false);
