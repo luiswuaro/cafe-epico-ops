@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getPosCatalog, type PosServiceMode } from "@/src/application/pos/catalog";
+import {priceExtras} from "@/src/application/pos/extras";
 import { cancelLiveOrder } from "@/src/application/pos/live-cancellation";
 import { checkoutLiveOrder, isPosLiveEnabled } from "@/src/application/pos/live";
 import { getPosReadiness } from "@/src/application/pos/readiness";
@@ -32,6 +33,7 @@ const cartSchema = z
       quantity: z.number().int().min(1).max(20),
       note: z.string().trim().max(180).nullable().optional(),
       serviceMode: z.enum(["DINE_IN","TAKEAWAY"]).optional(),
+      extras: z.array(z.object({id:z.literal("ESPRESSO_SHOT"),quantity:z.number().int().min(1).max(2)})).max(1).optional(),
     }),
   )
   .min(1)
@@ -87,7 +89,9 @@ async function buildOrderInput(
     const item = catalogById.get(line.externalId);
     if (!item) throw new Error("Producto no disponible en el catálogo POS");
 
-    const lineTotal = item.price * line.quantity;
+    const extras=priceExtras(line.extras,item,catalog);
+    const unitPrice=Number((item.price+extras.unitPrice).toFixed(2));
+    const lineTotal = Number((unitPrice * line.quantity).toFixed(2));
     const lineMode = line.serviceMode ?? serviceMode;
     const serviceRecipe = item.serviceRecipes[lineMode as PosServiceMode];
 
@@ -97,12 +101,13 @@ async function buildOrderInput(
       note: line.note?.trim() || null,
       lineMode,
       lineTotal,
+      unitPrice,extras:extras.extras,
       expectedConsumption: {
         mode,
-        serviceMode: lineMode,
+        serviceMode: lineMode,extras:extras.extras,
         sourceRecipeExternalId: serviceRecipe.externalId,
         sourceCategory: serviceRecipe.sourceCategory,
-        components: serviceRecipe.components.map((component) => ({
+        components: [...serviceRecipe.components,...extras.components].map((component) => ({
           variantExternalId: component.variantExternalId,
           itemExternalId: component.itemExternalId,
           name: component.name,
@@ -258,7 +263,7 @@ async function createShadowOrder(
         variantExternalId: line.item.variantExternalId,
         nameSnapshot: line.item.name,
         categorySnapshot: line.item.category,
-        unitPrice: line.item.price.toFixed(2),
+        unitPrice: line.unitPrice.toFixed(2),
         quantity: String(line.quantity),
         lineTotal: line.lineTotal.toFixed(2),
         note: line.note,
