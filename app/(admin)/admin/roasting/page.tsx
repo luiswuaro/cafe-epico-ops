@@ -90,6 +90,11 @@ export default async function RoastingPage({
             <button>Comparar batches en Roast Engineer</button>
           </Link>
         </p>
+        <p>
+          <Link href="/admin/roasting/maquila" className="ops-primary-link">
+            Maquila para terceros · Inventarios, QC y reportes PDF →
+          </Link>
+        </p>
       </section>
 
       {typeof params.error === "string" && (
