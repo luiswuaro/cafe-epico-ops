@@ -103,6 +103,7 @@ export async function addProductsToLiveCommand(data:FormData){
           sourceRecipeExternalId:line.recipe.externalId,
           components:line.components.map(c=>({
             inventoryItemId:c.inventoryItemId??null,inventoryLocationId:c.inventoryLocationId??null,
+            costOnlyCode:c.costOnlyCode??null,
             variantExternalId:c.variantExternalId,itemExternalId:c.itemExternalId,
             name:c.name,quantity:c.quantity*line.quantity,unitLabel:c.unitLabel,
           })),
