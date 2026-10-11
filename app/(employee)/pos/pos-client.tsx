@@ -423,6 +423,7 @@ export function PosClient({
           Este preview está en modo espejo. El simulador NO cobra, no crea tickets,
           no registra ventas, no modifica caja ni descuenta inventario.
         </p>
+        {hasTakeawayDrinks&&courtesyCupCarriers4>0&&<p className="status-ok">Cortesía: {courtesyCupCarriers4} portavasos de 4 espacios · $0.00</p>}
         <p className="muted">Pedido: <strong>{ticketNamePreview}</strong>
           {" · "}{ticketServiceMode==="TAKEAWAY"?"Para llevar":"Aquí"}
         </p>
@@ -479,6 +480,7 @@ export function PosClient({
       <section className="card stack" style={{maxWidth:780,margin:"0 auto",width:"100%"}}>
         <p className="eyebrow">POS · COBRAR</p>
         <h2>Elegir método de pago</h2>
+        {hasTakeawayDrinks&&courtesyCupCarriers4>0&&<p className="status-ok">Cortesía: {courtesyCupCarriers4} portavasos de 4 espacios · $0.00</p>}
         <p className="muted">Ticket: <strong>{staffFreeCheckout?"Consumo personal":ticketNamePreview}</strong> · {ticketServiceMode==="DINE_IN"?"Aquí":"Para llevar"}</p>
         <p className="muted">El pedido sigue en memoria hasta confirmar el cobro. Puedes volver sin perder productos ni notas.</p>
         {checkoutState.error&&<div className="status-bad" role="alert">
