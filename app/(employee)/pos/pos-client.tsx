@@ -529,7 +529,8 @@ export function PosClient({
           <button className="pos-pay-button" type="submit" disabled={checkoutPending ||
             missingTable || pointCheckout || (staffSelected&&!staffFreeCheckout) ||
             (monetaryDue>0&&paymentMethod==="CASH"&&(!tendered.trim()||Number(tendered)<monetaryDue))}>
-            {checkoutPending?"Procesando...":"Confirmar cobro · "+money.format(monetaryDue)}
+            {checkoutPending?"Registrando...":staffFreeCheckout
+              ?"Registrar bebida gratis · $0.00":"Confirmar cobro · "+money.format(monetaryDue)}
           </button>
         </form>
         <button type="button" className="button" onClick={()=>setCheckoutOpen(false)}>
