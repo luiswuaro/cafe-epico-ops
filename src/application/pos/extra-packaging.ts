@@ -1,15 +1,17 @@
 import {and,eq,sql} from "drizzle-orm";
 import {getPosCatalog} from "./catalog";
 import {getDb} from "@/src/infrastructure/db/client";
-import {auditEvents,inventoryBalances,inventoryItems,inventoryMovements,loyverseInventoryMappings,posOrders,posOrderLines} from "@/src/infrastructure/db/schema";
+import {auditEvents,inventoryBalances,inventoryItems,inventoryLocations,inventoryMovements,loyverseInventoryMappings,posOrders,posOrderLines} from "@/src/infrastructure/db/schema";
 
 export type ExtraPackInput={
   organizationId:string;storeId:string;orderId:string;lineId:string;
   actorUserId:string;employeeId:string;requestId:string;quantity:number;
 };
 const isPack=(name:string)=>/VASO|TAPA|MANGA|FAJILLA|POPOTE|PAJILLA|SERVILLETA|AGITADOR/i.test(name);
-const componentId=(component:{variantExternalId:string|null;name:string})=>
-  component.variantExternalId??component.name.toLocaleUpperCase("es-MX");
+const componentId=(component:{variantExternalId:string|null;inventoryItemId?:string|null;inventoryLocationId?:string|null;name:string})=>
+  component.inventoryItemId&&component.inventoryLocationId
+    ?component.inventoryItemId+":"+component.inventoryLocationId
+    :component.variantExternalId??component.name.toLocaleUpperCase("es-MX");
 export async function recordExtraPackaging(input:ExtraPackInput){
   if(!Number.isInteger(input.quantity)||input.quantity<1||input.quantity>20)
     throw new Error("Cantidad de empaques inválida.");
@@ -53,6 +55,8 @@ export async function recordExtraPackaging(input:ExtraPackInput){
       const component={
         name:c.name,
         variantExternalId:typeof c.variantExternalId==="string"?c.variantExternalId:null,
+        inventoryItemId:typeof c.inventoryItemId==="string"?c.inventoryItemId:null,
+        inventoryLocationId:typeof c.inventoryLocationId==="string"?c.inventoryLocationId:null,
       };
       const amount=Number(c.quantity)/Number(line.quantity);
       if(Number.isFinite(amount)&&amount>0){
@@ -77,11 +81,32 @@ export async function recordExtraPackaging(input:ExtraPackInput){
         eq(loyverseInventoryMappings.storeId,input.storeId),
         eq(loyverseInventoryMappings.isActive,true),eq(inventoryItems.isActive,true)));
     const byExt=new Map(mappings.map(x=>[x.ext,x]));
+    const [nativeItems,locations]=await Promise.all([
+      tx.select({id:inventoryItems.id,name:inventoryItems.name,
+        unit:inventoryItems.canonicalUnit,policy:inventoryItems.trackingType})
+        .from(inventoryItems).where(and(eq(inventoryItems.organizationId,input.organizationId),
+          eq(inventoryItems.isActive,true))),
+      tx.select({id:inventoryLocations.id}).from(inventoryLocations).where(and(
+        eq(inventoryLocations.organizationId,input.organizationId),
+        eq(inventoryLocations.storeId,input.storeId),eq(inventoryLocations.isActive,true))),
+    ]);
+    const byId=new Map(nativeItems.map(i=>[i.id,i]));
+    const locationIds=new Set(locations.map(l=>l.id));
     const consumed=new Map<string,{location:string;item:string;name:string;amount:number}>();
     for(const extra of extras){
-      const m=extra.variantExternalId?byExt.get(extra.variantExternalId):null;
-      if(!m)throw new Error("Sin mapeo de inventario: "+extra.name);
-      const amount=Math.round(extra.quantity*Number(m.factor)*1000)/1000;
+      let m:{location:string;item:string;name:string;factor:number}|null=null;
+      if(extra.inventoryItemId||extra.inventoryLocationId){
+        const item=extra.inventoryItemId?byId.get(extra.inventoryItemId):null;
+        if(!item||!extra.inventoryLocationId||!locationIds.has(extra.inventoryLocationId)
+          ||item.unit!==extra.unitLabel||item.policy!=="QUANTITY")
+          throw new Error("Insumo de empaque OPS inválido: "+extra.name);
+        m={location:extra.inventoryLocationId,item:item.id,name:item.name,factor:1};
+      }else{
+        const old=extra.variantExternalId?byExt.get(extra.variantExternalId):null;
+        if(old)m={location:old.location,item:old.item,name:old.name,factor:Number(old.factor)};
+      }
+      if(!m)throw new Error("Insumo sin vinculación OPS: "+extra.name);
+      const amount=Math.round(extra.quantity*m.factor*1000)/1000;
       if(amount<=0)throw new Error("Cantidad de inventario inválida.");
       const id=m.location+":"+m.item,old=consumed.get(id);
       if(old)old.amount+=amount;
