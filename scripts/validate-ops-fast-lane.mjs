@@ -58,13 +58,14 @@ try{
   // Ensures theme changes do not leave black text on dark POS surfaces.
   const css=fs.readFileSync("app/globals.css","utf8");
   const epicSection=css.slice(css.indexOf("CAFÉ ÉPICO OPS · VISUAL SYSTEM"));
-  const light=epicSection.match(/:root \\{([\\s\\S]*?)\\}/)?.[1];
-  const dark=epicSection.match(/:root\\[data-theme="dark"\\]\\{([\\s\\S]*?)\\}/)?.[1];
+  const light=epicSection.match(/:root \{([\s\S]*?)\}/)?.[1];
+  const dark=epicSection.match(/:root\[data-theme="dark"\]\{([\s\S]*?)\}/)?.[1];
   assert.ok(light&&dark,"Los dos modos deben definir una paleta completa");
   const color=(block,name)=>{
-    const found=block.match(new RegExp(name+":(#[0-9a-fA-F]{6})"));
+    const found=block.match(new RegExp(name+":(#[0-9a-fA-F]{6}|#[0-9a-fA-F]{3})(?=[;\\s}])"));
     assert.ok(found,"Falta token "+name);
-    return found[1];
+    const hex=found[1];
+    return hex.length===4?"#"+hex.slice(1).split("").map(x=>x+x).join(""):hex;
   };
   const luminance=(hex)=>{
     const parts=[1,3,5].map(i=>parseInt(hex.slice(i,i+2),16)/255);
@@ -84,7 +85,7 @@ try{
       "Botones activos sin contraste suficiente");
   }
   assert.match(css,/Fast Lane theme parity/);
-  assert.match(css,/main\\.pos-shell \\.pos-cart :is\\(h2,h3,\\.pos-total/);
+  assert.match(css,/main\.pos-shell \.pos-cart :is\(h2,h3,\.pos-total/);
   console.log("OPS Fast Lane: paletas claro/oscuro PASS");
   console.log("OPS fast lane: stock + tiempos + shortcuts PASS");
 }finally{
