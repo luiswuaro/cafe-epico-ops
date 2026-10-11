@@ -2673,3 +2673,70 @@ details[open]>.ops-chevron,details[open]>summary>.ops-chevron{transform:rotate(1
 @media(max-width:760px){
   .pos-own-thermos-control{min-height:66px;padding:.65rem}
 }
+
+/* POS · editor de recetas: superficies y tipografía legibles en modos
+   claro, oscuro y automático. La tarjeta no debe permanecer blanca con
+   texto heredado del tema oscuro. Mantener el alcance al editor. */
+.recipe-visual-editor{
+  color:var(--epic-fg);
+  --recipe-row-bg:var(--epic-raised);
+}
+.recipe-visual-editor .recipe-component-row,
+.recipe-visual-editor .recipe-inherit-card{
+  background:var(--recipe-row-bg);
+  color:var(--epic-fg);
+  border-color:var(--epic-border);
+}
+.recipe-visual-editor .recipe-component-row :is(label,span,strong,p,small){
+  color:inherit;
+}
+.recipe-visual-editor .recipe-component-row .muted,
+.recipe-visual-editor .recipe-inherit-card .muted,
+.recipe-visual-editor .recipe-component-head,
+.recipe-visual-editor .recipe-component-row .mobile-field-label{
+  color:var(--epic-secondary);
+}
+.recipe-visual-editor .recipe-component-row .status-warn{
+  color:var(--epic-warn-ink);
+}
+.recipe-visual-editor .recipe-component-row .status-ok{
+  color:var(--epic-success-ink);
+}
+.recipe-visual-editor .recipe-component-row :is(input,select),
+.recipe-visual-editor .recipe-inherit-card :is(input,select){
+  background:var(--epic-field);
+  color:var(--epic-fg);
+  border:1px solid var(--epic-border);
+  min-width:0;
+}
+.recipe-visual-editor .recipe-component-row select option{
+  background:var(--epic-field);
+  color:var(--epic-fg);
+}
+.recipe-visual-editor .recipe-component-row input[readonly]{
+  background:var(--epic-soft);
+  color:var(--epic-fg);
+  opacity:1;
+}
+.recipe-visual-editor .recipe-service-tabs button{
+  background:var(--epic-raised);
+  color:var(--epic-fg);
+  border-color:var(--epic-border);
+}
+.recipe-visual-editor .recipe-service-tabs button.active{
+  background:var(--epic-accent);
+  color:var(--epic-accent-contrast);
+  border-color:var(--epic-accent);
+}
+.recipe-visual-editor .recipe-remove-row{
+  background:var(--epic-soft);
+  color:var(--epic-fg);
+  border-color:var(--epic-border);
+}
+.recipe-visual-editor .recipe-component-row .recipe-remove-row{
+  align-self:stretch;
+}
+.recipe-visual-editor .recipe-component-row :is(input,select):focus-visible{
+  outline:2px solid var(--epic-accent);
+  outline-offset:2px;
+}
