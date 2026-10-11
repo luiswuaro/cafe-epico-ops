@@ -13,6 +13,7 @@ const saved=read("app/(employee)/pos/orders/live-actions.ts");
 assert.match(catalog,/inventoryItemId\?: string \| null/);
 assert.match(catalog,/inventoryLocationId\?: string \| null/);
 assert.match(catalog,/component\.inventoryItemId/);
+assert.match(catalog,/component\.inventoryItemId \|\| component\.costOnlyCode/);
 assert.match(live,/nativeById\.get\(nativeId\)/);
 assert.match(live,/allowedLocations\.has\(nativeLocation\)/);
 assert.match(live,/native\.trackingType==="COST_ONLY"/);
