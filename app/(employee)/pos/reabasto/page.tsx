@@ -70,8 +70,7 @@ export default async function ReplenishmentPage(){
        </div>
        <div className="pos-replenishment-bottom">
          <span>Referencia: {item.referenceProduct} · hasta
-           <strong> {qty.format(item.theoreticalPortions??0)} porciones</strong>
-           {item.balance===null?" (cobertura desconocida)":""}
+           <strong> {item.theoreticalPortions===null?"desconocidas":qty.format(item.theoreticalPortions)+" porciones"}</strong>
          </span>
          <span>{item.minimum===null?"Mínimo no definido":
            "Mínimo "+qty.format(item.minimum)+" "+item.unit+

@@ -2907,3 +2907,10 @@ main.pos-shell .pos-table-shortcuts button[aria-pressed="true"] {
 .pos-replenishment-bottom{display:grid;gap:.28rem;color:var(--epic-secondary);font-size:.79rem}
 .pos-replenishment-bottom strong{color:var(--epic-fg)}
 @media(max-width:700px){.pos-replenishment-kpis{grid-template-columns:1fr}.pos-replenishment-top{flex-wrap:wrap}}
+
+/* Barista: lectura de receta sin abandonar la captura ni la comanda activa. */
+.pos-inline-recipe{display:inline-block;margin:.22rem 0 .4rem;
+ padding:.2rem .36rem;border-radius:6px;font-size:.75rem;
+ font-weight:800;color:var(--epic-fg);background:var(--epic-soft);
+ border:1px solid var(--epic-border);text-decoration:none}
+.pos-inline-recipe:hover,.pos-inline-recipe:focus-visible{outline:2px solid var(--epic-accent)}

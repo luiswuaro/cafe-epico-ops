@@ -279,6 +279,7 @@ export default async function PosPage({
           </Link>)}
           {liveTickets.length===0&&<span className="muted">Sin mesas pendientes</span>}
         </div>
+        <Link className="pos-fast-all" href="/pos/reabasto">Insumos <span aria-hidden="true">↗</span></Link>
         <Link className="pos-fast-all" href="/pos/orders">Comandas y cobro →</Link>
       </section>}
       {selectedTicketId&&!selectedTicket&&<p className="status-warn">
@@ -340,6 +341,7 @@ export default async function PosPage({
         </Link>
         <Link href="/pos/tickets" className="button">Historial de tickets</Link>
         <Link href="/pos/customers" className="button">Clientes y puntos</Link>
+        <Link href="/pos/reabasto" className="button">Reabasto rápido</Link>
         <Link href="/pos/inventory-audit" className="button">Auditoría inventario</Link>
         <Link href="/pos/performance" className="button">Tiempos y eficiencia</Link>
         <Link href="/pos/printer" className="button">

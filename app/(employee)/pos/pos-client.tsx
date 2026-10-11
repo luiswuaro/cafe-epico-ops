@@ -729,6 +729,12 @@ export function PosClient({
                     <strong>{money.format(unitPrice(line))}</strong>
                   </div>
 
+                  <Link className="pos-inline-recipe"
+                    href={"/recipes/"+encodeURIComponent(line.item.id)+(line.serviceMode==="TAKEAWAY"?"?servicio=llevar":"")}
+                    target="_blank" rel="noopener noreferrer"
+                    aria-label={"Abrir receta de "+line.item.name+" en otra pestaña"}>
+                    Consultar receta ↗
+                  </Link>
                   <label style={{display:"block",marginTop:8}}>
                     Preparación
                     <select value={line.serviceMode}
