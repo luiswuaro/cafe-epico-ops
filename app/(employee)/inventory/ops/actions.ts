@@ -1,6 +1,6 @@
 "use server";
 
-import { and, eq, sql, ilike } from "drizzle-orm";
+import { and, eq, ne, sql, ilike } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
@@ -137,6 +137,7 @@ const newItemSchema = z.object({
   sku: z.string().trim().max(80).optional(),
   category: z.string().trim().min(2).max(80),
   unit: z.enum(["g", "ml", "pz"]),
+  trackingType:z.enum(["QUANTITY","COST_ONLY"]).default("QUANTITY"),
   initialQuantity: z.coerce.number().finite().min(0).max(10000000),
   note: z.string().trim().min(3).max(500),
 });
@@ -155,11 +156,14 @@ export async function createOpsInventoryItem(formData: FormData) {
     sku: String(formData.get("sku") ?? "").trim() || undefined,
     category: formData.get("category"),
     unit: formData.get("unit"),
+    trackingType: formData.get("trackingType")??"QUANTITY",
     initialQuantity: rawInitial,
     note: formData.get("note"),
   });
   if (!parsed.success) throw new Error("Alta inválida: revisa nombre, ubicación, unidad y saldo.");
   const data = parsed.data;
+  if(data.trackingType==="COST_ONLY"&&data.initialQuantity!==0)
+    throw new Error("Los insumos de solo costo no requieren existencia inicial.");
   if (Math.abs(Math.round(data.initialQuantity*1000)-data.initialQuantity*1000)>0.00001)
     throw new Error("Cantidad inicial: máximo tres decimales.");
   const db = getDb();
@@ -185,7 +189,7 @@ export async function createOpsInventoryItem(formData: FormData) {
     const now = new Date();
     const [item]=await tx.insert(inventoryItems).values({
       organizationId:employee.organizationId,name:data.name,sku:data.sku??null,
-      category:data.category,canonicalUnit:data.unit,trackingType:"QUANTITY",
+      category:data.category,canonicalUnit:data.unit,trackingType:data.trackingType,
     }).returning({id:inventoryItems.id});
     await tx.insert(inventoryBalances).values({
       organizationId:employee.organizationId,storeId:employee.homeStoreId!,
@@ -211,4 +215,57 @@ export async function createOpsInventoryItem(formData: FormData) {
     return item.id;
   });
   redirect("/inventory/ops?created="+encodeURIComponent(itemId));
+}
+
+const updateItemSchema=z.object({
+  itemId:z.string().uuid(),
+  name:z.string().trim().min(2).max(150),
+  sku:z.string().trim().max(80).optional(),
+  category:z.string().trim().min(2).max(80),
+  minimumStock:z.coerce.number().finite().min(0).max(10000000).nullable().optional(),
+});
+export async function updateOpsInventoryItem(formData:FormData){
+  const {user,employee}=await getCurrentEmployee();
+  if(!employee.homeStoreId)throw new Error("Sin sucursal asignada.");
+  await assertEmployeePermission(employee.id,"inventory.item.manage",employee.homeStoreId);
+  if(process.env.VERCEL_ENV==="preview")
+    throw new Error("El preview es de solo lectura para proteger la base de producción.");
+  const minimum=String(formData.get("minimumStock")??"").trim();
+  const result=updateItemSchema.safeParse({
+    itemId:formData.get("itemId"),name:formData.get("name"),
+    category:formData.get("category"),
+    sku:String(formData.get("sku")??"").trim()||undefined,
+    minimumStock:minimum?Number(minimum):null,
+  });
+  if(!result.success)throw new Error("Verifica la ficha del insumo.");
+  const data=result.data;
+  if(data.minimumStock!=null&&Math.round(data.minimumStock*1000)/1000!==data.minimumStock)
+    throw new Error("Mínimo: usa máximo tres decimales.");
+  const db=getDb();
+  await db.transaction(async tx=>{
+    const [previous]=await tx.select().from(inventoryItems).where(and(
+      eq(inventoryItems.id,data.itemId),
+      eq(inventoryItems.organizationId,employee.organizationId),
+      eq(inventoryItems.isActive,true),
+    )).limit(1);
+    if(!previous)throw new Error("Insumo no encontrado.");
+    const [duplicate]=await tx.select({id:inventoryItems.id}).from(inventoryItems).where(and(
+      eq(inventoryItems.organizationId,employee.organizationId),
+      ilike(inventoryItems.name,data.name),ne(inventoryItems.id,data.itemId),
+    )).limit(1);
+    if(duplicate)throw new Error("Ya existe un insumo con este nombre.");
+    await tx.update(inventoryItems).set({
+      name:data.name,category:data.category,sku:data.sku??null,
+      minimumStock:data.minimumStock==null?null:data.minimumStock.toFixed(3),
+      updatedAt:new Date(),
+    }).where(eq(inventoryItems.id,data.itemId));
+    await tx.insert(auditEvents).values({
+      organizationId:employee.organizationId,storeId:employee.homeStoreId,
+      actorUserId:user.id,actorEmployeeId:employee.id,
+      action:"OPS_INVENTORY_ITEM_UPDATED",entityType:"inventory_item",entityId:data.itemId,
+      beforeData:{name:previous.name,category:previous.category,sku:previous.sku,minimumStock:previous.minimumStock},
+      afterData:{name:data.name,category:data.category,sku:data.sku,minimumStock:data.minimumStock},
+    });
+  });
+  redirect("/inventory/ops?updated="+encodeURIComponent(data.itemId));
 }
