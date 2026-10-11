@@ -7,7 +7,7 @@ export async function getPosExtraCatalog(organizationId:string):Promise<ExtraOpt
   const source=await getLoyverseRecipeSource(organizationId);
   return source.recipes.filter(r=>r.category.toUpperCase()==="EXTRAS" &&
     r.availableForSale && r.salePrice!==null && r.salePrice>0).map(r=>{
-    const components=r.effectiveComponents.filter(c=>
+    const components:PosRecipeComponent[]=r.effectiveComponents.filter(c=>
       !/VASO|TAPA|POPOTE|SERVILLETA|MANGA|FAJILLA/i.test(c.sourceName)).map(c=>({
       name:c.sourceName,quantity:c.quantity,variantExternalId:c.variantExternalId,
       itemExternalId:c.itemExternalId,unitLabel:c.unitLabel,category:c.category,

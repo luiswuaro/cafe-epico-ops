@@ -7,6 +7,8 @@ import {
 import { RecipeServiceEditor } from "./recipe-editor";
 import { SearchableCollection } from "@/components/searchable-collection";
 import { getPosCatalog } from "@/src/application/pos/catalog";
+import {getNativeRecipeOptions} from "@/src/application/pos/native-recipe-options";
+import {getCurrentEmployee} from "@/src/infrastructure/auth/current-employee";
 import { requirePermission } from "@/src/infrastructure/auth/permissions";
 
 export const dynamic = "force-dynamic";
@@ -20,11 +22,15 @@ export default async function PosCatalogAdminPage({searchParams}:{
   searchParams:Promise<Record<string,string|string[]|undefined>>;
 }) {
   const params=await searchParams;
+  const preview=process.env.VERCEL_ENV==="preview";
   const priceSaved=typeof params.priceSaved==="string"?params.priceSaved:null;
   const { organizationId } = await requirePermission("pos.catalog.manage");
   const catalog = await getPosCatalog(organizationId, {
     includeDisabled: true,
   });
+  const {employee}=await getCurrentEmployee();
+  if(!employee.homeStoreId)throw new Error("Configura una sucursal para editar recetas OPS.");
+  const native=await getNativeRecipeOptions(organizationId,employee.homeStoreId);
 
   const ingredientOptions = Array.from(
     new Set(
@@ -40,12 +46,14 @@ export default async function PosCatalogAdminPage({searchParams}:{
       <section className="hero">
         <p className="eyebrow">POS · ADMINISTRACIÓN</p>
         <h1>Catálogo y recetas</h1>
+        <p className="muted">Nuevo: vincula las recetas directamente con los insumos y ubicaciones reales de Inventario OPS; sin equivalencias obligatorias de Loyverse.</p>
         <p className="muted">
           Un producto, una ficha. La receta se edita por insumos y sólo
           personalizas “Para llevar” cuando realmente cambia el consumo.
         </p>
       </section>
 
+      {preview&&<section className="card status-warn" role="status">PREVIEW · Solo simulación visual. Este dominio comparte inventario con producción: botones de guardado desactivados.</section>}
       {priceSaved && <section className="card" role="status">
         <p className="status-ok">Precio actualizado en OPS. Los tickets existentes mantienen su valor guardado.</p>
       </section>}
@@ -82,9 +90,11 @@ export default async function PosCatalogAdminPage({searchParams}:{
             dineIn={[]}
             takeaway={[]}
             ingredientOptions={ingredientOptions}
+                  inventoryOptions={native.options}
+                  legacyMappings={native.legacyMappings}
           />
 
-          <button type="submit">Crear producto</button>
+          <button type="submit" disabled={preview}>Crear producto</button>
         </form>
       </details>
 
@@ -125,7 +135,7 @@ export default async function PosCatalogAdminPage({searchParams}:{
                   name="enabled"
                   value={item.active ? "false" : "true"}
                 />
-                <button type="submit">
+                <button type="submit" disabled={preview}>
                   {item.active ? "Quitar del POS" : "Volver a mostrar"}
                 </button>
               </form>
@@ -146,7 +156,7 @@ export default async function PosCatalogAdminPage({searchParams}:{
                     :"Precio de producto creado en OPS."}
                   {" "}Los tickets guardados conservan su precio original.
                 </p>
-                <button type="submit">Guardar precio</button>
+                <button type="submit" disabled={preview}>Guardar precio</button>
               </form>
             </details>
             <details className="pos-recipe-editor">
@@ -158,6 +168,8 @@ export default async function PosCatalogAdminPage({searchParams}:{
                   dineIn={item.serviceRecipes.DINE_IN.components}
                   takeaway={item.serviceRecipes.TAKEAWAY.components}
                   ingredientOptions={ingredientOptions}
+                  inventoryOptions={native.options}
+                  legacyMappings={native.legacyMappings}
                 />
 
                 <p className="muted">
@@ -165,7 +177,7 @@ export default async function PosCatalogAdminPage({searchParams}:{
                   cantidad, unidad e ingrediente sin obligarte a escribir
                   fórmulas de texto.
                 </p>
-                <button type="submit">Guardar receta</button>
+                <button type="submit" disabled={preview}>Guardar receta</button>
               </form>
             </details>
             </article>

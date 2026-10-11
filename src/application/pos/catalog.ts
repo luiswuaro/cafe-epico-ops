@@ -15,6 +15,10 @@ export type PosServiceMode = "DINE_IN" | "TAKEAWAY";
 export type PosCatalogCategory = "CALIENTES" | "FRÍAS" | "ALIMENTOS";
 
 export type PosRecipeComponent = {
+  /** Native OPS inventory identity; no Loyverse equivalence required. */
+  inventoryItemId?: string | null;
+  inventoryLocationId?: string | null;
+  costOnlyCode?: "WATER" | "ICE" | null;
   variantExternalId: string | null;
   itemExternalId: string | null;
   name: string;
@@ -82,8 +86,13 @@ function storedRecipe(value: unknown, byUniqueName?: Map<string,{itemId:string;v
         : "u.";
     if (!name || !Number.isFinite(quantity) || quantity <= 0) return [];
 
-    const matched=byUniqueName?.get(normalize(name));
+    // No rehidratar IDs Loyverse en componentes con identidad OPS ni costo puro.
+    const matched=(component.inventoryItemId || component.costOnlyCode)
+      ?undefined:byUniqueName?.get(normalize(name));
     return [{
+      inventoryItemId:typeof component.inventoryItemId==="string"?component.inventoryItemId:null,
+      inventoryLocationId:typeof component.inventoryLocationId==="string"?component.inventoryLocationId:null,
+      costOnlyCode:component.costOnlyCode==="WATER"?"WATER" as const:component.costOnlyCode==="ICE"?"ICE" as const:null,
       variantExternalId:
         typeof component.variantExternalId === "string"
           ? component.variantExternalId
@@ -300,7 +309,7 @@ export async function getPosCatalog(
     const override = overrideBySource.get(item.externalId);
     const dineIn = storedRecipe(override?.recipeDineIn,byUniqueName);
     const takeaway = storedRecipe(override?.recipeTakeaway,byUniqueName);
-    const singlePiece = !asBool(item.payload.sold_by_weight) ? [{
+    const singlePiece:PosRecipeComponent[] = !asBool(item.payload.sold_by_weight) ? [{
       variantExternalId: variant.externalId,
       itemExternalId: item.externalId,
       name: item.itemName,

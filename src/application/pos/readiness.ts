@@ -2,11 +2,11 @@ import { and, eq } from "drizzle-orm";
 import { getPosCatalog, type PosServiceMode } from "@/src/application/pos/catalog";
 import { isCostOnlyComponent } from "@/src/application/pos/component-policy";
 import { getDb } from "@/src/infrastructure/db/client";
-import { inventoryBalances, inventoryItems, loyverseInventoryMappings, posCashSessions } from "@/src/infrastructure/db/schema";
+import { inventoryBalances, inventoryItems, inventoryLocations, loyverseInventoryMappings, posCashSessions } from "@/src/infrastructure/db/schema";
 
 export async function getPosReadiness(organizationId:string,storeId:string) {
   const db=getDb();
-  const [catalog,mappings,balances,openCash]=await Promise.all([
+  const [catalog,mappings,balances,openCash,nativeItems,locations]=await Promise.all([
     getPosCatalog(organizationId),
     db.select({
       sourceVariant:loyverseInventoryMappings.loyverseVariantExternalId,
@@ -37,6 +37,17 @@ export async function getPosReadiness(organizationId:string,storeId:string) {
       eq(posCashSessions.storeId,storeId),
       eq(posCashSessions.status,"OPEN"),
     )).limit(1),
+    db.select({
+      id:inventoryItems.id,unit:inventoryItems.canonicalUnit,
+      trackingType:inventoryItems.trackingType,name:inventoryItems.name,
+    }).from(inventoryItems).where(and(
+      eq(inventoryItems.organizationId,organizationId),
+      eq(inventoryItems.isActive,true),
+    )),
+    db.select({id:inventoryLocations.id}).from(inventoryLocations).where(and(
+      eq(inventoryLocations.organizationId,organizationId),
+      eq(inventoryLocations.storeId,storeId),eq(inventoryLocations.isActive,true),
+    )),
   ]);
   const byVariant=new Map<string,typeof mappings>();
   for(const mapping of mappings){
@@ -45,6 +56,8 @@ export async function getPosReadiness(organizationId:string,storeId:string) {
     byVariant.set(mapping.sourceVariant,old);
   }
   const stock=new Map(balances.map(b=>[b.locationId+":"+b.inventoryItemId,Number(b.theoreticalQuantity)]));
+  const nativeById=new Map(nativeItems.map(i=>[i.id,i]));
+  const activeLocations=new Set(locations.map(i=>i.id));
   const modes=["DINE_IN","TAKEAWAY"] as const satisfies readonly PosServiceMode[];
   const products=catalog.map(product=>{
     const recipes=modes.map(mode=>{
@@ -63,20 +76,36 @@ export async function getPosReadiness(organizationId:string,storeId:string) {
       }
       for(const component of components){
         if(isCostOnlyComponent(component))continue;
-        const mappingsFor=component.variantExternalId
-          ? (byVariant.get(component.variantExternalId)||[]):[];
-        if(mappingsFor.length!==1){
-          errors.push((mappingsFor.length ? "Equivalencia duplicada: " : "Sin equivalencia: ")+component.name);
-          continue;
+        let inventoryItemId:string,locationId:string,unit:string,factor:number;
+        if(component.inventoryItemId||component.inventoryLocationId){
+          const native=component.inventoryItemId?nativeById.get(component.inventoryItemId):null;
+          if(!native||!component.inventoryLocationId||!activeLocations.has(component.inventoryLocationId)){
+            errors.push("Insumo OPS sin ubicación válida: "+component.name);continue;
+          }
+          if(native.trackingType==="COST_ONLY")continue;
+          if(native.trackingType!=="QUANTITY"||native.unit!==component.unitLabel){
+            errors.push("Unidad o política inválida de "+native.name);continue;
+          }
+          inventoryItemId=native.id;locationId=component.inventoryLocationId;
+          unit=native.unit;factor=1;
+        }else{
+          const mappingsFor=component.variantExternalId
+            ?(byVariant.get(component.variantExternalId)||[]):[];
+          if(mappingsFor.length!==1){
+            errors.push((mappingsFor.length?"Equivalencia duplicada: ":"Sin vinculación OPS: ")+component.name);continue;
+          }
+          const mapping=mappingsFor[0];
+          inventoryItemId=mapping.inventoryItemId;
+          locationId=mapping.locationId;unit=mapping.unit;
+          factor=Number(mapping.factor);
         }
-        const mapping=mappingsFor[0];
-        const amount=Math.round(component.quantity*Number(mapping.factor)*1000)/1000;
+        const amount=Math.round(component.quantity*factor*1000)/1000;
         if(!Number.isFinite(amount)||amount<=0){
           errors.push("Cantidad/unidad inválida: "+component.name);continue;
         }
-        const key=mapping.locationId+":"+mapping.inventoryItemId;
+        const key=locationId+":"+inventoryItemId;
         const prev=consumption.get(key);
-        consumption.set(key,{name:component.name,required:Math.round(((prev?.required||0)+amount)*1000)/1000,unit:mapping.unit});
+        consumption.set(key,{name:component.name,required:Math.round(((prev?.required||0)+amount)*1000)/1000,unit});
       }
       for(const [key,needed] of consumption){
         const balance=stock.get(key);
