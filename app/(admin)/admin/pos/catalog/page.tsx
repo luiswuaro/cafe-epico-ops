@@ -104,6 +104,8 @@ export default async function PosCatalogAdminPage({searchParams}:{
         label="bebidas y productos"
         placeholder="Ej. maracuyá, latte, moka, jarabe, hielo..."
         listClassName="pos-admin-list"
+        persistKey="ops-admin-pos-catalog"
+        resumeId={typeof params.saved==="string"?params.saved:priceSaved}
         entries={catalog.map((item) => ({
           id: item.id,
           name: item.name,
@@ -143,7 +145,7 @@ export default async function PosCatalogAdminPage({searchParams}:{
               </form>
             </div>
 
-            <details className="pos-recipe-editor">
+            <details className="pos-recipe-editor" data-save-state="precio">
               <summary>Editar precio de venta</summary>
               <form action={updatePosCatalogPrice} className="stack pos-price-edit">
                 <input type="hidden" name="catalogId" value={item.id}/>
@@ -161,7 +163,7 @@ export default async function PosCatalogAdminPage({searchParams}:{
                 <button type="submit" disabled={preview}>Guardar precio</button>
               </form>
             </details>
-            <details className="pos-recipe-editor">
+            <details className="pos-recipe-editor" data-save-state="receta">
               <summary>Editar receta</summary>
               <form action={savePosRecipe} className="stack">
                 <input type="hidden" name="catalogId" value={item.id} />

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect,useMemo,useRef,useState, type FormEvent,type ReactNode } from "react";
 
 export type SearchableEntry = {
   id: string;
@@ -20,6 +20,8 @@ type Props = {
   statusLabel?: string;
   defaultStatus?: string;
   emptyText?: string;
+  persistKey?:string;
+  resumeId?:string|null;
 };
 
 function normalize(value: string) {
@@ -36,8 +38,11 @@ export function SearchableCollection({
   entries, label, placeholder="Buscar por nombre, ingrediente o código...",
   listClassName, categoryLabel="Categoría", statusLabel="Estado",
   defaultStatus="", emptyText="No hay coincidencias con esos filtros.",
+  persistKey,resumeId,
 }: Props) {
   const [query, setQuery] = useState("");
+  const root=useRef<HTMLDivElement>(null);
+  const restored=useRef(false);
   const [category, setCategory] = useState("");
   const [status, setStatus] = useState(() => defaultStatus && entries.some(item=>item.status===defaultStatus) ? defaultStatus : "");
   const categories = useMemo(
@@ -59,8 +64,67 @@ export function SearchableCollection({
     }).map(item=>item.id));
   },[entries,query,category,status]);
   const reset=()=>{setQuery("");setCategory("");setStatus("");};
+  useEffect(()=>{
+    if(!persistKey)return;
+    try{
+      const value=window.sessionStorage.getItem(persistKey+":filters");
+      if(value){
+        const old=JSON.parse(value) as {query?:string;category?:string;status?:string};
+        setQuery(old.query??"");setCategory(old.category??"");setStatus(old.status??"");
+      }
+    }catch{/* navegación normal cuando el almacenamiento esté deshabilitado */}
+    restored.current=true;
+  },[persistKey]);
+  useEffect(()=>{
+    if(!persistKey||!restored.current)return;
+    try{window.sessionStorage.setItem(persistKey+":filters",JSON.stringify({query,category,status}));}
+    catch{/* sin almacenamiento: el filtro todavía funciona */}
+  },[persistKey,query,category,status]);
+  useEffect(()=>{
+    if(!persistKey)return;
+    const raw=window.sessionStorage.getItem(persistKey+":return");
+    if(!raw)return;
+    let cancelled=false;
+    let frame=0;
+    try{
+      const saved=JSON.parse(raw) as {scrollY:number;itemId?:string;offset?:number;open?:string[]};
+      // Rehidratar los filtros antes de reposicionar. El producto se identifica por ID
+      // estable, no por el nombre ni por el índice de la lista.
+      frame=window.requestAnimationFrame(()=>{
+        window.requestAnimationFrame(()=>{
+          if(cancelled)return;
+          const entry=saved.itemId?[...root.current?.querySelectorAll<HTMLElement>("[data-search-entry]")??[]]
+            .find(element=>element.dataset.searchEntry===saved.itemId):undefined;
+          if(entry && entry.getClientRects().length){
+            for(const details of entry.querySelectorAll<HTMLDetailsElement>("details[data-save-state]"))
+              details.open=Boolean(saved.open?.includes(details.dataset.saveState??""));
+            const top=entry.getBoundingClientRect().top+window.scrollY-(saved.offset??0);
+            window.scrollTo({top:Math.max(0,top),behavior:"instant"});
+          }else{
+            window.scrollTo({top:saved.scrollY??0,behavior:"instant"});
+          }
+          window.sessionStorage.removeItem(persistKey+":return");
+        });
+      });
+    }catch{window.sessionStorage.removeItem(persistKey+":return");}
+    return ()=>{cancelled=true;window.cancelAnimationFrame(frame);};
+  },[persistKey,resumeId,entries.length,query,category,status]);
+  function rememberPosition(event:FormEvent<HTMLDivElement>){
+    if(!persistKey)return;
+    const target=event.target;
+    if(!(target instanceof HTMLFormElement))return;
+    const entry=target.closest<HTMLElement>("[data-search-entry]");
+    try{
+      window.sessionStorage.setItem(persistKey+":return",JSON.stringify({
+        itemId:entry?.dataset.searchEntry,offset:entry?.getBoundingClientRect().top,
+        scrollY:window.scrollY,
+        open:entry?[...entry.querySelectorAll<HTMLDetailsElement>("details[data-save-state]")]
+          .filter(x=>x.open).map(x=>x.dataset.saveState):[],
+      }));
+    }catch{/* el guardado no depende de la memoria de navegación */}
+  }
   return (
-    <div className="stack">
+    <div className="stack" ref={root} onSubmitCapture={rememberPosition}>
       <div className="card stack" style={{gap:12}}>
         <label htmlFor={"search-"+label.replace(/[^a-zA-Z0-9]/g,"-")}>
           <strong>Buscar {label}</strong>
@@ -98,7 +162,7 @@ export function SearchableCollection({
       {visible.size===0 && <p className="card muted" role="status">{emptyText}</p>}
       <div className={listClassName ?? "stack"}>
         {entries.map(item=>(
-          <div key={item.id} style={{display:visible.has(item.id)?"contents":"none"}}>
+          <div key={item.id} data-search-entry={item.id} style={{display:visible.has(item.id)?"contents":"none"}}>
             {item.content}
           </div>
         ))}

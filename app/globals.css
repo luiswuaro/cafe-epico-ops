@@ -2934,3 +2934,11 @@ main.pos-shell .pos-table-shortcuts button[aria-pressed="true"] {
 @media(max-width:520px){.recipe-ops-extraction-metrics{grid-template-columns:1fr}
  .recipe-ops-extraction-metrics>div{display:flex;justify-content:space-between;align-items:center;gap:.5rem}
  .recipe-ops-extraction-metrics strong{font-size:1.05rem}}
+
+/* Navegación de administración: lista amplia y retorno a la ficha editada. */
+@media(min-width:1150px){
+ main:has(.pos-admin-list){max-width:none;width:100%;padding-inline:clamp(.65rem,2vw,2rem)}
+ main:has(.pos-admin-list) .pos-admin-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:.65rem;align-items:start}
+ main:has(.pos-admin-list) .pos-admin-item{min-width:0}
+}
+.pos-admin-item{scroll-margin-top:5.25rem}
