@@ -1,0 +1,26 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+const backend=fs.readFileSync("src/application/analytics/ops.ts","utf8");
+const page=fs.readFileSync("app/(admin)/admin/analytics/page.tsx","utf8");
+const actions=fs.readFileSync("app/(admin)/admin/analytics/actions.ts","utf8");
+const landing=fs.readFileSync("app/(admin)/admin/page.tsx","utf8");
+
+assert.match(backend,/eq\(posOrders\.mode,"LIVE"\)/);
+assert.match(backend,/eq\(posOrders\.status,"PAID"\)/);
+assert.match(backend,/gte\(posOrders\.paidAt,from\)/);
+assert.match(backend,/timeZone:TZ/);
+assert.match(backend,/posOrderLines/);
+assert.match(backend,/posPayments/);
+assert.match(backend,/posCustomers/);
+assert.match(backend,/rows\.length>0&&rows\.every\(x=>x\.cogsComplete\)/);
+assert.match(backend,/components\.length>0&&priced===components\.length/);
+assert.match(backend,/return \{\s*source:"OPS_LIVE"/);
+assert.doesNotMatch(backend,/loyverse|syncLoyverse|loyverseReceipts/i);
+assert.match(page,/application\/analytics\/ops/);
+assert.doesNotMatch(page,/Loyverse|sincronizaci[oó]n incremental|backfill manual/i);
+assert.match(page,/period\.cogsComplete/);
+assert.match(page,/Fuente única: ventas pagadas y vigentes de OPS LIVE/);
+assert.doesNotMatch(actions,/syncLoyverse|loyverseReceiptWindowStart/);
+assert.match(landing,/Catálogo y recetas OPS/);
+assert.match(landing,/\/inventory\/ops/);
+console.log("OPS ANALYTICS: PASS (paid LIVE only, no SHADOW/cancelled, local paid date, no Loyverse sync, missing costs explicit)");
