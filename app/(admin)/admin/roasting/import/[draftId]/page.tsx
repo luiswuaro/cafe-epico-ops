@@ -7,6 +7,7 @@ import { requirePermission } from "@/src/infrastructure/auth/permissions";
 import { getDb } from "@/src/infrastructure/db/client";
 import {
   inventoryBalances,
+  inventoryItems,
   roastCoffeeLots,
   roastImportDrafts,
   roastProfiles,
@@ -66,6 +67,17 @@ export default async function HiBeanImportPreviewPage({
       .from(roastProfiles)
       .where(eq(roastProfiles.organizationId, organizationId)),
   ]);
+
+  const roastedInventoryItems = await db
+    .select({ id: inventoryItems.id, name: inventoryItems.name })
+    .from(inventoryItems)
+    .where(and(
+      eq(inventoryItems.organizationId, organizationId),
+      eq(inventoryItems.canonicalUnit, "g"),
+      eq(inventoryItems.trackingType, "QUANTITY"),
+      eq(inventoryItems.isActive, true),
+    ))
+    .orderBy(inventoryItems.name);
 
   if (!draft) notFound();
 
@@ -305,6 +317,29 @@ export default async function HiBeanImportPreviewPage({
             ))}
           </select>
         </label>
+
+        <label>
+          Insumo OPS que recibirá todo el café tostado de este batch
+          <select
+            name="roastedInventoryItemId"
+            required
+            defaultValue={
+              matchedLot?.roastedInventoryItemId ??
+              roastedInventoryItems.find(item => item.name === "Café espresso en grano")?.id ??
+              ""
+            }
+          >
+            <option value="" disabled>Seleccionar insumo en gramos…</option>
+            {roastedInventoryItems.map(item => (
+              <option key={item.id} value={item.id}>{item.name}</option>
+            ))}
+          </select>
+        </label>
+        <p className="muted">
+          El peso real tostado sumará existencias al insumo que utiliza el POS;
+          el café verde se descontará aparte. Para Café Épico, selecciona
+          «Café espresso en grano».
+        </p>
 
         <label>
           Nombre si se crea un café nuevo
