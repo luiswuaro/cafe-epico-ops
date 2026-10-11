@@ -97,10 +97,14 @@ export function SearchableCollection({
           if(cancelled)return;
           const entry=saved.itemId?[...root.current?.querySelectorAll<HTMLElement>("[data-search-entry]")??[]]
             .find(element=>element.dataset.searchEntry===saved.itemId):undefined;
-          if(entry && entry.getClientRects().length){
+          // display:contents does not have its own bounding box.
+          // Anchor to the visible article inside it instead.
+          const anchor=entry?.firstElementChild instanceof HTMLElement
+            ?entry.firstElementChild:entry;
+          if(entry && anchor?.getClientRects().length){
             for(const details of entry.querySelectorAll<HTMLDetailsElement>("details[data-save-state]"))
               details.open=Boolean(saved.open?.includes(details.dataset.saveState??""));
-            const top=entry.getBoundingClientRect().top+window.scrollY-(saved.offset??0);
+            const top=anchor.getBoundingClientRect().top+window.scrollY-(saved.offset??0);
             window.scrollTo({top:Math.max(0,top),behavior:"instant"});
           }else{
             window.scrollTo({top:saved.scrollY??0,behavior:"instant"});
@@ -116,9 +120,11 @@ export function SearchableCollection({
     const target=event.target;
     if(!(target instanceof HTMLFormElement))return;
     const entry=target.closest<HTMLElement>("[data-search-entry]");
+    const anchor=entry?.firstElementChild instanceof HTMLElement
+      ?entry.firstElementChild:entry;
     try{
       window.sessionStorage.setItem(persistKey+":return",JSON.stringify({
-        itemId:entry?.dataset.searchEntry,offset:entry?.getBoundingClientRect().top,
+        itemId:entry?.dataset.searchEntry,offset:anchor?.getBoundingClientRect().top,
         scrollY:window.scrollY,
         open:entry?[...entry.querySelectorAll<HTMLDetailsElement>("details[data-save-state]")]
           .filter(x=>x.open).map(x=>x.dataset.saveState):[],
