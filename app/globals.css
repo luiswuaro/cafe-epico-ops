@@ -2740,3 +2740,39 @@ details[open]>.ops-chevron,details[open]>summary>.ops-chevron{transform:rotate(1
   outline:2px solid var(--epic-accent);
   outline-offset:2px;
 }
+
+/* OPS FAST LANE · preview desktop: desktop-first POS, no wasted outer margins. */
+@media (min-width: 1024px){
+  main.pos-shell{max-width:none;width:100%;padding:.55rem clamp(.6rem,1.15vw,1.5rem) 1rem}
+  main.pos-shell .pos-hero{padding:.1rem 0 .45rem;gap:.35rem;align-items:center}
+  main.pos-shell .pos-hero h1{font-size:clamp(1.4rem,2vw,2rem);margin:0}
+  main.pos-shell .pos-hero .muted{font-size:.77rem;line-height:1.25;margin:0}
+  main.pos-shell .pos-hero .eyebrow{display:none}
+  main.pos-shell .pos-layout.pos-layout-mobile-cart{display:grid;grid-template-columns:minmax(0,1fr) minmax(330px,29%);gap:.75rem;align-items:start}
+  main.pos-shell .pos-catalog{min-width:0}
+  main.pos-shell .pos-product-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:.45rem}
+  main.pos-shell .pos-product-card{min-height:92px;padding:.62rem .7rem;border-radius:11px}
+  main.pos-shell .pos-product-card strong{font-size:.91rem}
+  main.pos-shell .pos-product-card .eyebrow{font-size:.63rem}
+  main.pos-shell .pos-toolbar{padding:.5rem .65rem;margin-bottom:.48rem}
+  main.pos-shell .pos-toolbar input{margin-top:0;padding:.52rem .7rem}
+  main.pos-shell .pos-category-tabs{margin-top:.35rem}
+  main.pos-shell .pos-category-tabs button{padding:.34rem .6rem;font-size:.83rem}
+  main.pos-shell .pos-cart{position:sticky;top:4.1rem;max-height:calc(100dvh - 4.7rem);overflow-y:auto;overscroll-behavior:contain}
+}
+.pos-fast-tickets{display:flex;align-items:center;gap:.65rem;padding:.45rem .6rem;
+  border:1px solid var(--epic-border,var(--line));background:var(--epic-card,var(--surface));
+  border-radius:12px;margin:.25rem 0 .6rem;font-size:.84rem;min-width:0}
+.pos-fast-tickets>strong{white-space:nowrap}
+.pos-fast-tickets-scroll{display:flex;align-items:center;gap:.32rem;min-width:0;flex:1;overflow-x:auto;scrollbar-width:thin}
+.pos-fast-ticket{flex:none;padding:.4rem .65rem;border-radius:9px;
+  border:1px solid var(--epic-border,var(--line));font-weight:750;white-space:nowrap}
+.pos-fast-ticket:hover,.pos-fast-ticket:focus-visible{outline:2px solid var(--epic-accent,var(--ink))}
+.pos-fast-all{font-weight:750;white-space:nowrap;padding:.35rem .5rem}
+.pos-secondary-links{margin:.8rem 0 0;border-top:1px solid var(--epic-border,var(--line));padding:.65rem 0}
+.pos-secondary-links summary{cursor:pointer;font-weight:700;color:var(--epic-secondary,var(--muted));font-size:.84rem}
+.pos-secondary-links .pos-context-links{margin-top:.6rem}
+@media(max-width:700px){
+  .pos-fast-tickets{flex-wrap:wrap}
+  .pos-fast-tickets-scroll{order:3;flex-basis:100%}
+}

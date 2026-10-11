@@ -5,7 +5,7 @@ import { z } from "zod";
 import { checkoutLiveOrder } from "@/src/application/pos/live";
 import {effectiveOrderServiceMode,validateTicketLabel} from "@/src/application/pos/ticket-names";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
-import { assertEmployeePermission, employeeHasPermission } from "@/src/infrastructure/auth/permissions";
+import { assertEmployeePermission } from "@/src/infrastructure/auth/permissions";
 
 const cartSchema = z.array(z.object({
   externalId:z.string().min(1),
@@ -35,7 +35,6 @@ export async function submitLiveSale(_previous:{error:string|null},formData:Form
     customerId:z.union([z.string().uuid(),z.literal("")]),
     tableLabel:z.string().max(100),
     note:z.string().max(300),
-    allowStockShortage:z.boolean().optional(),
   }).parse({
     clientOrderId:String(formData.get("clientOrderId")??""),
     cart:JSON.parse(String(formData.get("cart")??"[]")),
@@ -47,14 +46,9 @@ export async function submitLiveSale(_previous:{error:string|null},formData:Form
     customerId:String(formData.get("customerId")??""),
     tableLabel:String(formData.get("tableLabel")??""),
     note:String(formData.get("note")??""),
-    allowStockShortage:formData.get("allowStockShortage")==="on",
   });
   const resolvedMode=effectiveOrderServiceMode(parsed.serviceMode,parsed.cart);
   const resolvedLabel=validateTicketLabel(resolvedMode,parsed.tableLabel);
-  if(parsed.allowStockShortage){
-    const permitted=await employeeHasPermission(employee.id,"inventory.adjust",employee.homeStoreId);
-    if(!permitted)throw new Error("Solo el propietario puede autorizar una diferencia de inventario.");
-  }
   const result=await checkoutLiveOrder({
     organizationId:employee.organizationId,storeId:employee.homeStoreId,
     actorUserId:user.id,employeeId:employee.id,
@@ -67,7 +61,6 @@ export async function submitLiveSale(_previous:{error:string|null},formData:Form
       ? Number(parsed.tenderedAmount) : null,
     customerId:parsed.customerId||null,tableLabel:resolvedLabel,
     note:parsed.note||null,
-    allowStockShortage:parsed.allowStockShortage,
     });
   savedOrderId=result.id;
   newlyPaid=!result.alreadyRecorded;

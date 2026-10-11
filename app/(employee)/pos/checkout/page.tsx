@@ -6,7 +6,7 @@ import { getOpenPosOrders } from "@/src/application/pos/orders";
 import { getCashState } from "@/src/application/pos/cash";
 import {getPosCustomers} from "@/src/application/pos/customers";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
-import { assertEmployeePermission, employeeHasPermission } from "@/src/infrastructure/auth/permissions";
+import { assertEmployeePermission } from "@/src/infrastructure/auth/permissions";
 import { CheckoutPaymentForm } from "./payment-form";
 import {extraLabels} from "@/src/application/pos/extras";
 
@@ -21,10 +21,9 @@ export default async function PosCheckoutPage({searchParams}:{
   const {employee}=await getCurrentEmployee();
   if(!employee.homeStoreId)throw new Error("Sin sucursal asignada.");
   await assertEmployeePermission(employee.id,"pos.sell",employee.homeStoreId);
-  const [orders,cash,canOverrideStock,customers]=await Promise.all([
+  const [orders,cash,customers]=await Promise.all([
     getOpenPosOrders(employee.organizationId,employee.homeStoreId),
     getCashState(employee.organizationId,employee.homeStoreId),
-    employeeHasPermission(employee.id,"inventory.adjust",employee.homeStoreId),
     getPosCustomers(employee.organizationId),
   ]);
   const order=orders.find(o=>o.id===orderId&&o.mode==="LIVE");
@@ -64,7 +63,7 @@ export default async function PosCheckoutPage({searchParams}:{
     {error&&<section className="card" role="alert">
       <p className="status-bad">No se cobró: {error}</p>
       {order
-        ?<p className="muted">El ticket continúa pendiente. Si faltan insumos, verifica existencias o solicita autorización antes de intentar nuevamente.</p>
+        ?<p className="muted">El ticket continúa pendiente. Si persiste el error, revisa la receta o el pago; un saldo teórico insuficiente no debe bloquear la venta.</p>
         :<p className="muted">Consulta el estado del folio en Comandas antes de intentar de nuevo.</p>}
     </section>}
     {!order?<section className="card stack">
@@ -101,7 +100,6 @@ export default async function PosCheckoutPage({searchParams}:{
         customers={customers.map(c=>({id:c.id,name:c.name,pointsBalance:Number(c.pointsBalance)}))}
         initialCustomerId={order.customerId}
         cashOpen={Boolean(cash.session)}
-        canOverrideStock={canOverrideStock}
         partialPaid={order.status==="PARTIALLY_PAID"}/>
     </div>}</>}
   </main>;

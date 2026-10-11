@@ -58,7 +58,7 @@ export default async function PosPage({
   const today=new Intl.DateTimeFormat("en-CA",{
     timeZone:"America/Mexico_City",year:"numeric",month:"2-digit",day:"2-digit",
   }).format(new Date());
-  const [catalog, customers, saved, canCancel, cash, openOrders, canOverrideStock, extrasOptions,activeWorkers,usedStaffDrinks] = await Promise.all([
+  const [catalog, customers, saved, canCancel, cash, openOrders, extrasOptions,activeWorkers,usedStaffDrinks] = await Promise.all([
     getPosCatalog(employee.organizationId),
     getPosCustomers(employee.organizationId),
     savedId
@@ -71,7 +71,6 @@ export default async function PosPage({
     ),
     getCashState(employee.organizationId, employee.homeStoreId),
     getOpenPosOrders(employee.organizationId,employee.homeStoreId),
-    employeeHasPermission(employee.id,"inventory.adjust",employee.homeStoreId),
     getPosExtraCatalog(employee.organizationId),
     getDb().select({id:employees.id,name:employees.name}).from(employees)
       .where(and(eq(employees.organizationId,employee.organizationId),
@@ -122,11 +121,11 @@ export default async function PosPage({
           </p>}
           <p className="muted">
             {liveEnabled
-              ? "Cobro operativo: descuenta cada ingrediente mapeado y abona puntos. No aceptará productos con recetas o saldos incompletos."
+              ? "Venta continua: descuenta insumos incluso si su saldo teórico es insuficiente. Los faltantes se registran para reabasto."
               : "Registra la misma venta que acabas de cobrar en Loyverse. En esta etapa OPS captura un espejo sin descontar insumos ni acreditar puntos."}
           </p>
         </div>
-        <span className="status-warn">{liveEnabled ? "COBRO LIVE · INVENTARIO EXIGIDO" : "NO CONTABILIZA INVENTARIO"}</span>
+        <span className="status-warn">{liveEnabled ? "VENTA LIVE · SIN BLOQUEO POR STOCK" : "NO CONTABILIZA INVENTARIO"}</span>
       </section>
 
       {payError && <section className="card"><p className="status-bad" role="alert">No se registró el cobro: {payError}</p></section>}
@@ -265,60 +264,23 @@ export default async function PosPage({
         </section>
       )}
 
-      <div className="pos-context-links">
-        <Link href="/pos/orders" className="button">
-          Ver comandas abiertas
-        </Link>
-        <Link href="/pos/cash" className="button">
-          {cash.session
-            ? "Caja abierta · " + money.format(cash.expectedCash)
-            : "Abrir caja"}
-        </Link>
-        <Link href="/pos/tickets" className="button">Historial de tickets</Link>
-        <Link href="/pos/customers" className="button">Clientes y puntos</Link>
-        <Link href="/pos/inventory-audit" className="button">Auditoría inventario</Link>
-        <Link href="/pos/printer" className="button">
-          Impresora
-        </Link>
-      </div>
-
-      {liveEnabled && (
-        <section className="card stack">
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">TICKETS GUARDADOS</p>
-              <h2>Mesas abiertas</h2>
-            </div>
-            <span className="pill">{liveTickets.length} pendientes</span>
-          </div>
-          <p className="muted">Reabre una mesa para agregar bebidas desde este mismo POS. El ticket conserva su folio y separa lo anterior de la nueva ronda.</p>
-          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-            <Link className="button" href="/pos">+ Ticket nuevo</Link>
-            {liveTickets.map(ticket=>(
-              <Link className="button" key={ticket.id}
-                href={ticket.status==="PARTIALLY_PAID"
-                  ? "/pos/orders/"+ticket.id+"/split"
-                  : "/pos?ticket="+ticket.id}>
-                {ticket.tableLabel??(ticket.serviceMode==="TAKEAWAY"?"Para llevar":ticket.folio)}
-                {" · "}{money.format(Number(ticket.total))}
-                {ticket.status==="PARTIALLY_PAID"?" · cobro parcial":""}
-              </Link>
-            ))}
-          </div>
-          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-            {liveTickets.map(ticket=><Link key={ticket.id} className="button"
-              href={ticket.status==="PARTIALLY_PAID"
-                ? "/pos/orders/"+ticket.id+"/split"
-                : "/pos/checkout?ticket="+ticket.id}>
-              Cobrar {ticket.tableLabel??ticket.folio} · {money.format(Number(ticket.total))}
-            </Link>)}
-          </div>
-          {selectedTicketId&&!selectedTicket&&<p className="status-warn">
-            Ese ticket no está abierto en esta sucursal. Selecciona otro o consulta el historial.
-          </p>}
-          {typeof params.updated==="string"&&<p className="status-ok">Ticket actualizado; nueva ronda guardada sin cobrar.</p>}
-        </section>
-      )}
+      {liveEnabled&&<section className="pos-fast-tickets" aria-label="Mesas y tickets activos">
+        <strong>Mesas abiertas <span className="pill">{liveTickets.length}</span></strong>
+        <div className="pos-fast-tickets-scroll">
+          {liveTickets.slice(0,8).map(ticket=><Link key={ticket.id}
+            href={ticket.status==="PARTIALLY_PAID"
+              ?"/pos/orders/"+ticket.id+"/split":"/pos?ticket="+ticket.id}
+            className="pos-fast-ticket">
+            {ticket.tableLabel??(ticket.serviceMode==="TAKEAWAY"?"Para llevar":ticket.folio)}
+          </Link>)}
+          {liveTickets.length===0&&<span className="muted">Sin mesas pendientes</span>}
+        </div>
+        <Link className="pos-fast-all" href="/pos/orders">Comandas y cobro →</Link>
+      </section>}
+      {selectedTicketId&&!selectedTicket&&<p className="status-warn">
+        Ese ticket ya no está abierto. Consulta el historial o crea uno nuevo.
+      </p>}
+      {typeof params.updated==="string"&&<p className="status-ok">Ronda guardada. Puedes seguir tomando pedidos.</p>}
 
       <PosClient
         extrasOptions={extrasOptions}
@@ -341,7 +303,6 @@ export default async function PosPage({
         selectedCustomerId={selectedCustomerId}
         cashOpen={Boolean(cash.session)}
         liveEnabled={liveEnabled}
-        canOverrideStock={canOverrideStock}
         savedTicket={selectedTicket?{
           id:selectedTicket.id,
           folio:selectedTicket.folio,
@@ -361,6 +322,26 @@ export default async function PosPage({
           })),
         }:null}
       />
+
+      <details className="pos-secondary-links">
+        <summary>Herramientas adicionales · caja, historial, clientes, impresora</summary>
+        <div className="pos-context-links">
+        <Link href="/pos/orders" className="button">
+          Ver comandas abiertas
+        </Link>
+        <Link href="/pos/cash" className="button">
+          {cash.session
+            ? "Caja abierta · " + money.format(cash.expectedCash)
+            : "Abrir caja"}
+        </Link>
+        <Link href="/pos/tickets" className="button">Historial de tickets</Link>
+        <Link href="/pos/customers" className="button">Clientes y puntos</Link>
+        <Link href="/pos/inventory-audit" className="button">Auditoría inventario</Link>
+        <Link href="/pos/printer" className="button">
+          Impresora
+        </Link>
+      </div>
+      </details>
 
 
     </main>

@@ -53,7 +53,6 @@ type Props = {
   cashOpen: boolean;
   liveEnabled: boolean;
   savedTicket?:SavedTicket|null;
-  canOverrideStock:boolean;
 };
 
 function normalizeSearch(value:string) {
@@ -77,7 +76,6 @@ export function PosClient({
   cashOpen,
   liveEnabled,
   savedTicket=null,
-  canOverrideStock,
 }: Props) {
   const [category, setCategory] = useState<"TODAS" | CatalogItem["category"]>(
     "CALIENTES",
@@ -120,7 +118,6 @@ export function PosClient({
   const mobileCartRef=useRef<HTMLElement>(null);
   const mobileCartCloseRef=useRef<HTMLButtonElement>(null);
   const mobileSummaryRef=useRef<HTMLButtonElement>(null);
-  const [allowStockShortage,setAllowStockShortage]=useState(false);
   const [ticketNameOption,setTicketNameOption]=useState("");
   const [customTicketName,setCustomTicketName]=useState("");
   const [orderNote,setOrderNote]=useState("");
@@ -519,13 +516,6 @@ export function PosClient({
               ?"Sin ingreso monetario: no se registra pago ni movimiento de caja."
               :"OPS registra el pago; confirma el dinero en tu banco o terminal externa."}</p>
           </>}
-          {canOverrideStock&&<label className="stack">
-            <span><input type="checkbox" name="allowStockShortage"
-              checked={allowStockShortage} onChange={e=>setAllowStockShortage(e.target.checked)}/>
-              {" "}Autorizar cobro con faltante teórico (solo pedido físicamente entregado)
-            </span>
-            <small className="muted">Registra inventario negativo y auditoría; exige reconteo posterior. No crea existencias ficticias.</small>
-          </label>}
           <button className="pos-pay-button" type="submit" disabled={checkoutPending ||
             (missingTable&&!staffFreeCheckout) || pointCheckout || (staffSelected&&!staffFreeCheckout) ||
             (monetaryDue>0&&paymentMethod==="CASH"&&(!tendered.trim()||Number(tendered)<monetaryDue))}>
