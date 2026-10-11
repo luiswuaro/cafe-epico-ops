@@ -1,4 +1,5 @@
 import Link from "next/link";
+import {OpsWorkspaceNav} from "@/components/ops-workspace-nav";
 import {
   createManualPosProduct,
   savePosRecipe,
@@ -43,7 +44,7 @@ export default async function PosCatalogAdminPage({searchParams}:{
   ).sort((a, b) => a.localeCompare(b, "es-MX"));
 
   return (
-    <main className="shell">
+    <main className="shell ops-admin-workspace"><OpsWorkspaceNav active="/admin/pos/catalog"/>
       <section className="hero">
         <p className="eyebrow">POS · ADMINISTRACIÓN</p>
         <h1>Catálogo y recetas</h1>

@@ -1,4 +1,5 @@
 import { requirePermission } from "@/src/infrastructure/auth/permissions";
+import {OpsWorkspaceNav} from "@/components/ops-workspace-nav";
 import Link from "next/link";
 const modules = [
   ["Centro de decisiones", "Prioridades de ventas, inventario, compras, tueste y personal", "/admin/decision-center"],
@@ -19,4 +20,4 @@ const modules = [
   ["Mermas e incidencias", "Eventos de barra, retrabajos, fallas y seguimiento", "/admin/operations/events"],
   ["Auditoría", "Historial de cambios administrativos", "#"],
 ];
-export default async function AdminPage() { await requirePermission("admin.access"); return <main className="shell"><section className="hero"><p className="eyebrow">ADMINISTRACIÓN</p><h1>Sistema operativo</h1><p className="muted">Pantalla inicial para dueños. RBAC está modelado en base de datos.</p></section><section className="grid">{modules.map(([name,desc,href])=><article className="card" key={name}><h2>{name}</h2><p>{desc}</p><Link href={href}><button>Administrar</button></Link></article>)}</section></main>; }
+export default async function AdminPage() { await requirePermission("admin.access"); return <main className="shell ops-admin-workspace"><OpsWorkspaceNav active="/admin"/><section className="hero"><p className="eyebrow">ADMINISTRACIÓN</p><h1>Sistema operativo</h1><p className="muted">Pantalla inicial para dueños. RBAC está modelado en base de datos.</p></section><section className="grid">{modules.map(([name,desc,href])=><article className="card" key={name}><h2>{name}</h2><p>{desc}</p><Link href={href}><button>Administrar</button></Link></article>)}</section></main>; }
