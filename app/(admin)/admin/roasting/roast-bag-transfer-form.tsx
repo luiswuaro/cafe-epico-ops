@@ -5,10 +5,10 @@ import {transferProjection} from "@/src/domain/roasting/stock-ledger";
 
 const fmt=new Intl.NumberFormat("es-MX",{maximumFractionDigits:3});
 export function RoastBagTransferForm({
-  lotId,bagG,barG,previewPendingG,preview,canTransfer,
+  lotId,bagG,barG,previewPendingG,preview,canTransfer,operationId,
 }:{
   lotId:string;bagG:number;barG:number;previewPendingG:number;
-  preview:boolean;canTransfer:boolean;
+  preview:boolean;canTransfer:boolean;operationId:string;
 }){
   const [amount,setAmount]=useState("");
   const [showProjection,setShowProjection]=useState(true);
@@ -22,7 +22,7 @@ export function RoastBagTransferForm({
   const possible=canTransfer&&projection!==null&&!preview;
   return <form className="stack" action={transferRoastedBagToHopper}>
     <input type="hidden" name="lotId" value={lotId}/>
-    <input type="hidden" name="operationId" value={useTransferNonce(lotId)}/>
+    <input type="hidden" name="operationId" value={operationId}/>
     <label>
       <strong>Gramos a enviar a tolva</strong>
       <input name="quantityG" type="number" inputMode="decimal"
@@ -61,11 +61,4 @@ export function RoastBagTransferForm({
       Preview protegido: los botones de contabilización están deshabilitados porque el preview y producción comparten la misma base de datos.
     </p>}
   </form>;
-}
-function useTransferNonce(lotId:string){
-  // Stable for the lifetime of a rendered form, while avoiding a second
-  // submission with an accidental reload of the same operation.
-  const [id]=useState(()=>typeof crypto!=="undefined"&&"randomUUID" in crypto
-    ? crypto.randomUUID():lotId+"-manual-"+Date.now());
-  return id;
 }
