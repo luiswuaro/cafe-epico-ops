@@ -9,7 +9,7 @@ import { isCostOnlyComponent, costOnlyRecipeMeasure } from "@/src/application/po
 import { getDb } from "@/src/infrastructure/db/client";
 import {calculateEarnedPointsFromRealMoney} from "@/src/domain/pos/benefits-preview";
 import {
-  auditEvents, inventoryBalances, inventoryItems, inventoryMovements,
+  auditEvents, inventoryBalances, inventoryItems, inventoryLocations, inventoryMovements,
   loyverseInventoryMappings, posCashMovements, posCashSessions, posCustomers,
   posLoyaltyEntries, posOrderLines, posOrders, posPayments, posOrderSplits, posOrderSplitLines,
 } from "@/src/infrastructure/db/schema";
@@ -109,6 +109,8 @@ export async function checkoutLiveOrder(input:{
       ?(Array.isArray(frozen)?frozen.map((value:unknown)=>{
           const comp=value as Record<string,unknown>;
           return {
+            inventoryItemId:typeof comp.inventoryItemId==="string"?comp.inventoryItemId:null,
+            inventoryLocationId:typeof comp.inventoryLocationId==="string"?comp.inventoryLocationId:null,
             variantExternalId:typeof comp.variantExternalId==="string"?comp.variantExternalId:null,
             itemExternalId:typeof comp.itemExternalId==="string"?comp.itemExternalId:null,
             name:typeof comp.name==="string"?comp.name:"",
@@ -317,6 +319,22 @@ export async function checkoutLiveOrder(input:{
         eq(inventoryItems.isActive,true),
       ));
     const byExternal=new Map(mappings.map(mapping=>[mapping.externalId,mapping]));
+    const [nativeItems,locations]=await Promise.all([
+      tx.select({
+        id:inventoryItems.id,name:inventoryItems.name,
+        unit:inventoryItems.canonicalUnit,trackingType:inventoryItems.trackingType,
+      }).from(inventoryItems).where(and(
+        eq(inventoryItems.organizationId,input.organizationId),
+        eq(inventoryItems.isActive,true),
+      )),
+      tx.select({id:inventoryLocations.id}).from(inventoryLocations).where(and(
+        eq(inventoryLocations.organizationId,input.organizationId),
+        eq(inventoryLocations.storeId,input.storeId),
+        eq(inventoryLocations.isActive,true),
+      )),
+    ]);
+    const nativeById=new Map(nativeItems.map(item=>[item.id,item]));
+    const allowedLocations=new Set(locations.map(loc=>loc.id));
     const consume=new Map<string,{locationId:string;itemId:string;itemName:string;amount:number;unit:string;names:Set<string>}>();
     let costOnlyComponents = 0;
     for(const line of lines){
@@ -325,20 +343,36 @@ export async function checkoutLiveOrder(input:{
           costOnlyComponents++;
           continue;
         }
-        const map=component.variantExternalId ? byExternal.get(component.variantExternalId) : undefined;
-        if(!map) throw new Error("Insumo sin equivalencia confirmada: "+component.name+" ("+line.item.name+").");
-        const factor=Number(map.factor);
-        const amount=Math.round(component.quantity*factor*1000)/1000;
+        const nativeId=component.inventoryItemId;
+        const nativeLocation=component.inventoryLocationId;
+        const native=nativeId?nativeById.get(nativeId):undefined;
+        let mapped:{locationId:string;inventoryItemId:string;itemName:string;unit:string;factor:number};
+        if(nativeId||nativeLocation){
+          if(!native||!nativeLocation||!allowedLocations.has(nativeLocation))
+            throw new Error("Insumo OPS sin ubicación válida: "+component.name);
+          if(native.trackingType==="COST_ONLY"){costOnlyComponents++;continue;}
+          if(native.trackingType!=="QUANTITY")
+            throw new Error("Política de inventario no válida para "+native.name);
+          if(component.unitLabel!==native.unit)
+            throw new Error("Unidad nativa no coincide para "+native.name);
+          mapped={locationId:nativeLocation,inventoryItemId:nativeId!,
+            itemName:native.name,unit:native.unit,factor:1};
+        }else{
+          const old=component.variantExternalId?byExternal.get(component.variantExternalId):undefined;
+          if(!old)throw new Error("Insumo sin vinculación OPS: "+component.name+" ("+line.item.name+").");
+          mapped={...old,factor:Number(old.factor)};
+        }
+        const amount=Math.round(component.quantity*mapped.factor*1000)/1000;
         if(!(amount>0) || !Number.isFinite(amount)){
           throw new Error("Unidad o cantidad no válida en "+component.name);
         }
-        const key=mapKey(map.locationId,map.inventoryItemId);
+        const key=mapKey(mapped.locationId,mapped.inventoryItemId);
         const existing=consume.get(key);
         if(existing){
           existing.amount=Math.round((existing.amount+amount)*1000)/1000;
           existing.names.add(line.item.name);
         } else {
-          consume.set(key,{locationId:map.locationId,itemId:map.inventoryItemId,itemName:map.itemName,unit:map.unit,
+          consume.set(key,{locationId:mapped.locationId,itemId:mapped.inventoryItemId,itemName:mapped.itemName,unit:mapped.unit,
             amount,names:new Set([line.item.name])});
         }
       }
