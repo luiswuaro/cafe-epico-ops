@@ -1,7 +1,7 @@
 import Link from "next/link";
 import {and,eq,or,isNull,asc} from "drizzle-orm";
 import {getDb} from "@/src/infrastructure/db/client";
-import {employees} from "@/src/infrastructure/db/schema";
+import {employees,posStaffDrinks} from "@/src/infrastructure/db/schema";
 import {extraLabels,preparationNote} from "@/src/application/pos/extras";
 import {getPosExtraCatalog} from "@/src/application/pos/extra-catalog";
 import { PosClient } from "./pos-client";
@@ -55,7 +55,10 @@ export default async function PosPage({
   const selectedCustomerId =
     typeof params.customer === "string" ? params.customer : null;
 
-  const [catalog, customers, saved, canCancel, cash, openOrders, canOverrideStock, extrasOptions,activeWorkers] = await Promise.all([
+  const today=new Intl.DateTimeFormat("en-CA",{
+    timeZone:"America/Mexico_City",year:"numeric",month:"2-digit",day:"2-digit",
+  }).format(new Date());
+  const [catalog, customers, saved, canCancel, cash, openOrders, canOverrideStock, extrasOptions,activeWorkers,usedStaffDrinks] = await Promise.all([
     getPosCatalog(employee.organizationId),
     getPosCustomers(employee.organizationId),
     savedId
@@ -75,6 +78,11 @@ export default async function PosPage({
         eq(employees.isActive,true),
         or(eq(employees.homeStoreId,employee.homeStoreId),isNull(employees.homeStoreId),eq(employees.id,employee.id))))
       .orderBy(asc(employees.name)),
+    liveEnabled?getDb().select({beneficiaryEmployeeId:posStaffDrinks.beneficiaryEmployeeId})
+      .from(posStaffDrinks).where(and(
+        eq(posStaffDrinks.organizationId,employee.organizationId),
+        eq(posStaffDrinks.businessDate,today),
+      )):Promise.resolve([]),
   ]);
   const liveTickets=openOrders.filter(order=>order.mode==="LIVE");
   const selectedTicket=liveEnabled&&selectedTicketId
@@ -322,6 +330,7 @@ export default async function PosPage({
           price: item.price,
         }))}
         staffEmployees={activeWorkers}
+        usedStaffDrinkEmployeeIds={usedStaffDrinks.map(row=>row.beneficiaryEmployeeId)}
         customers={customers.map((customer) => ({
           id: customer.id,
           name: customer.name,
