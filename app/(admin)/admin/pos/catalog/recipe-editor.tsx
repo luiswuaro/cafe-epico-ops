@@ -252,7 +252,7 @@ export function RecipeServiceEditor({
                     {inventoryOptions.map(o=><option
                       key={o.inventoryItemId+"|"+o.locationId}
                       value={o.inventoryItemId+"|"+o.locationId}>
-                      {o.name} · {o.unit} · saldo {o.available} {o.unit}
+                      {o.name} · {o.locationName} · {o.unit} · saldo {o.available} {o.unit}
                     </option>)}
                   </select>
                   {row.inventoryItemId
@@ -280,6 +280,7 @@ export function RecipeServiceEditor({
                   <input
                     list={unitListId}
                     value={row.unitLabel}
+                    readOnly={Boolean(row.inventoryItemId)}
                     onChange={(event) =>
                       updateRow(row.key, {
                         unitLabel: event.target.value,
@@ -294,6 +295,7 @@ export function RecipeServiceEditor({
                   <input
                     list={ingredientListId}
                     value={row.name}
+                    readOnly={Boolean(row.inventoryItemId)}
                     onChange={(event) =>
                       updateRow(row.key, {
                         name: event.target.value,
