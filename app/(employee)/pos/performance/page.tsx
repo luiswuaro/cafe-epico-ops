@@ -49,7 +49,7 @@ export default async function PosPerformance(){
         eq(auditEvents.organizationId,employee.organizationId),
         eq(auditEvents.entityType,"pos_order"),
         inArray(auditEvents.entityId,ids),
-        inArray(auditEvents.action,["POS_COMMAND_PRINT_ACKNOWLEDGED","POS_COMMAND_STATUS_CHANGED"]),
+        inArray(auditEvents.action,["POS_COMMAND_PRINT_ACKNOWLEDGED","POS_COMMAND_STATUS_CHANGED","POS_TAKEAWAY_DISPATCHED"]),
       )),
   ]):[[],[]];
   const details=orders.map(order=>{
@@ -66,13 +66,20 @@ export default async function PosPerformance(){
     // Apertura de ticket -> cobro. No mide entrada/salida física del cliente.
     const tableSeconds=order.serviceMode==="DINE_IN"
       ?durationSeconds(order.createdAt,order.paidAt??now):null;
-    return {...order,...timing,printToReady,prep,tableSeconds};
+    const receivedToDispatch=order.serviceMode==="TAKEAWAY"&&timing.dispatchedAt
+      ?durationSeconds(order.createdAt,timing.dispatchedAt):null;
+    const readyToDispatch=order.serviceMode==="TAKEAWAY"&&timing.readyAt&&timing.dispatchedAt
+      ?durationSeconds(timing.readyAt,timing.dispatchedAt):null;
+    return {...order,...timing,printToReady,prep,tableSeconds,receivedToDispatch,readyToDispatch};
   });
   const valid=(values:(number|null)[])=>values.filter((n):n is number=>n!==null);
   const barValues=valid(details.map(d=>d.printToReady));
   const prepValues=valid(details.map(d=>d.prep));
   const paidTableValues=valid(details.filter(d=>d.paidAt!==null).map(d=>d.tableSeconds));
   const openTableCount=details.filter(d=>d.serviceMode==="DINE_IN"&&!d.paidAt).length;
+  const takeaway=details.filter(d=>d.serviceMode==="TAKEAWAY");
+  const dispatched=valid(takeaway.map(d=>d.receivedToDispatch));
+  const handoff=valid(takeaway.map(d=>d.readyToDispatch));
   return <main className="shell pos-shell ops-performance">
     <header className="hero pos-hero">
       <div>
@@ -94,6 +101,14 @@ export default async function PosPerformance(){
         <strong className="metric">{formatted(average(prepValues))}</strong>
         <small className="muted">{prepValues.length} rondas con ambos estados registrados</small>
       </article>
+      <article className="card"><p className="eyebrow">Para llevar: pedido → entregado</p>
+        <strong className="metric">{formatted(average(dispatched))}</strong>
+        <small className="muted">{dispatched.length} pedidos entregados · mediana {formatted(median(dispatched))}</small>
+      </article>
+      <article className="card"><p className="eyebrow">Para llevar: listo → entregado</p>
+        <strong className="metric">{formatted(average(handoff))}</strong>
+        <small className="muted">{handoff.length} entregas medidas</small>
+      </article>
       <article className="card"><p className="eyebrow">Mesa: apertura → cobro</p>
         <strong className="metric">{formatted(average(paidTableValues))}</strong>
         <small className="muted">{paidTableValues.length} mesas cobradas · {openTableCount} abiertas</small>
@@ -106,13 +121,16 @@ export default async function PosPerformance(){
     </p>
     <div className="ops-performance-scroll">
       <table className="ops-performance-table">
-        <thead><tr><th>Pedido</th><th>Estado</th><th>Impresora → Lista</th>
-          <th>Preparación</th><th>Mesa abierta / duración</th><th>Acción</th></tr></thead>
+        <thead><tr><th>Pedido</th><th>Servicio</th><th>Estado</th><th>Impresora → Lista</th>
+          <th>Preparación</th><th>Pedido → entregado</th><th>Listo → entregado</th><th>Mesa abierta / duración</th><th>Acción</th></tr></thead>
         <tbody>{details.map(d=><tr key={d.id}>
           <td><strong>{d.tableLabel||d.folio}</strong><small>{d.createdAt.toLocaleString("es-MX",{timeZone:"America/Mexico_City"})}</small></td>
+          <td>{d.serviceMode==="TAKEAWAY"?"Para llevar":"Aquí"}</td>
           <td>{d.status==="PAID"?"Cobrado":d.status==="READY"?"Listo":d.status==="PREPARING"?"Preparando":"Pendiente"}</td>
           <td>{d.printToReady!==null?durationText(d.printToReady):"—"}</td>
           <td>{d.prep!==null?durationText(d.prep):"—"}</td>
+          <td>{d.receivedToDispatch===null?"—":durationText(d.receivedToDispatch)}</td>
+          <td>{d.readyToDispatch===null?"—":durationText(d.readyToDispatch)}</td>
           <td>{d.tableSeconds===null?"—":durationText(d.tableSeconds)}{d.serviceMode==="DINE_IN"&&!d.paidAt?" · abierta":""}</td>
           <td><Link href={d.status==="PAID"?"/pos/receipt/"+d.id:"/pos/orders"}>Ver ticket</Link></td>
         </tr>)}</tbody>

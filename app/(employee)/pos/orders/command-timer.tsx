@@ -5,7 +5,8 @@ import {durationText,durationSeconds} from "@/src/domain/pos/command-timing";
 
 /** Cronómetro vivo. No inventa impresión cuando el puente no dio acuse. */
 export function CommandTimer({createdAt,roundStartedAt,printAckAt,preparingAt,readyAt,
-  serviceMode,status}:{createdAt:string;roundStartedAt:string;
+  dispatchedAt,serviceMode,status}:{createdAt:string;roundStartedAt:string;
+    dispatchedAt:string|null;
     printAckAt:string|null;preparingAt:string|null;readyAt:string|null;
     serviceMode:string;status:string;
   }){
@@ -29,6 +30,12 @@ export function CommandTimer({createdAt,roundStartedAt,printAckAt,preparingAt,re
       : "Sin acuse de impresión"}</span>
     {preparingAt&&<span><strong>Preparación:</strong> {readyAt
       ?since(preparingAt,readyAt):now===null?"—":since(preparingAt,null)}</span>}
+    {serviceMode==="TAKEAWAY"&&<span>
+      <strong>Despacho:</strong> {dispatchedAt
+        ?"Entregado · "+since(roundStartedAt,dispatchedAt)
+        :readyAt?(now===null?"Listo para entregar":"Listo hace "+since(readyAt,null))
+        :"En preparación"}
+    </span>}
     {serviceMode==="DINE_IN"&&<span>
       <strong>Mesa:</strong> {now===null?"—":since(createdAt,null)}
     </span>}

@@ -22,6 +22,7 @@ try{
   let result=deriveCommandTimeline(order,first,[ready,print,preparing]);
   assert.equal(durationSeconds(result.printAckAt,result.readyAt),25);
   assert.equal(durationSeconds(result.preparingAt,result.readyAt),21);
+  assert.equal(result.dispatchedAt,null);
   assert.equal(durationText(125),"2:05");
   result=deriveCommandTimeline(order,first,[ready]);
   assert.equal(result.printAckAt,null,"Sin acuse del puente, no inventar impresión");
@@ -37,6 +38,15 @@ try{
   const roundReady=mk("POS_COMMAND_STATUS_CHANGED",59,{status:"READY"});
   result=deriveCommandTimeline(order,second,[print,ready,roundPrint,roundReady]);
   assert.equal(durationSeconds(result.printAckAt,result.readyAt),13);
+  const delivered=mk("POS_TAKEAWAY_DISPATCHED",61,{roundId:"RONDA_2"});
+  result=deriveCommandTimeline(order,second,[print,ready,roundPrint,roundReady,delivered]);
+  assert.equal(durationSeconds(result.readyAt,result.dispatchedAt),2);
+  assert.equal(result.dispatchedAt?.getTime(),t(61).getTime());
+  const actions=fs.readFileSync("app/(employee)/pos/actions.ts","utf8");
+  assert.ok(actions.includes('action:"POS_TAKEAWAY_DISPATCHED"'));
+  assert.ok(actions.includes('order.status!=="PAID"'));
+  const board=fs.readFileSync("app/(employee)/pos/orders/page.tsx","utf8");
+  assert.ok(board.includes("Entregado al cliente · cerrar despacho"));
 
   const sale=fs.readFileSync("src/application/pos/live.ts","utf8");
   assert.ok(sale.includes("POS_LIVE_INVENTORY_SHORTAGE_AUTO_RECORDED"));

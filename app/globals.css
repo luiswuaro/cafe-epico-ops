@@ -3001,3 +3001,8 @@ main.pos-shell .pos-table-shortcuts button[aria-pressed="true"] {
  border:1px solid var(--epic-border);border-radius:9px;font-weight:900;
  background:var(--epic-card);color:var(--epic-fg)}
 .pos-courtesy-carrier-count strong{min-width:2ch;text-align:center;font-variant-numeric:tabular-nums}
+
+.command-takeaway-handoff button{min-height:46px;width:100%;padding:.7rem 1rem;
+ border-radius:10px;background:var(--epic-accent);color:var(--epic-accent-contrast);
+ font-weight:850;border:1px solid var(--epic-accent)}
+@media(min-width:900px){.ops-performance-kpis{grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}}

@@ -15,6 +15,7 @@ import {
   cancelPosOrder,
   payShadowCommand,
   updateCommandStatus,
+  markTakeawayDispatched,
 } from "../actions";
 import { getCashState } from "@/src/application/pos/cash";
 import { getOpenPosOrders } from "@/src/application/pos/orders";
@@ -183,6 +184,7 @@ export default async function PosOrdersPage({
                   printAckAt={order.printAckAt?.toISOString()??null}
                   preparingAt={order.preparingAt?.toISOString()??null}
                   readyAt={order.readyAt?.toISOString()??null}
+                  dispatchedAt={order.dispatchedAt?.toISOString()??null}
                   serviceMode={order.serviceMode} status={order.status}
                 />
                 <div className="command-lines">
@@ -248,9 +250,9 @@ export default async function PosOrdersPage({
                   Puntos acreditados por cuenta pagada.
                 </p>}
 
-                {!partiallyPaid && (
+                {(!partiallyPaid && (order.status!=="PAID"||order.mode==="LIVE"&&order.serviceMode==="TAKEAWAY")) && (
                   <div className="command-status-actions">
-                    {order.status !== "PREPARING" && (
+                    {(order.status==="PAID"?!order.preparingAt:order.status !== "PREPARING") && (
                       <form action={updateCommandStatus}>
                         <input
                           type="hidden"
@@ -265,7 +267,7 @@ export default async function PosOrdersPage({
                         <button type="submit">Preparando</button>
                       </form>
                     )}
-                    {order.status !== "READY" && (
+                    {(order.status==="PAID"?!order.readyAt:order.status !== "READY") && (
                       <form action={updateCommandStatus}>
                         <input
                           type="hidden"
@@ -279,6 +281,12 @@ export default async function PosOrdersPage({
                   </div>
                 )}
 
+                {order.mode==="LIVE"&&order.status==="PAID"&&order.readyAt&&
+                  order.serviceMode==="TAKEAWAY"&&!order.dispatchedAt&&
+                  <form action={markTakeawayDispatched} className="command-takeaway-handoff">
+                    <input type="hidden" name="orderId" value={order.id}/>
+                    <button type="submit">Entregado al cliente · cerrar despacho</button>
+                  </form>}
                 {(order.mode==="LIVE"||order.mode==="SHADOW")&&
                   <KitchenPrintButton
                     orderId={order.id}
