@@ -844,15 +844,18 @@ export async function postMissingRoastedOutputs(formData: FormData) {
       postedWeightG += roastedWeightG;
     }
 
-    await tx.insert(auditEvents).values({
-      organizationId,
-      storeId: settings.defaultStoreId,
-      actorUserId: user.id,
-      actorEmployeeId: employeeId,
-      action: "ROAST_OUTPUT_BACKFILL",
-      entityType: "roast_batch",
-      afterData: { roastedDay: day, postedCount, postedWeightG },
-    });
+    if (rows.length > 0 && postedCount > 0) {
+      await tx.insert(auditEvents).values({
+        organizationId,
+        storeId: settings.defaultStoreId,
+        actorUserId: user.id,
+        actorEmployeeId: employeeId,
+        action: "ROAST_OUTPUT_BACKFILL",
+        entityType: "roast_batch",
+        entityId: rows[0].id,
+        afterData: { roastedDay: day, postedCount, postedWeightG },
+      });
+    }
     return { postedCount, postedWeightG };
   });
 
