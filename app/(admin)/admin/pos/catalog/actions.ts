@@ -87,6 +87,7 @@ export async function updatePosCatalogPrice(formData: FormData) {
 const recipeComponentSchema = z.object({
   inventoryItemId:z.string().uuid().nullable().optional(),
   inventoryLocationId:z.string().uuid().nullable().optional(),
+  costOnlyCode:z.enum(["WATER","ICE"]).nullable().optional(),
   variantExternalId: z.string().nullable().optional(),
   itemExternalId: z.string().nullable().optional(),
   name: z.string().trim().min(1).max(160),
@@ -114,6 +115,17 @@ async function validateNativeRecipes(
   const byKey=new Map(options.map(o=>[o.inventoryItemId+"|"+o.locationId,o]));
   const canonical=(recipe:ReturnType<typeof parseRecipeJson>)=>({
     components:recipe.components.map(c=>{
+      if(c.costOnlyCode){
+        if(c.inventoryItemId || c.inventoryLocationId ||
+          c.variantExternalId || c.itemExternalId)
+          throw new Error("Agua e hielo de solo costo no deben estar ligados al inventario.");
+        const quantity=Math.round(c.quantity*1000)/1000;
+        if(quantity!==c.quantity)
+          throw new Error("Agua/hielo: máximo tres decimales en gramos.");
+        return {...c,inventoryItemId:null,inventoryLocationId:null,
+          variantExternalId:null,itemExternalId:null,category:"COST_ONLY",
+          name:c.costOnlyCode==="WATER"?"AGUA":"HIELO",unitLabel:"g",quantity};
+      }
       if(!c.inventoryItemId&&!c.inventoryLocationId)return c;
       if(!c.inventoryItemId||!c.inventoryLocationId)
         throw new Error("Insumo OPS requiere identidad y ubicación completas.");
