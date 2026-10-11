@@ -48,5 +48,21 @@ try{
   assert.ok(details.includes("getEmployeePosRecipe"));
   assert.ok(book.includes("getPosCatalog(organizationId)"));
   assert.ok(!page.includes('getEmployeeRecipeBook'));
-  console.log("Bar recipe: POS single source, serve modes, tracked 40 g PASS");
+  const auditText=fs.readFileSync("src/domain/recipes/consistency-audit.ts","utf8")
+    .replace('import {normalizeOperationalRecipeName} from "@/src/domain/recipes/operational";',
+      'const normalizeOperationalRecipeName=(v:string)=>v.normalize("NFD").replace(/[\\u0300-\\u036f]/g,"").toUpperCase().trim();');
+  fs.writeFileSync(path.join(dir,"audit.cjs"),ts.transpileModule(auditText,{
+    compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS},
+  }).outputText);
+  const {compareHistoricalToOps}=createRequire(path.join(dir,"test.cjs"))("./audit.cjs");
+  const audited=compareHistoricalToOps([{
+    name:"LATTE ESPAÑOL FRÍO",category:"FRÍAS",
+    components:[{sourceName:"LECHE CONDENSADA",displayQuantity:45,displayUnit:"g",
+      isComposite:false,isDisposable:false}],
+  }],[result]);
+  assert.equal(audited.differences.length,2,"Diferencia visible por modalidad, sin multiplicar productos");
+  assert.equal(audited.differences[0].historical,45);
+  assert.equal(audited.differences[0].live,40);
+  assert.equal(audited.differences[0].unit,"g");
+  console.log("Bar recipe: POS single source, serve modes, historical 45 g vs POS 40 g audited PASS");
 }finally{fs.rmSync(dir,{recursive:true,force:true});}
