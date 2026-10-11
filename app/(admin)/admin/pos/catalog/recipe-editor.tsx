@@ -2,10 +2,12 @@
 
 import { useId, useMemo, useState } from "react";
 import type {NativeRecipeOption,LegacyRecipeMapping} from "@/src/application/pos/native-recipe-options";
+import {costOnlyComponentCode,type CostOnlyCode} from "@/src/application/pos/component-policy";
 
 export type RecipeEditorComponent = {
   inventoryItemId?:string|null;
   inventoryLocationId?:string|null;
+  costOnlyCode?:CostOnlyCode|null;
   variantExternalId: string | null;
   itemExternalId: string | null;
   name: string;
@@ -114,7 +116,19 @@ export function RecipeServiceEditor({
 
   const legacyByVariant=new Map(legacyMappings.map(m=>[m.variantExternalId,m]));
   const nativeByLocation=new Map(inventoryOptions.map(o=>[o.inventoryItemId+"|"+o.locationId,o]));
+  function asNonInventory(row:EditorRow,code:CostOnlyCode):Partial<EditorRow>{
+    const source=row.unitLabel.trim().toLowerCase();
+    const multiplier=(source==="peso/volumen"||source==="kg")?1000:1;
+    return {inventoryItemId:null,inventoryLocationId:null,
+      variantExternalId:null,itemExternalId:null,costOnlyCode:code,
+      name:code==="WATER"?"AGUA":"HIELO",unitLabel:"g",category:"COST_ONLY",
+      quantity:Number((row.quantity*multiplier).toFixed(3))};
+  }
   function chooseNative(row:EditorRow,value:string){
+    if(value==="COST:WATER"||value==="COST:ICE"){
+      updateRow(row.key,asNonInventory(row,value==="COST:WATER"?"WATER":"ICE"));
+      return;
+    }
     const selected=nativeByLocation.get(value);
     if(!selected)return;
     const legacy=row.variantExternalId?legacyByVariant.get(row.variantExternalId):undefined;
@@ -123,7 +137,7 @@ export function RecipeServiceEditor({
       ?legacy.factor:shouldConvert?1000:1;
     updateRow(row.key,{
       inventoryItemId:selected.inventoryItemId,inventoryLocationId:selected.locationId,
-      variantExternalId:null,itemExternalId:null,
+      costOnlyCode:null,variantExternalId:null,itemExternalId:null,
       name:selected.name,unitLabel:selected.unit,category:"OPS",
       quantity:Number((row.quantity*factor).toFixed(3)),
     });
@@ -131,6 +145,8 @@ export function RecipeServiceEditor({
   function migrateCurrent(){
     const migrate=(rows:EditorRow[])=>rows.map(row=>{
       if(row.inventoryItemId&&row.inventoryLocationId)return row;
+      const policy=costOnlyComponentCode(row);
+      if(policy)return {...row,...asNonInventory(row,policy)};
       const legacy=row.variantExternalId?legacyByVariant.get(row.variantExternalId):undefined;
       const selected=legacy&&nativeByLocation.get(legacy.inventoryItemId+"|"+legacy.locationId);
       if(!selected||!legacy)return row;
@@ -246,9 +262,12 @@ export function RecipeServiceEditor({
                 <label style={{gridColumn:"1 / -1"}}>
                   <span className="mobile-field-label">Insumo del inventario OPS</span>
                   <select value={row.inventoryItemId&&row.inventoryLocationId
-                    ?row.inventoryItemId+"|"+row.inventoryLocationId:""}
+                    ?row.inventoryItemId+"|"+row.inventoryLocationId
+                    :row.costOnlyCode?"COST:"+row.costOnlyCode:""}
                     onChange={e=>chooseNative(row,e.target.value)}>
                     <option value="">Sin vincular · seleccionar insumo OPS</option>
+                    <option value="COST:WATER">AGUA PURIFICADA · Solo costo (g), SIN inventario</option>
+                    <option value="COST:ICE">HIELO PROPIO · Solo costo (g), SIN inventario</option>
                     {inventoryOptions.map(o=><option
                       key={o.inventoryItemId+"|"+o.locationId}
                       value={o.inventoryItemId+"|"+o.locationId}>
@@ -257,6 +276,8 @@ export function RecipeServiceEditor({
                   </select>
                   {row.inventoryItemId
                     ?<small className="status-ok">Vinculado al inventario OPS</small>
+                    :row.costOnlyCode?<small className="status-ok">Solo costo: sin equivalencia, sin descuento de existencias</small>
+                    :costOnlyComponentCode(row)?<small className="status-ok">Agua/hielo heredado: ya es solo costo; puedes convertirlo a OPS</small>
                     :<small className="status-warn">Receta heredada, pendiente de vincular a OPS</small>}
                 </label>
                 <label>
@@ -280,7 +301,7 @@ export function RecipeServiceEditor({
                   <input
                     list={unitListId}
                     value={row.unitLabel}
-                    readOnly={Boolean(row.inventoryItemId)}
+                    readOnly={Boolean(row.inventoryItemId||row.costOnlyCode)}
                     onChange={(event) =>
                       updateRow(row.key, {
                         unitLabel: event.target.value,
@@ -295,7 +316,7 @@ export function RecipeServiceEditor({
                   <input
                     list={ingredientListId}
                     value={row.name}
-                    readOnly={Boolean(row.inventoryItemId)}
+                    readOnly={Boolean(row.inventoryItemId||row.costOnlyCode)}
                     onChange={(event) =>
                       updateRow(row.key, {
                         name: event.target.value,
@@ -303,6 +324,7 @@ export function RecipeServiceEditor({
                         // identidad Loyverse del ingrediente anterior.
                         variantExternalId: null,
                         itemExternalId: null,
+                        costOnlyCode:null,
                       })
                     }
                     placeholder="Ej. Leche deslactosada"
