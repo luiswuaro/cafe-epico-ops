@@ -28,6 +28,10 @@ try{
  assert.throws(()=>validateFreeCupCarriers(2.5,true));
  assert.equal(isFourCupCarrierInventoryItem({name:"PORTAVASOS 4",unit:"pz",trackingType:"QUANTITY"}),true);
  assert.equal(isFourCupCarrierInventoryItem({name:"CHAROLA DE 4 VASOS",unit:"pz",trackingType:"QUANTITY"}),true);
+ assert.equal(isFourCupCarrierInventoryItem({name:"CHAROLA DE 4",unit:"pz",trackingType:"QUANTITY"}),true);
+ assert.equal(isFourCupCarrierInventoryItem({name:"charola de 4",unit:"pz",trackingType:"QUANTITY"}),true);
+ assert.equal(isFourCupCarrierInventoryItem({name:"CHAROLA DE 4",unit:"g",trackingType:"QUANTITY"}),false);
+ assert.equal(isFourCupCarrierInventoryItem({name:"CHAROLA DE 4",unit:"pz",trackingType:"COST_ONLY"}),false);
  assert.equal(isFourCupCarrierInventoryItem({name:"CHAROLA 2 VASOS",unit:"pz",trackingType:"QUANTITY"}),false);
  const labelCode=fs.readFileSync("src/application/pos/extras.ts","utf8");
  assert.ok(labelCode.includes("PORTAVASOS 4 ×"),"La comanda debe indicar la cortesía entregada");

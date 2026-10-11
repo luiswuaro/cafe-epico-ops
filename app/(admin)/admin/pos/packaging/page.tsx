@@ -40,7 +40,7 @@ export default async function PackagingAdmin(){
        El barista decide si entrega 0, 1 o varias unidades. Precio al cliente: <strong>$0.00</strong>.</p>
     {carriers.length===1?<p className="status-ok">Insumo listo: {carriers[0].name} (pz).
       Descuento de inventario por cantidad efectivamente entregada.</p>:
-      <p className="status-warn">Pendiente: registra <strong>PORTAVASOS 4</strong> (pz) en inventario OPS,
+      <p className="status-warn">Pendiente: registra <strong>CHAROLA DE 4</strong> o PORTAVASOS 4 (pz) en inventario OPS,
       ubicación Barra, con conteo real. No se descontará hasta tener una ficha única.</p>}
    </section>
    <section className="card stack">

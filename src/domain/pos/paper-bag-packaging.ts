@@ -37,7 +37,7 @@ export function isFourCupCarrierInventoryItem(item:{
 }){
  const name=norm(item.name);
  return ["PORTAVASOS 4","PORTAVASOS 4 VASOS","PORTAVASOS 4 ESPACIOS",
-   "CHAROLA PORTAVASOS 4","CHAROLA DE 4 VASOS","PORTAVASOS DE 4"].includes(name)&&
+   "CHAROLA PORTAVASOS 4","CHAROLA DE 4","CHAROLA DE 4 VASOS","PORTAVASOS DE 4"].includes(name)&&
    item.unit==="pz"&&item.trackingType==="QUANTITY";
 }
 export function calculatePaperBagPlan(lines:PackagingLine[]){
