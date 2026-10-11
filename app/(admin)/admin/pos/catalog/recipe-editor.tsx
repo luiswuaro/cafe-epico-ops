@@ -1,8 +1,11 @@
 "use client";
 
 import { useId, useMemo, useState } from "react";
+import type {NativeRecipeOption,LegacyRecipeMapping} from "@/src/application/pos/native-recipe-options";
 
 export type RecipeEditorComponent = {
+  inventoryItemId?:string|null;
+  inventoryLocationId?:string|null;
   variantExternalId: string | null;
   itemExternalId: string | null;
   name: string;
@@ -17,6 +20,8 @@ type Props = {
   dineIn: RecipeEditorComponent[];
   takeaway: RecipeEditorComponent[];
   ingredientOptions: string[];
+  inventoryOptions:NativeRecipeOption[];
+  legacyMappings:LegacyRecipeMapping[];
 };
 
 function rowsFrom(
@@ -62,7 +67,7 @@ function toPayload(rows: EditorRow[]) {
 export function RecipeServiceEditor({
   dineIn,
   takeaway,
-  ingredientOptions,
+  ingredientOptions,inventoryOptions,legacyMappings,
 }: Props) {
   const editorId = useId().replace(/:/g, "");
   const unitListId = "recipe-units-" + editorId;
@@ -107,6 +112,36 @@ export function RecipeServiceEditor({
     );
   }
 
+  const legacyByVariant=new Map(legacyMappings.map(m=>[m.variantExternalId,m]));
+  const nativeByLocation=new Map(inventoryOptions.map(o=>[o.inventoryItemId+"|"+o.locationId,o]));
+  function chooseNative(row:EditorRow,value:string){
+    const selected=nativeByLocation.get(value);
+    if(!selected)return;
+    const legacy=row.variantExternalId?legacyByVariant.get(row.variantExternalId):undefined;
+    const shouldConvert=row.unitLabel.toLowerCase()==="peso/volumen";
+    const factor=legacy&&legacy.inventoryItemId===selected.inventoryItemId&&legacy.locationId===selected.locationId
+      ?legacy.factor:shouldConvert?1000:1;
+    updateRow(row.key,{
+      inventoryItemId:selected.inventoryItemId,inventoryLocationId:selected.locationId,
+      variantExternalId:null,itemExternalId:null,
+      name:selected.name,unitLabel:selected.unit,category:"OPS",
+      quantity:Number((row.quantity*factor).toFixed(3)),
+    });
+  }
+  function migrateCurrent(){
+    const migrate=(rows:EditorRow[])=>rows.map(row=>{
+      if(row.inventoryItemId&&row.inventoryLocationId)return row;
+      const legacy=row.variantExternalId?legacyByVariant.get(row.variantExternalId):undefined;
+      const selected=legacy&&nativeByLocation.get(legacy.inventoryItemId+"|"+legacy.locationId);
+      if(!selected||!legacy)return row;
+      return {...row,inventoryItemId:selected.inventoryItemId,
+        inventoryLocationId:selected.locationId,variantExternalId:null,
+        itemExternalId:null,name:selected.name,unitLabel:selected.unit,
+        category:"OPS",quantity:Number((row.quantity*legacy.factor).toFixed(3))};
+    });
+    if(activeMode==="DINE_IN")setDineRows(current=>migrate(current));
+    else setTakeRows(current=>migrate(current));
+  }
   function addRow() {
     setRows((current) => [
       ...current,
@@ -193,6 +228,11 @@ export function RecipeServiceEditor({
         </div>
       ) : (
         <>
+          <p className="muted">
+            <strong>Inventario OPS:</strong> selecciona insumos físicos. Las cantidades se capturan
+            en g, ml o pz; el inventario histórico no se modifica al editar.
+          </p>
+          <button type="button" onClick={migrateCurrent}>Vincular automáticamente insumos antiguos a OPS</button>
           <div className="recipe-component-head" aria-hidden="true">
             <span>Cantidad</span>
             <span>Unidad</span>
@@ -203,6 +243,22 @@ export function RecipeServiceEditor({
           <div className="recipe-component-list">
             {activeRows.map((row) => (
               <div className="recipe-component-row" key={row.key}>
+                <label style={{gridColumn:"1 / -1"}}>
+                  <span className="mobile-field-label">Insumo del inventario OPS</span>
+                  <select value={row.inventoryItemId&&row.inventoryLocationId
+                    ?row.inventoryItemId+"|"+row.inventoryLocationId:""}
+                    onChange={e=>chooseNative(row,e.target.value)}>
+                    <option value="">Sin vincular · seleccionar insumo OPS</option>
+                    {inventoryOptions.map(o=><option
+                      key={o.inventoryItemId+"|"+o.locationId}
+                      value={o.inventoryItemId+"|"+o.locationId}>
+                      {o.name} · {o.unit} · saldo {o.available} {o.unit}
+                    </option>)}
+                  </select>
+                  {row.inventoryItemId
+                    ?<small className="status-ok">Vinculado al inventario OPS</small>
+                    :<small className="status-warn">Receta heredada, pendiente de vincular a OPS</small>}
+                </label>
                 <label>
                   <span className="mobile-field-label">Cantidad</span>
                   <input
