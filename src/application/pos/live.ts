@@ -10,9 +10,9 @@ import {resolveUnlinkedOpsIngredient} from "@/src/domain/pos/resolve-unlinked-op
 import { getDb } from "@/src/infrastructure/db/client";
 import {calculateEarnedPointsFromRealMoney} from "@/src/domain/pos/benefits-preview";
 import {
-  auditEvents, inventoryBalances, inventoryItems, inventoryLocations, inventoryMovements,
+  auditEvents, employees, inventoryBalances, inventoryItems, inventoryLocations, inventoryMovements,
   loyverseInventoryMappings, posCashMovements, posCashSessions, posCustomers,
-  posLoyaltyEntries, posOrderLines, posOrders, posPayments, posOrderSplits, posOrderSplitLines,
+  posLoyaltyEntries, posOrderLines, posOrders, posPayments, posOrderSplits, posOrderSplitLines, posStaffDrinks,
 } from "@/src/infrastructure/db/schema";
 
 export type LiveCart = Array<{
@@ -50,7 +50,9 @@ export async function checkoutLiveOrder(input:{
   cart:LiveCart;
   customerId:string|null;
   serviceMode:PosServiceMode;
-  paymentMethod:"CASH"|"CARD"|"TRANSFER"|"POINTS";
+  paymentMethod:"CASH"|"CARD"|"TRANSFER"|"POINTS"|"STAFF_BENEFIT";
+  /** UUID del trabajador al que corresponde la bebida de cortesía (solo una por día). */
+  staffFreeEmployeeId?:string|null;
   redeemPoints?:number;
   tenderedAmount:number|null;
   tableLabel:string|null;
@@ -159,12 +161,25 @@ export async function checkoutLiveOrder(input:{
       })),
     };
   });
+  const staffFree=Boolean(input.staffFreeEmployeeId);
+  let staffListedPrice=0;
+  if(staffFree){
+    // Sólo una bebida base para consumir aquí. Jamás interpretar esta cortesía como puntos.
+    if(input.existingOrderId || lines.length!==1 || lines[0].quantity!==1 ||
+      lines[0].item.category==="ALIMENTOS" || lines[0].lineMode!=="DINE_IN" ||
+      lines[0].customerContainer || (input.cart[0].extras?.length??0)>0 ||
+      lines[0].extraSnapshots.length>0 || input.customerId || (input.redeemPoints??0)!==0)
+      throw new Error("La bebida gratuita es una bebida base, para consumir aquí, en ticket individual y sin cliente ni extras.");
+    staffListedPrice=lines[0].price;
+    lines[0].price=0;
+    lines[0].total=0;
+  }
   const actualMode=effectiveOrderServiceMode(input.serviceMode,lines.map(line=>({serviceMode:line.lineMode})));
   if(!input.existingOrderId && actualMode!==input.serviceMode)
     throw new Error("El tipo de servicio cambió. Actualiza el pedido antes de cobrar.");
   if(!input.existingOrderId)validateTicketLabel(actualMode,input.tableLabel);
   const total=Number(lines.reduce((sum,line)=>sum+line.total,0).toFixed(2));
-  if(total<=0) throw new Error("El total de la venta es inválido.");
+  if(total<=0&&!staffFree) throw new Error("El total de la venta es inválido.");
   const requestedPoints=input.redeemPoints??0;
   if(!Number.isFinite(requestedPoints)||requestedPoints<0 ||
     !Number.isInteger(Math.round(requestedPoints*100)) ||
@@ -173,8 +188,13 @@ export async function checkoutLiveOrder(input:{
   const redeemedAmount=Math.round(requestedPoints*100)/100; // 1 punto = $1 MXN
   if(redeemedAmount>0&&!input.customerId)throw new Error("Selecciona al cliente antes de canjear.");
   const monetaryDue=Math.round((total-redeemedAmount)*100)/100;
-  if((monetaryDue===0)!==(input.paymentMethod==="POINTS"))
+  if(staffFree){
+    if(monetaryDue!==0 || input.paymentMethod!=="STAFF_BENEFIT")
+      throw new Error("Una cortesía de personal no se registra como cobro ni como canje de puntos.");
+  }else if(input.paymentMethod==="STAFF_BENEFIT" ||
+    (monetaryDue===0)!==(input.paymentMethod==="POINTS")){
     throw new Error("Selecciona la forma de pago correspondiente al saldo restante.");
+  }
   if(input.paymentMethod==="CASH" &&
     (input.tenderedAmount===null || !Number.isFinite(input.tenderedAmount) ||
       input.tenderedAmount < monetaryDue || input.tenderedAmount > 1000000)) {
@@ -289,7 +309,26 @@ export async function checkoutLiveOrder(input:{
       eq(posCashSessions.storeId,input.storeId),
       eq(posCashSessions.status,"OPEN"),
     )).for("update").limit(1);
-    if(!session) throw new Error("Abre una caja operativa antes de cobrar.");
+    if(!session) throw new Error("Abre una caja operativa antes de registrar el ticket.");
+
+    if(staffFree){
+      const [beneficiary]=await tx.select({id:employees.id,homeStoreId:employees.homeStoreId})
+        .from(employees).where(and(
+          eq(employees.id,input.staffFreeEmployeeId!),
+          eq(employees.organizationId,input.organizationId),
+          eq(employees.isActive,true),
+        )).limit(1);
+      if(!beneficiary || (beneficiary.homeStoreId && beneficiary.homeStoreId!==input.storeId))
+        throw new Error("Selecciona un trabajador activo de esta sucursal.");
+      const [alreadyUsed]=await tx.select({id:posStaffDrinks.id})
+        .from(posStaffDrinks).where(and(
+          eq(posStaffDrinks.organizationId,input.organizationId),
+          eq(posStaffDrinks.beneficiaryEmployeeId,beneficiary.id),
+          eq(posStaffDrinks.businessDate,businessDate(now)),
+        )).limit(1);
+      if(alreadyUsed)
+        throw new Error("Este trabajador ya registró su bebida gratuita de hoy. Las siguientes bebidas se cobran normalmente.");
+    }
     
     if(split && pending && pending.customerId!==input.customerId)
       throw new Error("Para dividir la cuenta, usa el cliente registrado en la mesa.");
@@ -440,7 +479,7 @@ export async function checkoutLiveOrder(input:{
           // El nombre identifica también los pedidos para llevar y mixtos.
           tableLabel:assignedLabel,
           customerId:input.customerId,businessDate:businessDate(now),
-          subtotal:total.toFixed(2),total:total.toFixed(2),note:input.note,
+          subtotal:(staffFree?staffListedPrice:total).toFixed(2),total:total.toFixed(2),note:input.note,
           loyaltyPointsPreview:(input.customerId?calculateEarnedPointsFromRealMoney(monetaryDue):0).toFixed(2),
           loyaltyEffectApplied:Boolean(input.customerId),inventoryEffectApplied:true,paidAt:now,
         }).returning({id:posOrders.id,folio:posOrders.folio});
@@ -453,7 +492,11 @@ export async function checkoutLiveOrder(input:{
       note:line.note,expectedConsumption:{
         mode:"LIVE",serviceMode:line.lineMode,extras:line.extraSnapshots,
         customerContainer:line.customerContainer,
-        discount:line.customerContainer?{
+        discount:staffFree?{
+          code:"STAFF_INCLUDED_DRINK",amountPerUnit:staffListedPrice,
+          total:staffListedPrice,beneficiaryEmployeeId:input.staffFreeEmployeeId,
+          note:"Cortesía interna sin ingreso, sin puntos y con consumo de insumos",
+        }:line.customerContainer?{
           code:"OWN_THERMOS",amountPerUnit:OWN_CONTAINER_DISCOUNT_MXN,
           total:Number((OWN_CONTAINER_DISCOUNT_MXN*line.quantity).toFixed(2)),
         }:null,
@@ -464,6 +507,17 @@ export async function checkoutLiveOrder(input:{
         })),
       },
     })));
+    if(staffFree){
+      // La restricción UNIQUE diaria protege incluso frente a envíos simultáneos.
+      // La cancelación posterior no libera la cortesía automáticamente.
+      await tx.insert(posStaffDrinks).values({
+        organizationId:input.organizationId,storeId:input.storeId,
+        beneficiaryEmployeeId:input.staffFreeEmployeeId!,
+        businessDate:businessDate(now),orderId:order.id,
+        listedPrice:staffListedPrice.toFixed(2),
+        recordedByEmployeeId:input.employeeId,
+      });
+    }
     if(split){
       const [changed]=await tx.update(posOrderSplits).set({
         status:"PAID",paidAt:now,updatedAt:now
@@ -511,9 +565,10 @@ export async function checkoutLiveOrder(input:{
       await tx.insert(inventoryMovements).values({
         organizationId:input.organizationId,storeId:input.storeId,
         locationId:item.locationId,inventoryItemId:item.itemId,
-        movementType:"SALE",quantityDelta:(-item.amount).toFixed(3),
+        movementType:staffFree?"MANUAL_ADJUSTMENT":"SALE",quantityDelta:(-item.amount).toFixed(3),
         sourceType:"POS_LIVE_ORDER",sourceId:order.id,occurredAt:now,
-        employeeId:input.employeeId,note:order.folio,
+        employeeId:input.employeeId,note:staffFree
+          ?"Consumo interno · bebida incluida · "+order.folio:order.folio,
         externalProvider:"OPS_POS",externalId:split?.id??order.id,
       });
       await tx.update(inventoryBalances).set({
@@ -553,10 +608,15 @@ export async function checkoutLiveOrder(input:{
     await tx.insert(auditEvents).values({
       organizationId:input.organizationId,storeId:input.storeId,
       actorUserId:input.actorUserId,actorEmployeeId:input.employeeId,
-      action:split?"POS_LIVE_SPLIT_PAID":pending?"POS_LIVE_COMMAND_PAID":"POS_LIVE_SALE_PAID",entityType:"pos_order",entityId:order.id,
+      action:staffFree?"POS_STAFF_DRINK_RECORDED":
+        split?"POS_LIVE_SPLIT_PAID":pending?"POS_LIVE_COMMAND_PAID":"POS_LIVE_SALE_PAID",
+      entityType:"pos_order",entityId:order.id,
       afterData:{folio:order.folio,total,redeemedPoints:redeemedAmount,monetaryPaid:monetaryDue,
         pointsEarned:input.customerId?calculateEarnedPointsFromRealMoney(monetaryDue):0,
-        payment:input.paymentMethod,fromOpenCommand:Boolean(pending),
+        payment:staffFree?"NONE":input.paymentMethod,
+        staffBeneficiaryId:staffFree?input.staffFreeEmployeeId:null,
+        staffBenefitDiscount:staffFree?staffListedPrice:0,
+        internalConsumption:staffFree,fromOpenCommand:Boolean(pending),
         splitId:split?.id??null,finalPayment:!split||finalSplitPayment,consumptionCount:consume.size,costOnlyComponents,
         nativeAutoResolved,
         customerId:input.customerId,inventoryEffectApplied:true,loyaltyEffectApplied:Boolean(input.customerId),
