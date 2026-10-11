@@ -696,6 +696,97 @@ export async function confirmHiBeanRoastImport(formData: FormData) {
         .where(eq(roastBatches.id, createdBatch.id));
     }
 
+    // HiBean también produce café tostado. Registrar el output por batch
+    // en el mismo inventario que consume el POS, sin tratarlo como compra.
+    // El verde usa la ubicación configurada del tostador (almacén);
+    // el tostado usa la ubicación del insumo (normalmente Barra).
+    let roastedInventoryProducedG = 0;
+    if (
+      existingLot?.roastedInventoryItemId &&
+      settings?.defaultStoreId
+    ) {
+      const roastedBalances = await tx
+        .select({ locationId: inventoryBalances.locationId })
+        .from(inventoryBalances)
+        .where(
+          and(
+            eq(inventoryBalances.organizationId, organizationId),
+            eq(inventoryBalances.storeId, settings.defaultStoreId),
+            eq(
+              inventoryBalances.inventoryItemId,
+              existingLot.roastedInventoryItemId,
+            ),
+          ),
+        )
+        .limit(2);
+
+      // Más de una ubicación requiere un destino explícito. Es preferible
+      // detener la confirmación a contabilizar el mismo café en otra bodega.
+      if (roastedBalances.length > 1) {
+        throw new Error(
+          "El café tostado tiene varias ubicaciones OPS; configura un destino único antes de confirmar.",
+        );
+      }
+      const roastedLocationId =
+        roastedBalances[0]?.locationId ?? settings.defaultLocationId;
+      if (!roastedLocationId) {
+        throw new Error(
+          "Configura la ubicación del tostador o un saldo del insumo tostado antes de importar.",
+        );
+      }
+
+      const [outputMovement] = await tx
+        .insert(inventoryMovements)
+        .values({
+          organizationId,
+          storeId: settings.defaultStoreId,
+          locationId: roastedLocationId,
+          inventoryItemId: existingLot.roastedInventoryItemId,
+          movementType: "PRODUCTION_OUTPUT",
+          quantityDelta: String(roastedWeightG),
+          sourceType: "ROAST_BATCH",
+          sourceId: createdBatch.id,
+          occurredAt: roastedAt,
+          employeeId,
+          note: "Producción café tostado HiBean, batch " + batchCode,
+          externalProvider: "ROASTING",
+          externalId: createdBatch.id + ":ROASTED",
+        })
+        .onConflictDoNothing()
+        .returning({ id: inventoryMovements.id });
+
+      if (outputMovement) {
+        await tx
+          .insert(inventoryBalances)
+          .values({
+            organizationId,
+            storeId: settings.defaultStoreId,
+            locationId: roastedLocationId,
+            inventoryItemId: existingLot.roastedInventoryItemId,
+            theoreticalQuantity: String(roastedWeightG),
+          })
+          .onConflictDoUpdate({
+            target: [
+              inventoryBalances.storeId,
+              inventoryBalances.locationId,
+              inventoryBalances.inventoryItemId,
+            ],
+            set: {
+              theoreticalQuantity: sql`${inventoryBalances.theoreticalQuantity} + ${roastedWeightG}`,
+              updatedAt: new Date(),
+            },
+          });
+        roastedInventoryProducedG = roastedWeightG;
+      }
+      if (!inventoryPosted) {
+        inventoryPosted = true;
+        await tx
+          .update(roastBatches)
+          .set({ inventoryPosted: true, updatedAt: new Date() })
+          .where(eq(roastBatches.id, createdBatch.id));
+      }
+    }
+
     await tx.insert(roastGreenInventoryConfirmations).values({
       organizationId,
       coffeeLotId: lotId,
@@ -747,7 +838,8 @@ export async function confirmHiBeanRoastImport(formData: FormData) {
         reportedInventoryG,
         confirmedInventoryG,
         inventoryPosted,
-        greenInventoryConsumedG: inventoryPosted ? greenWeightG : 0,
+        greenInventoryConsumedG: existingLot?.greenInventoryItemId && settings?.defaultStoreId && settings.defaultLocationId ? greenWeightG : 0,
+        roastedInventoryProducedG,
         inventoryCorrected:
           reportedInventoryG == null ||
           Math.abs(reportedInventoryG - confirmedInventoryG) > 0.01,
