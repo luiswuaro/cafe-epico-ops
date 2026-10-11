@@ -14,21 +14,39 @@ const ICE = {
   itemId: "9577abe2-ada4-403b-bc55-6de87fc53438",
 } as const;
 
-type ComponentIdentity = Pick<PosRecipeComponent, "variantExternalId" | "itemExternalId">;
+export type CostOnlyCode = "WATER" | "ICE";
+type ComponentIdentity = Pick<PosRecipeComponent, "variantExternalId" | "itemExternalId"> &
+  Partial<Pick<PosRecipeComponent,
+    "costOnlyCode" | "name" | "inventoryItemId" | "inventoryLocationId" | "unitLabel">>;
 
 function matches(component: ComponentIdentity, item:{variantId:string;itemId:string}) {
   return component.variantExternalId === item.variantId &&
     component.itemExternalId === item.itemId;
 }
-
-export function isCostOnlyComponent(component: ComponentIdentity) {
-  return matches(component, WATER) || matches(component, ICE);
-}
-
-export function costOnlyComponentName(component:ComponentIdentity): "Agua" | "Hielo" | null {
-  if(matches(component,WATER))return "Agua";
-  if(matches(component,ICE))return "Hielo";
+function unnamedLegacyCode(component:ComponentIdentity): CostOnlyCode | null {
+  // La receta histórica puede omitir ambos IDs. No confundir AGUA MINERAL,
+  // AGUA TÓNICA ni otros productos comercializables con el agua de preparación.
+  if(component.variantExternalId || component.itemExternalId ||
+    component.inventoryItemId || component.inventoryLocationId)return null;
+  const name=(component.name??"").normalize("NFD")
+    .replace(/[\u0300-\u036f]/g,"").trim().toUpperCase();
+  if(name==="AGUA")return "WATER";
+  if(name==="HIELO")return "ICE";
   return null;
+}
+export function costOnlyComponentCode(component:ComponentIdentity):CostOnlyCode|null {
+  if(component.costOnlyCode==="WATER" || component.costOnlyCode==="ICE")
+    return component.costOnlyCode;
+  if(matches(component,WATER))return "WATER";
+  if(matches(component,ICE))return "ICE";
+  return unnamedLegacyCode(component);
+}
+export function isCostOnlyComponent(component: ComponentIdentity) {
+  return costOnlyComponentCode(component)!==null;
+}
+export function costOnlyComponentName(component:ComponentIdentity): "Agua" | "Hielo" | null {
+  const code=costOnlyComponentCode(component);
+  return code==="WATER"?"Agua":code==="ICE"?"Hielo":null;
 }
 
 /** Precio de agua declarado por el propietario: garrafón de 19 L a $26 MXN. */
@@ -60,7 +78,10 @@ export const ICE_COST_BASIS = {
 export function costOnlyRecipeMeasure(component:PosRecipeComponent, quantity:number) {
   const name=costOnlyComponentName(component);
   if(!name)return null;
-  const grams=Math.round(quantity*1_000_000)/1000;
+  // Loyverse guardaba kg como "peso/volumen"; las recetas OPS guardan g.
+  // Mantener la misma cantidad física al convertir una receta.
+  const legacyKg=component.unitLabel==="peso/volumen" || component.unitLabel==="kg";
+  const grams=Math.round(quantity*(legacyKg?1000:1)*1000)/1000;
   if(name==="Agua"){
     return {
       ingredient:name,
