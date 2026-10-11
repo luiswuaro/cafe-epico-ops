@@ -111,6 +111,7 @@ export async function checkoutLiveOrder(input:{
           return {
             inventoryItemId:typeof comp.inventoryItemId==="string"?comp.inventoryItemId:null,
             inventoryLocationId:typeof comp.inventoryLocationId==="string"?comp.inventoryLocationId:null,
+            costOnlyCode:comp.costOnlyCode==="WATER"||comp.costOnlyCode==="ICE"?comp.costOnlyCode:null,
             variantExternalId:typeof comp.variantExternalId==="string"?comp.variantExternalId:null,
             itemExternalId:typeof comp.itemExternalId==="string"?comp.itemExternalId:null,
             name:typeof comp.name==="string"?comp.name:"",
