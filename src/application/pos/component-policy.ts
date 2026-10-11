@@ -35,8 +35,15 @@ function unnamedLegacyCode(component:ComponentIdentity): CostOnlyCode | null {
   return null;
 }
 export function costOnlyComponentCode(component:ComponentIdentity):CostOnlyCode|null {
-  if(component.costOnlyCode==="WATER" || component.costOnlyCode==="ICE")
-    return component.costOnlyCode;
+  if(component.costOnlyCode==="WATER" || component.costOnlyCode==="ICE"){
+    // Una marca no puede ocultar descuentos de insumos realmente inventariados.
+    if(component.inventoryItemId||component.inventoryLocationId||
+      component.variantExternalId||component.itemExternalId)return null;
+    const label=(component.name??"").trim().toUpperCase();
+    if(component.costOnlyCode==="WATER"&&label==="AGUA")return "WATER";
+    if(component.costOnlyCode==="ICE"&&label==="HIELO")return "ICE";
+    return null;
+  }
   if(matches(component,WATER))return "WATER";
   if(matches(component,ICE))return "ICE";
   return unnamedLegacyCode(component);
