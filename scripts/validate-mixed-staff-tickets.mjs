@@ -39,6 +39,12 @@ try{
   t=quote([free],null);
   assert.equal(t.valid,true);
   assert.equal(t.staffDiscount,60);
+  assert.equal(t.totalBeforePoints,0);
+  assert.equal(settle(t,0).totalDue,0);
+  assert.equal(settle(t,0).earnedPoints,0); // Corte de personal: no son puntos del cliente.
+  t=quote([{...free,extrasPrice:10}]);
+  assert.equal(t.staffDiscount,60);
+  assert.equal(t.totalBeforePoints,10); // Los extras no están incluidos en la cortesía.
   t=quote([customer,free]); // Tickets sin cliente identificado: legacy test
   assert.equal(t.valid,true);
   assert.equal(t.listedTotal,130);

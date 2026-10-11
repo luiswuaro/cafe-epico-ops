@@ -1118,6 +1118,23 @@ export const posOrders = pgTable("pos_orders", {
   index("pos_orders_employee_idx").on(t.employeeId, t.paidAt),
 ]);
 
+/** Registro de consumo interno: una cortesía por empleado y fecha local. */
+export const posStaffDrinks = pgTable("pos_staff_drinks", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  storeId: uuid("store_id").notNull().references(() => stores.id, { onDelete: "restrict" }),
+  beneficiaryEmployeeId: uuid("beneficiary_employee_id").notNull().references(() => employees.id, { onDelete: "restrict" }),
+  businessDate: varchar("business_date", { length: 10 }).notNull(),
+  orderId: uuid("order_id").notNull().references(() => posOrders.id, { onDelete: "restrict" }),
+  listedPrice: numeric("listed_price", { precision: 14, scale: 2 }).notNull(),
+  recordedByEmployeeId: uuid("recorded_by_employee_id").references(() => employees.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("pos_staff_drinks_day_uidx").on(t.organizationId,t.beneficiaryEmployeeId,t.businessDate),
+  uniqueIndex("pos_staff_drinks_order_uidx").on(t.orderId),
+  index("pos_staff_drinks_store_day_idx").on(t.storeId,t.businessDate),
+]);
+
 export const posOrderLines = pgTable("pos_order_lines", {
   id: uuid("id").primaryKey().defaultRandom(),
   organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
