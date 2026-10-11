@@ -491,7 +491,7 @@ export function PosClient({
           <input type="hidden" name="customerId" value={customerId}/>
           <input type="hidden" name="redeemPoints" value={redemption.points.toFixed(2)}/>
           <input type="hidden" name="staffFreeEmployeeId"
-            value={staffFreeCheckout?freeStaffLine.employeeId??"":""}/>
+            value={staffFreeCheckout?(freeStaffLine?.employeeId??""):""}/>
           <input type="hidden" name="tableLabel" value={tableLabel}/>
           <input type="hidden" name="note" value={orderNote}/>
           {monetaryDue>0?<label>Forma de pago
