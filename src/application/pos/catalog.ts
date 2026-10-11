@@ -18,6 +18,7 @@ export type PosRecipeComponent = {
   /** Native OPS inventory identity; no Loyverse equivalence required. */
   inventoryItemId?: string | null;
   inventoryLocationId?: string | null;
+  costOnlyCode?: "WATER" | "ICE" | null;
   variantExternalId: string | null;
   itemExternalId: string | null;
   name: string;
@@ -89,6 +90,7 @@ function storedRecipe(value: unknown, byUniqueName?: Map<string,{itemId:string;v
     return [{
       inventoryItemId:typeof component.inventoryItemId==="string"?component.inventoryItemId:null,
       inventoryLocationId:typeof component.inventoryLocationId==="string"?component.inventoryLocationId:null,
+      costOnlyCode:component.costOnlyCode==="WATER"||component.costOnlyCode==="ICE"?component.costOnlyCode:null,
       variantExternalId:
         typeof component.variantExternalId === "string"
           ? component.variantExternalId
