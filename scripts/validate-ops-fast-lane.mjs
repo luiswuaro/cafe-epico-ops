@@ -54,6 +54,38 @@ try{
   const pos=fs.readFileSync("app/(employee)/pos/pos-client.tsx","utf8");
   assert.ok(pos.includes("Seleccionar mesa en un toque"));
   assert.ok(pos.includes('event.key==="F2"'));
+  // Contrast guard: light/dark must keep readable FG and secondary on cards.
+  // Ensures theme changes do not leave black text on dark POS surfaces.
+  const css=fs.readFileSync("app/globals.css","utf8");
+  const epicSection=css.slice(css.indexOf("CAFÉ ÉPICO OPS · VISUAL SYSTEM"));
+  const light=epicSection.match(/:root \\{([\\s\\S]*?)\\}/)?.[1];
+  const dark=epicSection.match(/:root\\[data-theme="dark"\\]\\{([\\s\\S]*?)\\}/)?.[1];
+  assert.ok(light&&dark,"Los dos modos deben definir una paleta completa");
+  const color=(block,name)=>{
+    const found=block.match(new RegExp(name+":(#[0-9a-fA-F]{6})"));
+    assert.ok(found,"Falta token "+name);
+    return found[1];
+  };
+  const luminance=(hex)=>{
+    const parts=[1,3,5].map(i=>parseInt(hex.slice(i,i+2),16)/255);
+    const c=parts.map(x=>x<=0.04045?x/12.92:((x+0.055)/1.055)**2.4);
+    return .2126*c[0]+.7152*c[1]+.0722*c[2];
+  };
+  const contrast=(a,b)=>{
+    const x=luminance(a),y=luminance(b);
+    return (Math.max(x,y)+.05)/(Math.min(x,y)+.05);
+  };
+  for(const block of [light,dark]){
+    for(const textToken of ["--epic-fg","--epic-secondary"]){
+      assert.ok(contrast(color(block,textToken),color(block,"--epic-card"))>=4.5,
+        textToken+" no tiene contraste suficiente contra tarjetas");
+    }
+    assert.ok(contrast(color(block,"--epic-accent-contrast"),color(block,"--epic-accent"))>=4.5,
+      "Botones activos sin contraste suficiente");
+  }
+  assert.match(css,/Fast Lane theme parity/);
+  assert.match(css,/main\\.pos-shell \\.pos-cart :is\\(h2,h3,\\.pos-total/);
+  console.log("OPS Fast Lane: paletas claro/oscuro PASS");
   console.log("OPS fast lane: stock + tiempos + shortcuts PASS");
 }finally{
   fs.rmSync(dir,{recursive:true,force:true});
