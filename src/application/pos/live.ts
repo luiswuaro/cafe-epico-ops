@@ -6,6 +6,7 @@ import {OWN_CONTAINER_DISCOUNT_MXN,canUseOwnContainer,isOwnContainerDisposable,
   isOwnContainerSnapshot,ownContainerUnitPrice,preparedOwnContainerComponents} from "@/src/domain/pos/own-container";
 import {dailyTakeawayTicketLabel,effectiveOrderServiceMode,validateTicketLabel} from "@/src/application/pos/ticket-names";
 import { isCostOnlyComponent, costOnlyRecipeMeasure } from "@/src/application/pos/component-policy";
+import {resolveUnlinkedOpsIngredient} from "@/src/domain/pos/resolve-unlinked-ops-ingredient";
 import { getDb } from "@/src/infrastructure/db/client";
 import {calculateEarnedPointsFromRealMoney} from "@/src/domain/pos/benefits-preview";
 import {
@@ -328,7 +329,7 @@ export async function checkoutLiveOrder(input:{
         eq(inventoryItems.organizationId,input.organizationId),
         eq(inventoryItems.isActive,true),
       )),
-      tx.select({id:inventoryLocations.id}).from(inventoryLocations).where(and(
+      tx.select({id:inventoryLocations.id,name:inventoryLocations.name}).from(inventoryLocations).where(and(
         eq(inventoryLocations.organizationId,input.organizationId),
         eq(inventoryLocations.storeId,input.storeId),
         eq(inventoryLocations.isActive,true),
@@ -336,6 +337,15 @@ export async function checkoutLiveOrder(input:{
     ]);
     const nativeById=new Map(nativeItems.map(item=>[item.id,item]));
     const allowedLocations=new Set(locations.map(loc=>loc.id));
+    // Lock all balances before auto-resolving frozen ingredient identities.
+    const stocks=await tx.select().from(inventoryBalances).where(and(
+      eq(inventoryBalances.organizationId,input.organizationId),
+      eq(inventoryBalances.storeId,input.storeId),
+    )).for("update");
+    const fallbackBalances=stocks.map(stock=>({
+      inventoryItemId:stock.inventoryItemId,locationId:stock.locationId,
+    }));
+    const nativeAutoResolved:Array<{ingredient:string;inventoryItemId:string;locationId:string;amount:number}>=[];
     const consume=new Map<string,{locationId:string;itemId:string;itemName:string;amount:number;unit:string;names:Set<string>}>();
     let costOnlyComponents = 0;
     for(const line of lines){
@@ -360,8 +370,19 @@ export async function checkoutLiveOrder(input:{
             itemName:native.name,unit:native.unit,factor:1};
         }else{
           const old=component.variantExternalId?byExternal.get(component.variantExternalId):undefined;
-          if(!old)throw new Error("Insumo sin vinculación OPS: "+component.name+" ("+line.item.name+").");
-          mapped={...old,factor:Number(old.factor)};
+          if(old){
+            mapped={...old,factor:Number(old.factor)};
+          }else{
+            const physical=resolveUnlinkedOpsIngredient(component,nativeItems,locations,fallbackBalances);
+            if(!physical)throw new Error("Insumo sin vinculación OPS: "+component.name+
+              " ("+line.item.name+"). No hay coincidencia única de nombre y unidad en el inventario físico de la sucursal.");
+            mapped={locationId:physical.locationId,
+              inventoryItemId:physical.inventoryItemId,
+              itemName:physical.itemName,unit:physical.unit,factor:physical.factor};
+            nativeAutoResolved.push({ingredient:component.name,
+              inventoryItemId:physical.inventoryItemId,locationId:physical.locationId,
+              amount:Math.round(component.quantity*physical.factor*1000)/1000});
+          }
         }
         const amount=Math.round(component.quantity*mapped.factor*1000)/1000;
         if(!(amount>0) || !Number.isFinite(amount)){
@@ -379,10 +400,6 @@ export async function checkoutLiveOrder(input:{
       }
     }
 
-    const stocks=await tx.select().from(inventoryBalances).where(and(
-      eq(inventoryBalances.organizationId,input.organizationId),
-      eq(inventoryBalances.storeId,input.storeId),
-    )).for("update");
     const byStock=new Map(stocks.map(stock=>[mapKey(stock.locationId,stock.inventoryItemId),stock]));
     const stockShortages:Array<{ingredient:string;available:number;required:number;deficit:number;unit:string;products:string[]}>=[];
     for(const [key,requested] of consume){
@@ -541,6 +558,7 @@ export async function checkoutLiveOrder(input:{
         pointsEarned:input.customerId?calculateEarnedPointsFromRealMoney(monetaryDue):0,
         payment:input.paymentMethod,fromOpenCommand:Boolean(pending),
         splitId:split?.id??null,finalPayment:!split||finalSplitPayment,consumptionCount:consume.size,costOnlyComponents,
+        nativeAutoResolved,
         customerId:input.customerId,inventoryEffectApplied:true,loyaltyEffectApplied:Boolean(input.customerId),
         stockShortageOverride:stockShortages.length>0},
     });

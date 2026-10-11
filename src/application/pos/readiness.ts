@@ -1,6 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { getPosCatalog, type PosServiceMode } from "@/src/application/pos/catalog";
 import { isCostOnlyComponent } from "@/src/application/pos/component-policy";
+import {resolveUnlinkedOpsIngredient} from "@/src/domain/pos/resolve-unlinked-ops-ingredient";
 import { getDb } from "@/src/infrastructure/db/client";
 import { inventoryBalances, inventoryItems, inventoryLocations, loyverseInventoryMappings, posCashSessions } from "@/src/infrastructure/db/schema";
 
@@ -44,7 +45,7 @@ export async function getPosReadiness(organizationId:string,storeId:string) {
       eq(inventoryItems.organizationId,organizationId),
       eq(inventoryItems.isActive,true),
     )),
-    db.select({id:inventoryLocations.id}).from(inventoryLocations).where(and(
+    db.select({id:inventoryLocations.id,name:inventoryLocations.name}).from(inventoryLocations).where(and(
       eq(inventoryLocations.organizationId,organizationId),
       eq(inventoryLocations.storeId,storeId),eq(inventoryLocations.isActive,true),
     )),
@@ -91,13 +92,22 @@ export async function getPosReadiness(organizationId:string,storeId:string) {
         }else{
           const mappingsFor=component.variantExternalId
             ?(byVariant.get(component.variantExternalId)||[]):[];
-          if(mappingsFor.length!==1){
-            errors.push((mappingsFor.length?"Equivalencia duplicada: ":"Sin vinculación OPS: ")+component.name);continue;
+          if(mappingsFor.length>1){
+            errors.push("Equivalencia duplicada: "+component.name);continue;
           }
           const mapping=mappingsFor[0];
-          inventoryItemId=mapping.inventoryItemId;
-          locationId=mapping.locationId;unit=mapping.unit;
-          factor=Number(mapping.factor);
+          if(mapping){
+            inventoryItemId=mapping.inventoryItemId;
+            locationId=mapping.locationId;unit=mapping.unit;
+            factor=Number(mapping.factor);
+          }else{
+            const match=resolveUnlinkedOpsIngredient(component,nativeItems,locations,balances);
+            if(!match){
+              errors.push("Insumo sin vinculación OPS: "+component.name);continue;
+            }
+            inventoryItemId=match.inventoryItemId;
+            locationId=match.locationId;unit=match.unit;factor=match.factor;
+          }
         }
         const amount=Math.round(component.quantity*factor*1000)/1000;
         if(!Number.isFinite(amount)||amount<=0){
