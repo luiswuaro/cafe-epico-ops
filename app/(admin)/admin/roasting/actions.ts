@@ -748,6 +748,20 @@ export async function postMissingRoastedOutputs(formData: FormData) {
         throw new Error("Batch con rendimiento tostado inválido: " + batch.batchCode);
       }
 
+      // Evita regularizar de nuevo un batch incluso si su insumo o su
+      // ubicación fueron modificados después de contabilizarse.
+      const [priorOutput] = await tx
+        .select({ id: inventoryMovements.id })
+        .from(inventoryMovements)
+        .where(and(
+          eq(inventoryMovements.organizationId, organizationId),
+          eq(inventoryMovements.sourceType, "ROAST_BATCH"),
+          eq(inventoryMovements.sourceId, batch.id),
+          eq(inventoryMovements.movementType, "PRODUCTION_OUTPUT"),
+        ))
+        .limit(1);
+      if (priorOutput) continue;
+
       const [item] = await tx
         .select({
           id: inventoryItems.id,
