@@ -3,6 +3,7 @@ import Link from "next/link";
 import "./globals.css";
 import { ServiceWorkerRegister } from "@/components/service-worker-register";
 import { AppNav } from "@/components/app-nav";
+import {PrintStationBackground} from "@/components/print-station-background";
 
 export const metadata: Metadata = {
   title: { default: "Café Épico Ops", template: "%s · Café Épico Ops" },
@@ -23,6 +24,7 @@ export default function RootLayout({
     <html lang="es">
       <body>
         <ServiceWorkerRegister />
+        {process.env.VERCEL_ENV!=="preview"&&<PrintStationBackground/>}
         {process.env.OPS_QA_MODE==="true" && process.env.DEFAULT_ORGANIZATION_SLUG==="cafe-epico-qa" && (
           <div className="ops-qa-banner" role="status">
             <strong>ENTORNO QA</strong>

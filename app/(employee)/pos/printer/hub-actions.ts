@@ -201,3 +201,10 @@ export async function finishPrintStationJob(jobKey:string,stationId:string,
   });
  });
 }
+
+/** Consultar configuración solo tras activar esta PC. */
+export async function getPrintStationTemplate(){
+ const {employee}=await principal();
+ const {getPosPrintSettings}=await import("@/src/application/pos/print-settings");
+ return getPosPrintSettings(employee.organizationId);
+}

@@ -8,8 +8,8 @@ import {printReceiptWithBridge,type DirectReceiptTemplate} from "../receipt/[id]
 const STORAGE="cafe-epico-print-hub-pc-v1";
 const TICKET_CONFIG="cafe-epico-printer-bridge-v1";
 type HubState={enabled:boolean;since:string;stationId:string};
-export function PrintStation({template,preview}:{
- template:DirectReceiptTemplate;preview:boolean;
+export function PrintStation({template,preview,hiddenMode=false}:{
+ template:DirectReceiptTemplate;preview:boolean;hiddenMode?:boolean;
 }){
  const [state,setState]=useState<HubState|null>(null);
  const [status,setStatus]=useState("Activa esta PC para recibir impresión de los celulares.");
@@ -23,6 +23,7 @@ export function PrintStation({template,preview}:{
  },[]);
  const update=(next:HubState)=>{
   window.localStorage.setItem(STORAGE,JSON.stringify(next));setState(next);
+  window.dispatchEvent(new Event("ops-print-hub-config-changed"));
  };
  function start(){
   if(preview)return;
@@ -42,7 +43,7 @@ export function PrintStation({template,preview}:{
   setStatus("Estación pausada. Las siguientes impresiones quedarán pendientes.");
  }
  useEffect(()=>{
-  if(!state?.enabled||preview)return;
+  if(!state?.enabled||preview||!hiddenMode)return;
   let alive=true;
   const tick=async()=>{
     if(!alive||working.current)return;
@@ -83,17 +84,18 @@ export function PrintStation({template,preview}:{
   void tick();
   const timer=window.setInterval(()=>void tick(),4000);
   return ()=>{alive=false;window.clearInterval(timer)};
- },[state?.enabled,state?.since,state?.stationId,preview,template]);
+ },[state?.enabled,state?.since,state?.stationId,preview,template,hiddenMode]);
  const enabled=Boolean(state?.enabled)&&!preview;
+ if(hiddenMode)return null;
  return <section className="card stack pos-print-station">
    <div className="section-heading"><div>
     <p className="eyebrow">4 · ESTACIÓN PRINCIPAL · PC</p>
     <h2>Imprimir pedidos enviados desde el celular</h2></div>
     <span className={enabled?"status-ok":"muted"}>{enabled?"ACTIVA":"APAGADA"}</span>
    </div>
-   <p>Esta computadora recibe las comandas al guardarlas y los tickets
-    al cobrar desde cualquier dispositivo. Usa las impresoras ya configuradas
-    en esta PC. Mantén esta pestaña abierta durante el servicio.</p>
+   <p>Esta computadora recibe las comandas y los tickets enviados desde celular o PC.
+    Puedes regresar al POS, tueste o finanzas: la estación funciona en segundo plano
+    mientras OPS permanezca abierto en este equipo.</p>
    <div className="pos-result-actions">
     <button type="button" onClick={start} disabled={enabled||preview}>
      Activar estación de caja</button>
