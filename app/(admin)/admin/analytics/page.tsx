@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { refreshAnalytics } from "./actions";
-import { getBusinessAnalytics } from "@/src/application/analytics/business";
+import { getBusinessAnalytics } from "@/src/application/analytics/ops";
 import { requirePermission } from "@/src/infrastructure/auth/permissions";
 
 export const dynamic = "force-dynamic";
@@ -50,17 +50,16 @@ export default async function AnalyticsPage({
         <p className="eyebrow">ADMIN · DASHBOARD GERENCIAL</p>
         <h1>Ventas, margen y operación</h1>
         <p className="muted">
-          Ventana gratuita de Loyverse: hasta 30 días contando el día corriente.
-          COGS POS conserva el costo grabado en cada ticket al momento de la
-          venta. En productos con cobertura suficiente de costos configurados,
-          la tabla también calcula un margen efectivo reconstruido desde receta
-          e insumos actuales.
+          Fuente única: ventas pagadas y vigentes de OPS LIVE.
+          Las pruebas ESPEJO, cancelaciones y comandas sin pagar quedan fuera.
+          Periodos por fecha de pago en Tepexi de Rodríguez (America/Mexico_City).
+          Los periodos anteriores a operar con OPS no se reconstruyen a partir de Loyverse.
         </p>
       </section>
 
       {params.refreshed === "1" && (
         <p className="card status-ok">
-          Ventas y clientes actualizados desde Loyverse.
+          Se actualizaron las métricas desde los pedidos y pagos actuales de OPS.
         </p>
       )}
       {typeof params.error === "string" && (
@@ -72,11 +71,15 @@ export default async function AnalyticsPage({
           <button type="submit">Actualizar dashboard ahora</button>
         </form>
         <p className="muted" style={{ marginTop: ".5rem" }}>
-          Normalmente la sincronización incremental corre sola. Este botón sirve
-          para forzar un backfill manual de la ventana disponible.
+          Vuelve a consultar la base de OPS ahora. No sincroniza ni importa datos de Loyverse.
         </p>
       </section>
 
+      <p className="muted">
+        Corte actualizado: {new Intl.DateTimeFormat("es-MX",{
+          timeZone:"America/Mexico_City",dateStyle:"medium",timeStyle:"short"
+        }).format(new Date(data.asOf))} · Fuente OPS LIVE.
+      </p>
       <section className="grid">
         {data.periods.map((period) => (
           <article className="card" key={period.key}>
@@ -91,9 +94,9 @@ export default async function AnalyticsPage({
               {period.previousSales != null ? " vs periodo previo" : ""}
             </p>
             <div className="muted">
-              COGS {money0.format(period.cogs)} · contribución{" "}
-              {money0.format(period.contribution)} (
-              {period.contributionPct.toFixed(1)}%)
+              {period.cogsComplete
+                ? <>COGS {money0.format(period.cogs)} · contribución {money0.format(period.contribution)} ({period.contributionPct.toFixed(1)}%)</>
+                : <>COGS por completar en OPS · margen pendiente (costo identificado: {money2.format(period.cogs)})</>}
             </div>
           </article>
         ))}
@@ -136,13 +139,13 @@ export default async function AnalyticsPage({
                     {period.itemsPerTicket.toFixed(2)}
                   </td>
                   <td style={{ textAlign: "right" }}>
-                    {money0.format(period.cogs)}
+                    {period.cogsComplete?money0.format(period.cogs):"Pendiente"}
                   </td>
                   <td style={{ textAlign: "right" }}>
-                    {money0.format(period.contribution)}
+                    {period.cogsComplete?money0.format(period.contribution):"—"}
                   </td>
                   <td style={{ textAlign: "right" }}>
-                    {period.contributionPct.toFixed(1)}%
+                    {period.cogsComplete?period.contributionPct.toFixed(1)+"%":"—"}
                   </td>
                   <td style={{ textAlign: "right" }}>
                     {money0.format(period.discounts)} (
@@ -162,15 +165,17 @@ export default async function AnalyticsPage({
         <article className="card">
           <p className="eyebrow">30 DÍAS · RENTABILIDAD</p>
           <div className="metric">
-            {period30.contributionPct.toFixed(1)}%
+            {period30.cogsComplete?period30.contributionPct.toFixed(1)+"%":"Pendiente"}
           </div>
           <p>
-            Contribución {money0.format(period30.contribution)} sobre ventas de{" "}
-            {money0.format(period30.sales)}.
+            Ventas OPS LIVE: {money0.format(period30.sales)}.
+            {period30.cogsComplete
+              ?" Contribución completa: "+money0.format(period30.contribution)+"."
+              :" Hay ingredientes sin costo configurado; no se mostrará una utilidad ficticia."}
           </p>
           <p className="muted">
-            IVA incluido registrado: {money0.format(period30.tax)} · propinas{" "}
-            {money0.format(period30.tips)}.
+            IVA y propinas no están desglosados de forma fiable en las líneas de OPS;
+            consulta el centro financiero para estimaciones fiscales.
           </p>
         </article>
 
@@ -251,7 +256,7 @@ export default async function AnalyticsPage({
                 <strong>{row.date}</strong>
                 <span>
                   {money0.format(row.sales)} · {row.tickets} tickets · margen{" "}
-                  {row.contributionPct.toFixed(0)}%
+                  {row.cogsComplete?row.contributionPct.toFixed(0)+"%":"pendiente"}
                 </span>
               </div>
               <div
@@ -352,13 +357,13 @@ export default async function AnalyticsPage({
                 <strong>{category.name}</strong>
                 <div className="muted">
                   {number.format(category.qty)} unidades · margen{" "}
-                  {category.contributionPct.toFixed(1)}%
+                  {category.cogsComplete?category.contributionPct.toFixed(1)+"%":"pendiente"}
                 </div>
               </div>
               <div style={{ textAlign: "right" }}>
                 <strong>{money0.format(category.sales)}</strong>
                 <div className="muted">
-                  contrib. {money0.format(category.contribution)}
+                  contrib. {category.cogsComplete?money0.format(category.contribution):"pendiente de costos"}
                 </div>
               </div>
             </div>
@@ -374,8 +379,8 @@ export default async function AnalyticsPage({
             ≥2 visitas.
           </p>
           <p className="muted">
-            Visitas promedio {data.loyalty.averageVisits.toFixed(2)} · gasto
-            acumulado promedio {money0.format(data.loyalty.averageSpent)}.
+            En ventas OPS registradas: visitas promedio {data.loyalty.averageVisits.toFixed(2)}
+            {" "}· gasto promedio {money0.format(data.loyalty.averageSpent)}.
           </p>
 
           <h2 style={{ marginTop: "1rem" }}>Sugerencias</h2>
@@ -436,18 +441,16 @@ export default async function AnalyticsPage({
                     {money2.format(item.discounts)}
                   </td>
                   <td style={{ textAlign: "right" }}>
-                    {money0.format(item.cogs)}
+                    {item.cogsComplete?money0.format(item.cogs):"Pendiente"}
                   </td>
                   <td style={{ textAlign: "right" }}>
-                    {money0.format(item.contribution)}
+                    {item.cogsComplete?money0.format(item.contribution):"—"}
                   </td>
                   <td style={{ textAlign: "right" }}>
-                    {item.effectiveContributionPct.toFixed(1)}%
+                    {item.cogsComplete?item.effectiveContributionPct.toFixed(1)+"%":"—"}
                   </td>
                   <td style={{ textAlign: "right" }}>
-                    {item.costBasis === "CONFIGURED"
-                      ? "Receta/config."
-                      : "Loyverse"}
+                    {item.costBasis === "OPS_SNAPSHOT"?"OPS · costo completo":"OPS · costo pendiente"}
                     <div className="muted">
                       cobertura {item.configuredCoveragePct.toFixed(0)}%
                     </div>
