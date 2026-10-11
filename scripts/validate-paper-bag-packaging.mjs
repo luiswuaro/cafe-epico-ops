@@ -11,13 +11,24 @@ try{
   target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS,
  }}).outputText;
  fs.writeFileSync(path.join(temp,"bag.cjs"),compiled);
- const {calculatePaperBagPlan,incrementalPaperBags,isPaperBagInventoryItem}=createRequire(path.join(temp,"test.cjs"))("./bag.cjs");
+ const {calculatePaperBagPlan,incrementalPaperBags,isPaperBagInventoryItem,isFourCupCarrierInventoryItem,validateFreeCupCarriers}=createRequire(path.join(temp,"test.cjs"))("./bag.cjs");
  const hojaldra=(n,mode="TAKEAWAY")=>({name:"HOJALDRA",category:"ALIMENTOS",serviceMode:mode,quantity:n});
  const croissant=(n)=>({name:"CROISSANT JAMÓN CON QUESO",category:"ALIMENTOS",serviceMode:"TAKEAWAY",quantity:n});
  for(const [n,bags] of [[0,0],[1,1],[2,1],[3,1],[4,2],[5,2],[6,2],[7,3]]){
   assert.equal(calculatePaperBagPlan([hojaldra(n)]).bags,bags);
  }
  assert.equal(calculatePaperBagPlan([hojaldra(5),croissant(2)]).bags,4);
+ assert.equal(calculatePaperBagPlan([{name:"Pan SOLO",category:"ALIMENTOS",serviceMode:"TAKEAWAY",quantity:5}]).bags,2);
+ assert.equal(calculatePaperBagPlan([{name:"Pan SOLO",category:"ALIMENTOS",serviceMode:"DINE_IN",quantity:5}]).bags,0);
+ assert.equal(incrementalPaperBags([{name:"PAN SOLO",category:"ALIMENTOS",serviceMode:"TAKEAWAY",quantity:2}],
+   [{name:"PAN SOLO",category:"ALIMENTOS",serviceMode:"TAKEAWAY",quantity:3}]),1);
+ assert.equal(validateFreeCupCarriers(2,true),2);
+ assert.equal(validateFreeCupCarriers(0,false),0);
+ assert.throws(()=>validateFreeCupCarriers(1,false));
+ assert.throws(()=>validateFreeCupCarriers(2.5,true));
+ assert.equal(isFourCupCarrierInventoryItem({name:"PORTAVASOS 4",unit:"pz",trackingType:"QUANTITY"}),true);
+ assert.equal(isFourCupCarrierInventoryItem({name:"CHAROLA DE 4 VASOS",unit:"pz",trackingType:"QUANTITY"}),true);
+ assert.equal(isFourCupCarrierInventoryItem({name:"CHAROLA 2 VASOS",unit:"pz",trackingType:"QUANTITY"}),false);
  assert.equal(calculatePaperBagPlan([hojaldra(5,"DINE_IN"),croissant(1)]).bags,1);
  assert.equal(calculatePaperBagPlan([{name:"CROISSANT NUTELLA",category:"ALIMENTOS",serviceMode:"TAKEAWAY",quantity:2}]).bags,0);
  assert.equal(incrementalPaperBags([hojaldra(2)],[hojaldra(1)]),0);

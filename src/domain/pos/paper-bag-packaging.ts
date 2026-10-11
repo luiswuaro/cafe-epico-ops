@@ -17,10 +17,28 @@ export function isPaperBagInventoryItem(item:{
 export function classifyPaperBagProduct(line:PackagingLine){
   if(line.serviceMode!=="TAKEAWAY"||norm(line.category)!=="ALIMENTOS")return null;
   const name=norm(line.name);
-  if(name.includes("HOJALDRA"))return "HOJALDRA" as const;
+  if(name.includes("HOJALDRA")||name==="PAN SOLO")return "HOJALDRA" as const;
   if(name.includes("CROISSANT")&&
     (name.includes("JAMON")||name.includes("QUESO")))return "CROISSANT_JAMON" as const;
   return null;
+}
+/** Cortesía entregada manualmente: la cantidad no se deduce automáticamente
+ * de la cantidad de bebidas ni se cobra. Se contabiliza en piezas enteras.
+ */
+export function validateFreeCupCarriers(value:number,hasTakeawayDrink:boolean){
+ if(!Number.isInteger(value)||value<0||value>10)
+   throw new Error("Portavasos de cuatro espacios: selecciona de 0 a 10 piezas.");
+ if(value>0&&!hasTakeawayDrink)
+   throw new Error("Solo se pueden entregar portavasos con bebidas para llevar.");
+ return value;
+}
+export function isFourCupCarrierInventoryItem(item:{
+ name:string;unit:string;trackingType:string;
+}){
+ const name=norm(item.name);
+ return ["PORTAVASOS 4","PORTAVASOS 4 VASOS","PORTAVASOS 4 ESPACIOS",
+   "CHAROLA PORTAVASOS 4","CHAROLA DE 4 VASOS","PORTAVASOS DE 4"].includes(name)&&
+   item.unit==="pz"&&item.trackingType==="QUANTITY";
 }
 export function calculatePaperBagPlan(lines:PackagingLine[]){
  let hojaldras=0,croissants=0;
