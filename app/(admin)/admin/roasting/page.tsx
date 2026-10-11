@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { HiBeanImportForm } from "./hibean-import-form";
+import {RoastBagStockPanel} from "./roast-bag-stock-panel";
 import { RoastingSessionPlanner } from "./session-planner";
 
 import {
@@ -118,6 +119,12 @@ export default async function RoastingPage({
       {typeof params.saved === "string" && (
         <p className="card status-ok">Registro actualizado.</p>
       )}
+      {params.stock==="posted"&&<p className="card status-ok">
+        Café tostado contabilizado en bolsa: {params.count??"0"} batches · {params.grams??"0"} g. El café verde NO volvió a descontarse.
+      </p>}
+      {params.stock==="transferred"&&<p className="card status-ok">
+        Traslado de bolsa a tolva registrado con salida y entrada enlazadas. Se conservaron las existencias anteriores de Barra.
+      </p>}
 
       <section className="grid">
         <article className="card">
@@ -407,6 +414,8 @@ export default async function RoastingPage({
           }))}
         />
       </section>
+
+      <RoastBagStockPanel organizationId={organizationId}/>
 
       <section className="card" style={{ marginTop: "1rem" }} id="importar-hibean">
         <p className="eyebrow">MÉTODO RECOMENDADO · HIBEAN</p>
