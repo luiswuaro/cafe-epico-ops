@@ -12,6 +12,7 @@ import {
   auditEvents,
   inventoryBalances,
   inventoryMovements,
+  inventoryItems,
   roastBatches,
   roastCoffeeLots,
   roastGreenInventoryConfirmations,
@@ -251,6 +252,7 @@ export async function stageHiBeanRoastImport(formData: FormData): Promise<string
 export async function confirmHiBeanRoastImport(formData: FormData) {
   const draftId = String(formData.get("draftId") ?? "").trim();
   const requestedLotId = String(formData.get("coffeeLotId") ?? "").trim();
+  const requestedRoastedItemId = String(formData.get("roastedInventoryItemId") ?? "").trim();
   const profileIdRaw = String(formData.get("profileId") ?? "").trim();
   const profileId = profileIdRaw || null;
   const inventoryConfirmed =
@@ -269,6 +271,23 @@ export async function confirmHiBeanRoastImport(formData: FormData) {
   const { user, employeeId, organizationId } =
     await requirePermission("roast.manage");
   const db = getDb();
+
+  // La importación debe tener un destino explícito en el inventario OPS.
+  // Se valida organización, unidad y seguimiento para impedir vínculos ajenos.
+  const [selectedRoastedItem] = await db
+    .select({ id: inventoryItems.id })
+    .from(inventoryItems)
+    .where(and(
+      eq(inventoryItems.id, requestedRoastedItemId),
+      eq(inventoryItems.organizationId, organizationId),
+      eq(inventoryItems.canonicalUnit, "g"),
+      eq(inventoryItems.trackingType, "QUANTITY"),
+      eq(inventoryItems.isActive, true),
+    ))
+    .limit(1);
+  if (!selectedRoastedItem) {
+    redirect("/admin/roasting/import/" + encodeURIComponent(draftId) + "?error=roasted-item");
+  }
 
   const [draft] = await db
     .select()
@@ -515,6 +534,7 @@ export async function confirmHiBeanRoastImport(formData: FormData) {
                 hibeanBeanName: beanName,
               }
             : {}),
+          roastedInventoryItemId: selectedRoastedItem.id,
           hibeanGreenInventoryG: String(confirmedInventoryG),
           hibeanInventoryReportedG:
             reportedInventoryG == null
@@ -546,6 +566,7 @@ export async function confirmHiBeanRoastImport(formData: FormData) {
           targetUse: "OMNI",
           hibeanBeanCloudId: linkBean ? beanCloudId : null,
           hibeanBeanName: beanName,
+          roastedInventoryItemId: selectedRoastedItem.id,
           hibeanGreenInventoryG: String(confirmedInventoryG),
           hibeanInventoryReportedG:
             reportedInventoryG == null
@@ -696,6 +717,97 @@ export async function confirmHiBeanRoastImport(formData: FormData) {
         .where(eq(roastBatches.id, createdBatch.id));
     }
 
+    // HiBean también produce café tostado. Registrar el output por batch
+    // en el mismo inventario que consume el POS, sin tratarlo como compra.
+    // El verde usa la ubicación configurada del tostador (almacén);
+    // el tostado usa la ubicación del insumo (normalmente Barra).
+    let roastedInventoryProducedG = 0;
+    if (
+      selectedRoastedItem.id &&
+      settings?.defaultStoreId
+    ) {
+      const roastedBalances = await tx
+        .select({ locationId: inventoryBalances.locationId })
+        .from(inventoryBalances)
+        .where(
+          and(
+            eq(inventoryBalances.organizationId, organizationId),
+            eq(inventoryBalances.storeId, settings.defaultStoreId),
+            eq(
+              inventoryBalances.inventoryItemId,
+              selectedRoastedItem.id,
+            ),
+          ),
+        )
+        .limit(2);
+
+      // Más de una ubicación requiere un destino explícito. Es preferible
+      // detener la confirmación a contabilizar el mismo café en otra bodega.
+      if (roastedBalances.length > 1) {
+        throw new Error(
+          "El café tostado tiene varias ubicaciones OPS; configura un destino único antes de confirmar.",
+        );
+      }
+      const roastedLocationId =
+        roastedBalances[0]?.locationId ?? settings.defaultLocationId;
+      if (!roastedLocationId) {
+        throw new Error(
+          "Configura la ubicación del tostador o un saldo del insumo tostado antes de importar.",
+        );
+      }
+
+      const [outputMovement] = await tx
+        .insert(inventoryMovements)
+        .values({
+          organizationId,
+          storeId: settings.defaultStoreId,
+          locationId: roastedLocationId,
+          inventoryItemId: selectedRoastedItem.id,
+          movementType: "PRODUCTION_OUTPUT",
+          quantityDelta: String(roastedWeightG),
+          sourceType: "ROAST_BATCH",
+          sourceId: createdBatch.id,
+          occurredAt: roastedAt,
+          employeeId,
+          note: "Producción café tostado HiBean, batch " + batchCode,
+          externalProvider: "ROASTING",
+          externalId: createdBatch.id + ":ROASTED",
+        })
+        .onConflictDoNothing()
+        .returning({ id: inventoryMovements.id });
+
+      if (outputMovement) {
+        await tx
+          .insert(inventoryBalances)
+          .values({
+            organizationId,
+            storeId: settings.defaultStoreId,
+            locationId: roastedLocationId,
+            inventoryItemId: selectedRoastedItem.id,
+            theoreticalQuantity: String(roastedWeightG),
+          })
+          .onConflictDoUpdate({
+            target: [
+              inventoryBalances.storeId,
+              inventoryBalances.locationId,
+              inventoryBalances.inventoryItemId,
+            ],
+            set: {
+              theoreticalQuantity: sql`${inventoryBalances.theoreticalQuantity} + ${roastedWeightG}`,
+              updatedAt: new Date(),
+            },
+          });
+        roastedInventoryProducedG = roastedWeightG;
+      }
+      if (!inventoryPosted) {
+        inventoryPosted = true;
+        await tx
+          .update(roastBatches)
+          .set({ inventoryPosted: true, updatedAt: new Date() })
+          .where(eq(roastBatches.id, createdBatch.id));
+      }
+    }
+
     await tx.insert(roastGreenInventoryConfirmations).values({
       organizationId,
       coffeeLotId: lotId,
@@ -747,7 +859,8 @@ export async function confirmHiBeanRoastImport(formData: FormData) {
         reportedInventoryG,
         confirmedInventoryG,
         inventoryPosted,
-        greenInventoryConsumedG: inventoryPosted ? greenWeightG : 0,
+        greenInventoryConsumedG: existingLot?.greenInventoryItemId && settings?.defaultStoreId && settings.defaultLocationId ? greenWeightG : 0,
+        roastedInventoryProducedG,
         inventoryCorrected:
           reportedInventoryG == null ||
           Math.abs(reportedInventoryG - confirmedInventoryG) > 0.01,

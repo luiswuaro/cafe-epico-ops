@@ -11,6 +11,7 @@ import {
   inventoryBalances,
   inventoryItems,
   inventoryLocations,
+  inventoryMovements,
   roastBarAssignments,
   roastBatches,
   roastCoffeeLots,
@@ -100,6 +101,7 @@ export async function getRoastingDashboard(organizationId: string) {
     balances,
     storeRows,
     locationRows,
+    postedRoastedOutputs,
     loyverse,
   ] = await Promise.all([
     db
@@ -189,6 +191,14 @@ export async function getRoastingDashboard(organizationId: string) {
       .from(inventoryLocations)
       .where(eq(inventoryLocations.organizationId, organizationId))
       .orderBy(asc(inventoryLocations.name)),
+    db
+      .select({ sourceId: inventoryMovements.sourceId })
+      .from(inventoryMovements)
+      .where(and(
+        eq(inventoryMovements.organizationId, organizationId),
+        eq(inventoryMovements.sourceType, "ROAST_BATCH"),
+        eq(inventoryMovements.movementType, "PRODUCTION_OUTPUT"),
+      )),
     getInventoryIntelligence(organizationId),
   ]);
 
@@ -196,6 +206,7 @@ export async function getRoastingDashboard(organizationId: string) {
   const lotById = new Map(lots.map((lot) => [lot.id, lot]));
   const profileById = new Map(profiles.map((profile) => [profile.id, profile]));
   const batchById = new Map(batches.map((batch) => [batch.id, batch]));
+  const postedRoastedBatchIds = new Set(postedRoastedOutputs.map((row) => row.sourceId));
   const storeById = new Map(storeRows.map((store) => [store.id, store]));
 
   const sensoryByBatch = new Map<string, typeof sensory>();
@@ -334,6 +345,7 @@ export async function getRoastingDashboard(organizationId: string) {
   });
 
   const enrichedBatches = batches.map((batch) => {
+    const roastedOutputPosted = postedRoastedBatchIds.has(batch.id);
     const lot = lotById.get(batch.coffeeLotId) ?? null;
     const profile = batch.profileId
       ? profileById.get(batch.profileId) ?? null
@@ -440,6 +452,7 @@ export async function getRoastingDashboard(organizationId: string) {
       laborCost,
       estimatedBatchCost,
       roastedCostPerKg,
+      roastedOutputPosted,
       latestSensory,
       sensoryCount: batchSensory.length,
       espressoQcCount: batchQc.length,
