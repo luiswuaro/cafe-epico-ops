@@ -70,7 +70,9 @@ export function SearchableCollection({
       const value=window.sessionStorage.getItem(persistKey+":filters");
       if(value){
         const old=JSON.parse(value) as {query?:string;category?:string;status?:string};
-        setQuery(old.query??"");setCategory(old.category??"");setStatus(old.status??"");
+        window.requestAnimationFrame(()=>{
+          setQuery(old.query??"");setCategory(old.category??"");setStatus(old.status??"");
+        });
       }
     }catch{/* navegación normal cuando el almacenamiento esté deshabilitado */}
     restored.current=true;

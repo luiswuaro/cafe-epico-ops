@@ -17,7 +17,8 @@ export function PrintStation({template,preview}:{
  const [pending,setPending]=useState(0);
  const working=useRef(false);
  useEffect(()=>{
-  try{const raw=window.localStorage.getItem(STORAGE);if(raw)setState(JSON.parse(raw) as HubState)}
+  try{const raw=window.localStorage.getItem(STORAGE);if(raw)
+   window.requestAnimationFrame(()=>setState(JSON.parse(raw) as HubState))}
   catch{/* Ignorar configuración antigua */}
  },[]);
  const update=(next:HubState)=>{
