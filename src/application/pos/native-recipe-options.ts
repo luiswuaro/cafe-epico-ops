@@ -3,7 +3,7 @@ import {getDb} from "@/src/infrastructure/db/client";
 import {inventoryBalances,inventoryItems,inventoryLocations,loyverseInventoryMappings} from "@/src/infrastructure/db/schema";
 
 export type NativeRecipeOption={
-  inventoryItemId:string; locationId:string; name:string;
+  inventoryItemId:string; locationId:string; locationName:string; name:string;
   unit:"g"|"ml"|"pz"; trackingType:string; available:number;
 };
 export type LegacyRecipeMapping={
@@ -39,20 +39,20 @@ export async function getNativeRecipeOptions(organizationId:string,storeId:strin
       eq(loyverseInventoryMappings.isActive,true),
     )),
   ]);
-  const enabledLocations=new Set(locations.map(x=>x.id));
+  const enabledLocations=new Map(locations.map(x=>[x.id,x.name]));
   const availableItems=new Map(items.filter(i=>i.category!=="INSUMO_QA"&&
     (i.trackingType==="QUANTITY"||i.trackingType==="COST_ONLY")).map(i=>[i.id,i]));
   const options:NativeRecipeOption[]=stock.flatMap(s=>{
     const i=availableItems.get(s.inventoryItemId);
     if(!i||!enabledLocations.has(s.locationId))return [];
-    return [{inventoryItemId:i.id,locationId:s.locationId,name:i.name,
+    return [{inventoryItemId:i.id,locationId:s.locationId,locationName:enabledLocations.get(s.locationId)??"",name:i.name,
       unit:i.canonicalUnit,trackingType:i.trackingType,available:Number(s.quantity)}];
   });
   // Items of policy COST_ONLY can be attached directly and never block sale.
   const bar=locations.find(l=>l.name==="Barra")??locations[0];
   if(bar)for(const i of availableItems.values()){
     if(i.trackingType!=="COST_ONLY"||options.some(o=>o.inventoryItemId===i.id))continue;
-    options.push({inventoryItemId:i.id,locationId:bar.id,name:i.name,
+    options.push({inventoryItemId:i.id,locationId:bar.id,locationName:bar.name,name:i.name,
       unit:i.canonicalUnit,trackingType:i.trackingType,available:0});
   }
   options.sort((a,b)=>a.name.localeCompare(b.name,"es")||a.locationId.localeCompare(b.locationId));
