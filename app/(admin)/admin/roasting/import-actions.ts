@@ -12,6 +12,7 @@ import {
   auditEvents,
   inventoryBalances,
   inventoryMovements,
+  inventoryItems,
   roastBatches,
   roastCoffeeLots,
   roastGreenInventoryConfirmations,
@@ -696,6 +697,57 @@ export async function confirmHiBeanRoastImport(formData: FormData) {
         .where(eq(roastBatches.id, createdBatch.id));
     }
 
+    // Si el lote ya tiene su SKU exclusivo de café tostado en bolsa,
+    // registrar automáticamente el producto terminado de este JSON.
+    // No usar el artículo genérico de Barra como stock de almacén.
+    let roastedStockPosted=false;
+    if(existingLot?.roastedInventoryItemId &&
+      settings?.defaultStoreId&&settings.defaultLocationId&&inventoryPosted){
+      const [roastedItem]=await tx.select({
+        id:inventoryItems.id,sku:inventoryItems.sku,
+        unit:inventoryItems.canonicalUnit,active:inventoryItems.isActive,
+      }).from(inventoryItems).where(and(
+        eq(inventoryItems.id,existingLot.roastedInventoryItemId),
+        eq(inventoryItems.organizationId,organizationId),
+      )).limit(1);
+      const expectedSku="ROAST-"+existingLot.id.slice(0,8).toUpperCase();
+      if(roastedItem?.sku===expectedSku&&roastedItem.unit==="g"&&roastedItem.active){
+        const [alreadyPosted]=await tx.select({id:inventoryMovements.id})
+          .from(inventoryMovements).where(and(
+            eq(inventoryMovements.sourceType,"ROAST_BATCH"),
+            eq(inventoryMovements.sourceId,createdBatch.id),
+            eq(inventoryMovements.movementType,"PRODUCTION_OUTPUT"),
+          )).limit(1);
+        if(!alreadyPosted){
+          const [newOutput]=await tx.insert(inventoryMovements).values({
+            organizationId,storeId:settings.defaultStoreId,
+            locationId:settings.defaultLocationId,
+            inventoryItemId:roastedItem.id,movementType:"PRODUCTION_OUTPUT",
+            quantityDelta:roastedWeightG.toFixed(3),
+            sourceType:"ROAST_BATCH",sourceId:createdBatch.id,
+            occurredAt:roastedAt,employeeId,
+            note:"Entrada de café tostado a bolsa · "+lotName+" · "+batchCode,
+            externalProvider:"ROASTING",externalId:createdBatch.id+":ROASTED",
+          }).onConflictDoNothing().returning({id:inventoryMovements.id});
+          if(newOutput){
+            await tx.insert(inventoryBalances).values({
+              organizationId,storeId:settings.defaultStoreId,
+              locationId:settings.defaultLocationId,
+              inventoryItemId:roastedItem.id,
+              theoreticalQuantity:roastedWeightG.toFixed(3),
+            }).onConflictDoUpdate({
+              target:[inventoryBalances.storeId,inventoryBalances.locationId,inventoryBalances.inventoryItemId],
+              set:{
+                theoreticalQuantity:sql`${inventoryBalances.theoreticalQuantity} + ${roastedWeightG}`,
+                updatedAt:new Date(),
+              },
+            });
+            roastedStockPosted=true;
+          }
+        }
+      }
+    }
+
     await tx.insert(roastGreenInventoryConfirmations).values({
       organizationId,
       coffeeLotId: lotId,
@@ -748,6 +800,7 @@ export async function confirmHiBeanRoastImport(formData: FormData) {
         confirmedInventoryG,
         inventoryPosted,
         greenInventoryConsumedG: inventoryPosted ? greenWeightG : 0,
+        roastedInventoryProducedG: roastedStockPosted ? roastedWeightG : 0,
         inventoryCorrected:
           reportedInventoryG == null ||
           Math.abs(reportedInventoryG - confirmedInventoryG) > 0.01,
