@@ -515,7 +515,9 @@ export function PosClient({
               ?money.format(Number(tendered)-monetaryDue):"Ingresa el importe recibido"}</strong></p>
           </div>:<>
             <input type="hidden" name="tenderedAmount" value=""/>
-            <p className="muted">OPS registra el pago; confirma el dinero en tu banco o terminal externa.</p>
+            <p className="muted">{monetaryDue===0
+              ?"Sin ingreso monetario: no se registra pago ni movimiento de caja."
+              :"OPS registra el pago; confirma el dinero en tu banco o terminal externa."}</p>
           </>}
           {canOverrideStock&&<label className="stack">
             <span><input type="checkbox" name="allowStockShortage"
