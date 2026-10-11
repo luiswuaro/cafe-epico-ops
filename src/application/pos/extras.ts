@@ -58,6 +58,12 @@ export function extraLabels(expected:unknown,{showPrices=false}:{showPrices?:boo
     labels.unshift(showPrices
       ?"Termo propio · -"+money(OWN_CONTAINER_DISCOUNT_MXN)+"/bebida"
       :"TERMO PROPIO · NO ENTREGAR DESECHABLES");
+  // Mostrar la cortesía en la comanda y en el puente de impresión,
+  // sin incluir un modificador de precio ni duplicarla en cada producto.
+  const carrierQty=expected&&typeof expected==="object"&&!Array.isArray(expected)
+    ?(expected as Record<string,unknown>).courtesyCupCarriers4:null;
+  if(typeof carrierQty==="number"&&Number.isInteger(carrierQty)&&carrierQty>0)
+    labels.push("PORTAVASOS 4 ×"+carrierQty+" · CORTESÍA $0");
   return labels;
 }
 export function preparationNote(note:string|null|undefined,expected:unknown):string|null{

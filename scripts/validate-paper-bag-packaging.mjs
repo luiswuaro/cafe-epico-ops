@@ -29,6 +29,18 @@ try{
  assert.equal(isFourCupCarrierInventoryItem({name:"PORTAVASOS 4",unit:"pz",trackingType:"QUANTITY"}),true);
  assert.equal(isFourCupCarrierInventoryItem({name:"CHAROLA DE 4 VASOS",unit:"pz",trackingType:"QUANTITY"}),true);
  assert.equal(isFourCupCarrierInventoryItem({name:"CHAROLA 2 VASOS",unit:"pz",trackingType:"QUANTITY"}),false);
+ const labelCode=fs.readFileSync("src/application/pos/extras.ts","utf8");
+ assert.ok(labelCode.includes("PORTAVASOS 4 ×"),"La comanda debe indicar la cortesía entregada");
+ const check=fs.readFileSync("src/application/pos/live.ts","utf8");
+ assert.ok(check.includes("POS_COURTESY_CARRIER_CONSUMED"));
+ assert.ok(check.includes("courtesyCupCarriers4=validateFreeCupCarriers"));
+ assert.ok(check.includes("savedLinesHaveTakeawayDrink"));
+ const server=fs.readFileSync("app/(employee)/pos/live-actions.ts","utf8");
+ assert.ok(server.includes("courtesyCupCarriers4:parsed.courtesyCupCarriers4"));
+ const save=fs.readFileSync("app/(employee)/pos/actions.ts","utf8");
+ assert.ok(save.includes("courtesyCupCarriers4=carrierCount"));
+ const ui=fs.readFileSync("app/(employee)/pos/pos-client.tsx","utf8");
+ assert.ok(ui.includes("Portavasos de 4 · cortesía"));
  assert.equal(calculatePaperBagPlan([hojaldra(5,"DINE_IN"),croissant(1)]).bags,1);
  assert.equal(calculatePaperBagPlan([{name:"CROISSANT NUTELLA",category:"ALIMENTOS",serviceMode:"TAKEAWAY",quantity:2}]).bags,0);
  assert.equal(incrementalPaperBags([hojaldra(2)],[hojaldra(1)]),0);
