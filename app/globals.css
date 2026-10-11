@@ -2889,3 +2889,21 @@ main.pos-shell .pos-table-shortcuts button[aria-pressed="true"] {
   padding:.65rem .7rem;border-bottom:1px solid var(--epic-border);white-space:nowrap;color:var(--epic-fg)}
 .recipe-consistency-table th{background:var(--epic-soft)}
 .recipe-consistency-table tr:hover{background:var(--epic-soft)}
+
+/* Fast Lane: reabasto de 1 vistazo, semántica de color compatible con ambos temas. */
+.pos-replenishment-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.65rem;margin:.7rem 0}
+.pos-replenishment-kpis .metric{display:block;font-size:clamp(1.6rem,2.5vw,2.3rem)}
+.pos-replenishment-method{font-size:.81rem;line-height:1.5;margin:.65rem 0}
+.pos-replenishment-copy{display:flex;gap:.65rem;align-items:center;margin:.7rem 0}
+.pos-replenishment-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,330px),1fr));gap:.55rem;margin-top:.6rem}
+.pos-replenishment-item{padding:.85rem;display:grid;gap:.65rem;background:var(--epic-card);border-color:var(--epic-border);color:var(--epic-fg)}
+.pos-replenishment-top{display:flex;align-items:flex-start;justify-content:space-between;gap:.7rem}
+.pos-replenishment-top h2{font-size:1.02rem;margin:.4rem 0 0}
+.pos-replenishment-stock{font-size:1.11rem;white-space:nowrap;font-variant-numeric:tabular-nums}
+.pos-replenishment-state{display:inline-block;padding:.22rem .55rem;border-radius:7px;
+  font-size:.7rem;font-weight:800;background:var(--epic-soft);color:var(--epic-fg);border:1px solid var(--epic-border)}
+.pos-replenishment-state-AGOTADO,.pos-replenishment-state-SIN_CONTEO{border-left:4px solid #b64936}
+.pos-replenishment-state-BAJO_MINIMO,.pos-replenishment-state-POCAS_PORCIONES{border-left:4px solid #b78720}
+.pos-replenishment-bottom{display:grid;gap:.28rem;color:var(--epic-secondary);font-size:.79rem}
+.pos-replenishment-bottom strong{color:var(--epic-fg)}
+@media(max-width:700px){.pos-replenishment-kpis{grid-template-columns:1fr}.pos-replenishment-top{flex-wrap:wrap}}
