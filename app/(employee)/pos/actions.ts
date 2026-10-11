@@ -117,6 +117,7 @@ async function buildOrderInput(
       unitPrice,extras:extras.extras,
       expectedConsumption: {
         mode,
+        courtesyCupCarriers4:0,
         serviceMode: lineMode,extras:extras.extras,
         customerContainer,
         discount:customerContainer?{
