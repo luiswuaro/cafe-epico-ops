@@ -2816,3 +2816,10 @@ details[open]>.ops-chevron,details[open]>summary>.ops-chevron{transform:rotate(1
   border-color:var(--epic-accent,var(--ink))}
 .pos-table-shortcuts button:focus-visible{outline:3px solid var(--epic-accent,var(--ink));outline-offset:2px}
 @media(max-width:460px){.pos-table-shortcuts{grid-template-columns:repeat(3,minmax(0,1fr))}}
+
+/* El cliente es opcional; no ocupar un tercio de la cuenta en ventas rápidas. */
+.pos-optional-customer{border:1px solid var(--epic-border,var(--line));border-radius:10px;padding:.65rem .7rem}
+.pos-optional-customer summary{cursor:pointer;display:flex;justify-content:space-between;gap:1rem;font-size:.83rem;font-weight:750}
+.pos-optional-customer summary strong{font-weight:750;color:var(--epic-secondary,var(--muted))}
+.pos-optional-customer[open] summary{margin-bottom:.7rem}
+.pos-optional-customer .pos-customer-box{box-shadow:none;border:0;padding:.35rem}
