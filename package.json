@@ -14,7 +14,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
-    "validate:structure": "node scripts/validate-structure.mjs && node scripts/validate-contract-pdf.mjs && node scripts/validate-own-container.mjs && node scripts/validate-benefits-preview.mjs && node scripts/validate-mixed-staff-tickets.mjs && node scripts/validate-kitchen-auto.mjs && node scripts/validate-shadow-payment.mjs && node scripts/validate-shadow-receipt-routing.mjs && node scripts/validate-native-pos-inventory.mjs && node scripts/validate-ops-analytics.mjs && node scripts/validate-legacy-ops-stock-resolver.mjs && node scripts/validate-pos-cost-only.mjs && node scripts/validate-ops-fast-lane.mjs && node scripts/validate-bar-pos-recipes.mjs && node scripts/validate-replenishment-queue.mjs && node scripts/validate-paper-bag-packaging.mjs"
+    "validate:structure": "node scripts/validate-structure.mjs && node scripts/validate-contract-pdf.mjs && node scripts/validate-own-container.mjs && node scripts/validate-benefits-preview.mjs && node scripts/validate-mixed-staff-tickets.mjs && node scripts/validate-kitchen-auto.mjs && node scripts/validate-shadow-payment.mjs && node scripts/validate-shadow-receipt-routing.mjs && node scripts/validate-native-pos-inventory.mjs && node scripts/validate-ops-analytics.mjs && node scripts/validate-legacy-ops-stock-resolver.mjs && node scripts/validate-pos-cost-only.mjs && node scripts/validate-ops-fast-lane.mjs && node scripts/validate-bar-pos-recipes.mjs && node scripts/validate-replenishment-queue.mjs && node scripts/validate-paper-bag-packaging.mjs && node scripts/validate-print-hub.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "0.12.7",

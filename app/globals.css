@@ -2948,3 +2948,10 @@ main.pos-shell .pos-table-shortcuts button[aria-pressed="true"] {
 .packaging-simulator-result{font-size:clamp(1.4rem,2.5vw,2rem);
  border-top:1px solid var(--epic-border);padding-top:.45rem}
 @media(min-width:1024px){main:has(.packaging-simulator){width:100%;max-width:1280px}}
+
+.pos-print-station{border:2px solid var(--epic-border);
+  background:var(--epic-card);color:var(--epic-fg);padding:1.1rem}
+.pos-print-station>.section-heading{display:flex;align-items:center;gap:.75rem;justify-content:space-between}
+.pos-print-station .pos-result-actions{display:flex;flex-wrap:wrap;gap:.6rem}
+.pos-print-station button{min-height:44px}
+@media(min-width:1080px){main:has(.pos-print-station){max-width:none;width:100%;padding-inline:clamp(.8rem,2vw,2rem)}}

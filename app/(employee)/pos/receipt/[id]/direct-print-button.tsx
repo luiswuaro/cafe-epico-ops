@@ -532,6 +532,24 @@ async function buildRasterTicket(
   };
 }
 
+/** Renderizador único de ticket para botón manual y estación PC remota. */
+export async function printReceiptWithBridge(ticket:DirectReceiptPayload,
+ template:DirectReceiptTemplate):Promise<string>{
+ const raw=window.localStorage.getItem(STORAGE_KEY);
+ if(!raw)throw new Error("Configura primero la impresora de tickets en esta PC.");
+ const config=JSON.parse(raw) as {url:string;token:string};
+ if(!/^http:\/\/(127\.0\.0\.1|localhost):\d{2,5}\/?$/.test(config.url))
+   throw new Error("Solo se permite el puente local de impresora.");
+ const raster=await buildRasterTicket(ticket,template);
+ const response=await fetch(config.url.replace(/\/$/,"")+"/print",{
+  method:"POST",
+  headers:{"Content-Type":"application/json","X-Cafe-Epico-Token":config.token},
+  body:JSON.stringify({raster,feed:template.feedLines,cut:template.autoCut}),
+ });
+ const result=await response.json() as {ok?:boolean;error?:string;printer?:string};
+ if(!response.ok||!result.ok)throw new Error(result.error||"No se pudo imprimir ticket");
+ return result.printer||"impresora";
+}
 export function DirectPrintTicketButton({
   ticket,
   template,
