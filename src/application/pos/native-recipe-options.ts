@@ -40,21 +40,16 @@ export async function getNativeRecipeOptions(organizationId:string,storeId:strin
     )),
   ]);
   const enabledLocations=new Map(locations.map(x=>[x.id,x.name]));
+  // Solo insumos con existencias. Agua e hielo se ofrecen como componentes
+  // virtuales COST_ONLY en el editor, sin saldos ni equivalencias.
   const availableItems=new Map(items.filter(i=>i.category!=="INSUMO_QA"&&
-    (i.trackingType==="QUANTITY"||i.trackingType==="COST_ONLY")).map(i=>[i.id,i]));
+    i.trackingType==="QUANTITY").map(i=>[i.id,i]));
   const options:NativeRecipeOption[]=stock.flatMap(s=>{
     const i=availableItems.get(s.inventoryItemId);
     if(!i||!enabledLocations.has(s.locationId))return [];
     return [{inventoryItemId:i.id,locationId:s.locationId,locationName:enabledLocations.get(s.locationId)??"",name:i.name,
       unit:i.canonicalUnit,trackingType:i.trackingType,available:Number(s.quantity)}];
   });
-  // Items of policy COST_ONLY can be attached directly and never block sale.
-  const bar=locations.find(l=>l.name==="Barra")??locations[0];
-  if(bar)for(const i of availableItems.values()){
-    if(i.trackingType!=="COST_ONLY"||options.some(o=>o.inventoryItemId===i.id))continue;
-    options.push({inventoryItemId:i.id,locationId:bar.id,locationName:bar.name,name:i.name,
-      unit:i.canonicalUnit,trackingType:i.trackingType,available:0});
-  }
   options.sort((a,b)=>a.name.localeCompare(b.name,"es")||a.locationId.localeCompare(b.locationId));
   const legacyMappings:LegacyRecipeMapping[]=oldMappings.map(m=>({
     variantExternalId:m.variantExternalId,
