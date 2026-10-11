@@ -43,6 +43,12 @@ try{
   assert.ok(sale.includes("automaticForAllOperators:true"));
   assert.ok(!sale.includes("if(stockShortages.length&&!input.allowStockShortage)"));
   assert.ok(sale.includes("theoreticalQuantity:\"0\""));
+  const readiness=fs.readFileSync("src/application/pos/readiness.ts","utf8");
+  assert.ok(readiness.includes('warnings.push("Sin conteo inicial:'));
+  assert.ok(readiness.includes('warnings.push(\n          "Reabastecer:'));
+  assert.ok(!readiness.includes('errors.push("Sin saldo inicial:'));
+  const split=fs.readFileSync("app/(employee)/pos/orders/[id]/split/actions.ts","utf8");
+  assert.ok(!split.includes("allowStockShortage"));
   const checkout=fs.readFileSync("app/(employee)/pos/checkout/payment-form.tsx","utf8");
   assert.ok(!checkout.includes("allowStockShortage"));
   const pos=fs.readFileSync("app/(employee)/pos/pos-client.tsx","utf8");
