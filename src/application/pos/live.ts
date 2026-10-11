@@ -558,11 +558,13 @@ export async function checkoutLiveOrder(input:{
 
     for(const item of consume.values()){
       // Si nunca hubo conteo inicial, iniciar en cero de forma idempotente.
-      await tx.insert(inventoryBalances).values({
-        organizationId:input.organizationId,storeId:input.storeId,
-        locationId:item.locationId,inventoryItemId:item.itemId,
-        theoreticalQuantity:"0",
-      }).onConflictDoNothing();
+      if(!byStock.has(mapKey(item.locationId,item.itemId))){
+        await tx.insert(inventoryBalances).values({
+          organizationId:input.organizationId,storeId:input.storeId,
+          locationId:item.locationId,inventoryItemId:item.itemId,
+          theoreticalQuantity:"0",
+        }).onConflictDoNothing();
+      }
       await tx.insert(inventoryMovements).values({
         organizationId:input.organizationId,storeId:input.storeId,
         locationId:item.locationId,inventoryItemId:item.itemId,
