@@ -15,6 +15,9 @@ export type PosServiceMode = "DINE_IN" | "TAKEAWAY";
 export type PosCatalogCategory = "CALIENTES" | "FRÍAS" | "ALIMENTOS";
 
 export type PosRecipeComponent = {
+  /** Native OPS inventory identity; no Loyverse equivalence required. */
+  inventoryItemId?: string | null;
+  inventoryLocationId?: string | null;
   variantExternalId: string | null;
   itemExternalId: string | null;
   name: string;
@@ -84,6 +87,8 @@ function storedRecipe(value: unknown, byUniqueName?: Map<string,{itemId:string;v
 
     const matched=byUniqueName?.get(normalize(name));
     return [{
+      inventoryItemId:typeof component.inventoryItemId==="string"?component.inventoryItemId:null,
+      inventoryLocationId:typeof component.inventoryLocationId==="string"?component.inventoryLocationId:null,
       variantExternalId:
         typeof component.variantExternalId === "string"
           ? component.variantExternalId
