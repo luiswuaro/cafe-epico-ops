@@ -67,10 +67,7 @@ export default async function PosOrdersPage({
     getPosExtraCatalog(employee.organizationId),
   ]);
 
-  const recipeIds=new Map(catalog.map(product=>[
-    product.category+"|"+product.name.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toUpperCase().trim(),
-    product.id,
-  ]));
+  const knownRecipes=new Set(catalog.map(product=>product.id));
   // Sólo acciones de guardado confirmadas incluyen autoKitchen=saved.
   // Nunca iniciar una impresión al abrir / refrescar Comandas normalmente.
   const autoId=typeof params.created==="string"?params.created
@@ -211,12 +208,10 @@ export default async function PosOrdersPage({
                         {extraLabels(line.expectedConsumption,{showPrices:true}).map((label,i)=>
                           <div key={i} className="command-line-note">↳ {label}</div>)}
                         {line.note && <div className="command-line-note">↳ {line.note}</div>}
-                        {(["CALIENTES","FRÍAS","ALIMENTOS"].includes(line.category))&&
-                          recipeIds.has(line.category+"|"+line.name.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toUpperCase().trim())&&
+                        {knownRecipes.has(line.catalogId)&&
                           <Link className="pos-inline-recipe" target="_blank" rel="noopener noreferrer"
-                            href={"/recipes/"+encodeURIComponent(recipeIds.get(
-                              line.category+"|"+line.name.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toUpperCase().trim()
-                            )!)+(line.expectedConsumption?.serviceMode==="TAKEAWAY"?"?servicio=llevar":"")}>
+                            href={"/recipes/"+encodeURIComponent(line.catalogId)+
+                              (line.expectedConsumption?.serviceMode==="TAKEAWAY"?"?servicio=llevar":"")}>
                             Ver receta ↗
                           </Link>}
                       </div>

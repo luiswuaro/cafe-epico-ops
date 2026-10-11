@@ -50,6 +50,7 @@ export async function getOpenPosOrders(
   const lines = await db
     .select({
       id: posOrderLines.id,
+      catalogId: posOrderLines.catalogExternalId,
       orderId: posOrderLines.orderId,
       name: posOrderLines.nameSnapshot,
       category: posOrderLines.categorySnapshot,

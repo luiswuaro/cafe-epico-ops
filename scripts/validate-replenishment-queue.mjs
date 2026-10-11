@@ -48,6 +48,10 @@ try{
  assert.ok(page.includes("getOpsReplenishmentQueue"));
  assert.ok(pos.includes('href="/pos/reabasto"'));
  assert.ok(commands.includes("Ver receta ↗"));
+ assert.ok(commands.includes("knownRecipes.has(line.catalogId)"));
+ const ordersService=fs.readFileSync("src/application/pos/orders.ts","utf8");
+ assert.ok(ordersService.includes("catalogId: posOrderLines.catalogExternalId"),
+  "Las recetas de comandas deben apuntar al ID exacto y no al nombre");
  assert.ok(!page.includes("LOYVERSE_OVERRIDE"));
  console.log("OPS reabasto: saldos, sin conteo, cobertura, mínimos y accesos PASS");
 }finally{fs.rmSync(temp,{recursive:true,force:true});}
