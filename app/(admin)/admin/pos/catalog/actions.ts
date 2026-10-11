@@ -6,6 +6,7 @@ import { z } from "zod";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
 import { assertEmployeePermission } from "@/src/infrastructure/auth/permissions";
 import { getDb } from "@/src/infrastructure/db/client";
+import {getNativeRecipeOptions} from "@/src/application/pos/native-recipe-options";
 import {
   auditEvents,
   posCatalogOverrides,
@@ -83,6 +84,8 @@ export async function updatePosCatalogPrice(formData: FormData) {
 
 
 const recipeComponentSchema = z.object({
+  inventoryItemId:z.string().uuid().nullable().optional(),
+  inventoryLocationId:z.string().uuid().nullable().optional(),
   variantExternalId: z.string().nullable().optional(),
   itemExternalId: z.string().nullable().optional(),
   name: z.string().trim().min(1).max(160),
@@ -99,6 +102,33 @@ function parseRecipeJson(formData: FormData, name: string) {
   const raw = String(formData.get(name) ?? "").trim();
   if (!raw) return { components: [] };
   return recipeSchema.parse(JSON.parse(raw));
+}
+
+async function validateNativeRecipes(
+  organizationId:string,storeId:string,
+  dineIn:ReturnType<typeof parseRecipeJson>,
+  takeaway:ReturnType<typeof parseRecipeJson>,
+) {
+  const {options}=await getNativeRecipeOptions(organizationId,storeId);
+  const byKey=new Map(options.map(o=>[o.inventoryItemId+"|"+o.locationId,o]));
+  const canonical=(recipe:ReturnType<typeof parseRecipeJson>)=>({
+    components:recipe.components.map(c=>{
+      if(!c.inventoryItemId&&!c.inventoryLocationId)return c;
+      if(!c.inventoryItemId||!c.inventoryLocationId)
+        throw new Error("Insumo OPS requiere identidad y ubicación completas.");
+      const item=byKey.get(c.inventoryItemId+"|"+c.inventoryLocationId);
+      if(!item)throw new Error("El insumo OPS no está activo en esta sucursal.");
+      if(item.unit==="pz"&&!Number.isInteger(c.quantity))
+        throw new Error("Los insumos en piezas requieren cantidades enteras: "+item.name);
+      if(Math.round(c.quantity*1000)/1000!==c.quantity)
+        throw new Error("Usa máximo tres decimales en "+item.name);
+      return {...c,inventoryItemId:item.inventoryItemId,
+        inventoryLocationId:item.locationId,
+        variantExternalId:null,itemExternalId:null,
+        name:item.name,unitLabel:item.unit,category:"OPS"};
+    }),
+  });
+  return {dineIn:canonical(dineIn),takeaway:canonical(takeaway)};
 }
 
 export async function togglePosCatalogItem(formData: FormData) {
@@ -169,8 +199,13 @@ export async function savePosRecipe(formData: FormData) {
   );
 
   const catalogId = String(formData.get("catalogId") ?? "").trim();
-  const dineIn = parseRecipeJson(formData, "dineInRecipeJson");
-  const takeaway = parseRecipeJson(formData, "takeawayRecipeJson");
+  const draftDineIn=parseRecipeJson(formData,"dineInRecipeJson");
+  const draftTakeaway=parseRecipeJson(formData,"takeawayRecipeJson");
+  if(!employee.homeStoreId)throw new Error("No hay sucursal para validar inventario OPS.");
+  // Preview shares production DB: never let a preview change live recipes.
+  if(process.env.VERCEL_ENV==="preview")
+    throw new Error("Preview de recetas en modo lectura. La edición se habilita al publicar.");
+  const {dineIn,takeaway}=await validateNativeRecipes(employee.organizationId,employee.homeStoreId,draftDineIn,draftTakeaway);
   const db = getDb();
 
   if (catalogId.startsWith("manual:")) {
@@ -242,8 +277,12 @@ export async function createManualPosProduct(formData: FormData) {
     String(formData.get("category") ?? ""),
   );
   const price = Number(formData.get("price"));
-  const dineIn = parseRecipeJson(formData, "dineInRecipeJson");
-  const takeaway = parseRecipeJson(formData, "takeawayRecipeJson");
+  const draftDineIn=parseRecipeJson(formData,"dineInRecipeJson");
+  const draftTakeaway=parseRecipeJson(formData,"takeawayRecipeJson");
+  if(!employee.homeStoreId)throw new Error("No hay sucursal para validar inventario OPS.");
+  if(process.env.VERCEL_ENV==="preview")
+    throw new Error("Preview de catálogo en modo lectura para proteger el POS de producción.");
+  const {dineIn,takeaway}=await validateNativeRecipes(employee.organizationId,employee.homeStoreId,draftDineIn,draftTakeaway);
 
   if (!name) throw new Error("Falta el nombre del producto");
   if (!Number.isFinite(price) || price <= 0) {
