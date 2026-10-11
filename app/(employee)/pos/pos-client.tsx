@@ -807,13 +807,16 @@ export function PosClient({
           <strong>{money.format(total)}</strong>
         </div>
 
-        {!savedTicket&&<CheckoutLoyalty
-          identityOnly
-          customers={createdCustomer
-            ?[...customers.filter(c=>c.id!==createdCustomer.id),createdCustomer]:customers}
-          selectedId={customerId} onSelect={checkoutCustomerChange}
-          redeemPoints={redeemPoints} onRedeemChange={setRedeemPoints}
-          total={total} liveEnabled={liveEnabled}/>}
+        {!savedTicket&&<details className="pos-optional-customer">
+          <summary>Cliente y puntos <strong>{selectedCustomer?"· "+selectedCustomer.name:"· Sin cliente"}</strong></summary>
+          <CheckoutLoyalty
+            identityOnly
+            customers={createdCustomer
+              ?[...customers.filter(c=>c.id!==createdCustomer.id),createdCustomer]:customers}
+            selectedId={customerId} onSelect={checkoutCustomerChange}
+            redeemPoints={redeemPoints} onRedeemChange={setRedeemPoints}
+            total={total} liveEnabled={liveEnabled}/>
+        </details>}
 
         <form id="pos-order-command-form" action={savedTicket?addProductsToLiveCommand:liveEnabled?saveAction:shadowAction} className="stack pos-checkout">
           {savedTicket&&<>
