@@ -18,6 +18,7 @@ const schema = z.object({
 });
 
 export async function registerOpsInventoryMovement(formData: FormData) {
+  if(process.env.VERCEL_ENV==="preview")throw new Error("Preview de inventario en modo lectura: no se modificarán existencias reales.");
   const { user, employee } = await getCurrentEmployee();
   if (!employee.homeStoreId) throw new Error("No hay sucursal operativa.");
   await assertEmployeePermission(employee.id, "inventory.adjust", employee.homeStoreId);
@@ -143,6 +144,7 @@ const newItemSchema = z.object({
 });
 
 export async function createOpsInventoryItem(formData: FormData) {
+  if(process.env.VERCEL_ENV==="preview")throw new Error("Preview de inventario en modo lectura: no se modificarán existencias reales.");
   const { user, employee } = await getCurrentEmployee();
   if (!employee.homeStoreId) throw new Error("Sin sucursal asignada.");
   await assertEmployeePermission(employee.id, "inventory.item.manage", employee.homeStoreId);
