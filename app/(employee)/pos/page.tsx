@@ -84,7 +84,9 @@ export default async function PosPage({
         eq(posStaffDrinks.businessDate,today),
       )):Promise.resolve([]),
   ]);
-  const liveTickets=openOrders.filter(order=>order.mode==="LIVE");
+  // Los pedidos pagados siguen visibles en Comandas hasta despacho, pero NO
+  // deben aparecer como tickets abiertos para reabrir/editar desde el POS.
+  const liveTickets=openOrders.filter(order=>order.mode==="LIVE"&&order.status!=="PAID");
   const selectedTicket=liveEnabled&&selectedTicketId
     ? liveTickets.find(order=>order.id===selectedTicketId)??null : null;
 
