@@ -7,6 +7,8 @@ import {
 import { RecipeServiceEditor } from "./recipe-editor";
 import { SearchableCollection } from "@/components/searchable-collection";
 import { getPosCatalog } from "@/src/application/pos/catalog";
+import {getNativeRecipeOptions} from "@/src/application/pos/native-recipe-options";
+import {getCurrentEmployee} from "@/src/infrastructure/auth/current-employee";
 import { requirePermission } from "@/src/infrastructure/auth/permissions";
 
 export const dynamic = "force-dynamic";
@@ -25,6 +27,9 @@ export default async function PosCatalogAdminPage({searchParams}:{
   const catalog = await getPosCatalog(organizationId, {
     includeDisabled: true,
   });
+  const {employee}=await getCurrentEmployee();
+  if(!employee.homeStoreId)throw new Error("Configura una sucursal para editar recetas OPS.");
+  const native=await getNativeRecipeOptions(organizationId,employee.homeStoreId);
 
   const ingredientOptions = Array.from(
     new Set(
@@ -40,6 +45,7 @@ export default async function PosCatalogAdminPage({searchParams}:{
       <section className="hero">
         <p className="eyebrow">POS · ADMINISTRACIÓN</p>
         <h1>Catálogo y recetas</h1>
+        <p className="muted">Nuevo: vincula las recetas directamente con los insumos y ubicaciones reales de Inventario OPS; sin equivalencias obligatorias de Loyverse.</p>
         <p className="muted">
           Un producto, una ficha. La receta se edita por insumos y sólo
           personalizas “Para llevar” cuando realmente cambia el consumo.
@@ -82,6 +88,8 @@ export default async function PosCatalogAdminPage({searchParams}:{
             dineIn={[]}
             takeaway={[]}
             ingredientOptions={ingredientOptions}
+                  inventoryOptions={native.options}
+                  legacyMappings={native.legacyMappings}
           />
 
           <button type="submit">Crear producto</button>
@@ -158,6 +166,8 @@ export default async function PosCatalogAdminPage({searchParams}:{
                   dineIn={item.serviceRecipes.DINE_IN.components}
                   takeaway={item.serviceRecipes.TAKEAWAY.components}
                   ingredientOptions={ingredientOptions}
+                  inventoryOptions={native.options}
+                  legacyMappings={native.legacyMappings}
                 />
 
                 <p className="muted">
