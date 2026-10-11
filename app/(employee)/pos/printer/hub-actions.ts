@@ -140,7 +140,7 @@ export async function getPrintStationJobs({since}:FeedInput):Promise<HubJob[]>{
    (a.kind==="KITCHEN"?-1:1));
  return jobs.slice(0,30);
 }
-async function verifyJob(jobKey:string,org:string,store:string,tx:ReturnType<typeof getDb>){
+async function verifyJob(jobKey:string,org:string,store:string,tx:Pick<ReturnType<typeof getDb>,"select">){
  const match=/^(KITCHEN|RECEIPT):([0-9a-f-]{36})(?::([A-Za-z0-9_-]{1,120}))?$/i.exec(jobKey);
  if(!match)throw new Error("Trabajo de impresión inválido.");
  const [order]=await tx.select({id:posOrders.id}).from(posOrders).where(and(
@@ -156,7 +156,7 @@ export async function claimPrintStationJob(jobKey:string,stationId:string){
  if(!/^[0-9a-f-]{36}$/i.test(stationId))throw new Error("Estación inválida.");
  return getDb().transaction(async tx=>{
   await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${storeId}))`);
-  await verifyJob(jobKey,employee.organizationId,storeId,tx as ReturnType<typeof getDb>);
+  await verifyJob(jobKey,employee.organizationId,storeId,tx);
   const events=await tx.select({action:auditEvents.action,createdAt:auditEvents.createdAt,
     afterData:auditEvents.afterData}).from(auditEvents).where(and(
     eq(auditEvents.organizationId,employee.organizationId),
@@ -184,7 +184,7 @@ export async function finishPrintStationJob(jobKey:string,stationId:string,
  const action=outcome==="DONE"?"POS_PRINT_HUB_DONE":"POS_PRINT_HUB_FAILED";
  await getDb().transaction(async tx=>{
   await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${storeId}))`);
-  await verifyJob(jobKey,employee.organizationId,storeId,tx as ReturnType<typeof getDb>);
+  await verifyJob(jobKey,employee.organizationId,storeId,tx);
   const previous=await tx.select({action:auditEvents.action,afterData:auditEvents.afterData})
     .from(auditEvents).where(and(eq(auditEvents.organizationId,employee.organizationId),
       eq(auditEvents.entityType,"pos_print_job"),eq(auditEvents.entityId,jobKey)))
