@@ -2991,3 +2991,13 @@ main.pos-shell .pos-table-shortcuts button[aria-pressed="true"] {
  .ops-admin-workspace{padding-inline:.55rem}
  .ops-workspace-nav a{padding:.55rem .6rem;font-size:.81rem}
 }
+
+.pos-courtesy-carrier{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;
+ gap:.65rem;padding:.65rem;border-radius:11px;background:var(--epic-soft);
+ border:1px solid var(--epic-border);color:var(--epic-fg)}
+.pos-courtesy-carrier>div:first-child{display:grid;gap:.2rem}
+.pos-courtesy-carrier-count{display:flex;gap:.65rem;align-items:center}
+.pos-courtesy-carrier-count button{min-width:42px;min-height:42px;
+ border:1px solid var(--epic-border);border-radius:9px;font-weight:900;
+ background:var(--epic-card);color:var(--epic-fg)}
+.pos-courtesy-carrier-count strong{min-width:2ch;text-align:center;font-variant-numeric:tabular-nums}

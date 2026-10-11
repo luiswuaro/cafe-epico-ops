@@ -15,6 +15,7 @@ import { cancelLiveOrder } from "@/src/application/pos/live-cancellation";
 import { checkoutLiveOrder, isPosLiveEnabled } from "@/src/application/pos/live";
 import { getPosReadiness } from "@/src/application/pos/readiness";
 import {shadowPaymentFields} from "@/src/domain/pos/shadow-payment";
+import {validateFreeCupCarriers} from "@/src/domain/pos/paper-bag-packaging";
 import { syncLoyverseReceipts } from "@/src/application/loyverse/sync";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
 import { assertEmployeePermission, employeeHasPermission } from "@/src/infrastructure/auth/permissions";
@@ -138,6 +139,13 @@ async function buildOrderInput(
     };
   });
 
+  const carrierCount=validateFreeCupCarriers(
+    z.coerce.number().int().min(0).max(10).parse(formData.get("courtesyCupCarriers4")??"0"),
+    lines.some(line=>line.lineMode==="TAKEAWAY"&&line.item.category!=="ALIMENTOS"),
+  );
+  if(lines.length&&carrierCount){
+    lines[0].expectedConsumption.courtesyCupCarriers4=carrierCount;
+  }
   const total = lines.reduce((sum, line) => sum + line.lineTotal, 0);
 
   if (customerId) {

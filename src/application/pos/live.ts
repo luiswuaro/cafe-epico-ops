@@ -1,6 +1,6 @@
 import { and, eq, sql } from "drizzle-orm";
 import {assertNoPreviewMutation} from "@/src/shared/preview-guard";
-import {calculatePaperBagPlan,incrementalPaperBags,isPaperBagInventoryItem,type PackagingLine} from "@/src/domain/pos/paper-bag-packaging";
+import {calculatePaperBagPlan,incrementalPaperBags,isPaperBagInventoryItem,isFourCupCarrierInventoryItem,validateFreeCupCarriers,type PackagingLine} from "@/src/domain/pos/paper-bag-packaging";
 import { getPosCatalog, type PosServiceMode } from "@/src/application/pos/catalog";
 import {priceExtras, readExtraSnapshots, type ExtraRequest} from "@/src/application/pos/extras";
 import {getPosExtraCatalog} from "@/src/application/pos/extra-catalog";
@@ -27,6 +27,13 @@ export type LiveCart = Array<{
   // ID interno de la línea congelada de una comanda guardada; jamás se toma de una petición del navegador.
   sourceLineId?:string;
 }>;
+
+function savedLinesHaveTakeawayDrink(rows:Array<{
+ expected:Record<string,unknown>;category:string;
+}>){
+ return rows.some(row=>row.category!=="ALIMENTOS"&&
+   row.expected?.serviceMode==="TAKEAWAY");
+}
 
 export function isPosLiveEnabled() {
   return process.env.POS_LIVE_ENABLED === "true";
@@ -60,6 +67,7 @@ export async function checkoutLiveOrder(input:{
   tableLabel:string|null;
   note:string|null;
   allowStockShortage?:boolean;
+  courtesyCupCarriers4?:number;
 }) {
   assertNoPreviewMutation();
   if(!isPosLiveEnabled()) throw new Error("Cobros LIVE deshabilitados por seguridad.");
@@ -481,6 +489,49 @@ export async function checkoutLiveOrder(input:{
       }else packagingWarning="Configura un único insumo activo BOLSA PAPEL (pz) en Barra. El empaque físico no se descontó.";
     }
 
+    // Cortesía por ticket, registrada explícitamente antes de guardar o cobrar.
+    // Las comandas guardadas conservan la decisión en expectedConsumption:
+    // no aceptar una cantidad nueva desde un formulario de cobro posterior.
+    let courtesyCupCarriers4=0;
+    if(pending){
+      const storedCarriers=await tx.select({
+        expected:posOrderLines.expectedConsumption,
+        category:posOrderLines.categorySnapshot,
+      }).from(posOrderLines).where(eq(posOrderLines.orderId,pending.id));
+      const storedQuantity=storedCarriers.reduce((sum,row)=>{
+        const raw=row.expected?.courtesyCupCarriers4;
+        return sum+(typeof raw==="number"?raw:0);
+      },0);
+      courtesyCupCarriers4=validateFreeCupCarriers(storedQuantity,
+        savedLinesHaveTakeawayDrink(storedCarriers));
+      // Las charolas son por ticket, no por división del dinero.
+      if(split){
+        const paid=await tx.select({id:posOrderSplits.id}).from(posOrderSplits)
+          .where(and(eq(posOrderSplits.orderId,pending.id),eq(posOrderSplits.status,"PAID"))).limit(1);
+        if(paid.length)courtesyCupCarriers4=0;
+      }
+    }else{
+      courtesyCupCarriers4=validateFreeCupCarriers(input.courtesyCupCarriers4??0,
+        lines.some(line=>line.lineMode==="TAKEAWAY"&&line.item.category!=="ALIMENTOS"));
+    }
+    let cupCarrierWarning:string|null=null;
+    if(courtesyCupCarriers4>0){
+      const candidates=nativeItems.filter(isFourCupCarrierInventoryItem);
+      const bar=locations.filter(location=>location.name.normalize("NFD")
+        .replace(/[\\u0300-\\u036f]/g,"").toUpperCase().trim()==="BARRA");
+      if(candidates.length===1&&bar.length===1){
+        const item=candidates[0],loc=bar[0],key=mapKey(loc.id,item.id);
+        const previous=consume.get(key);
+        if(previous){
+          previous.amount+=courtesyCupCarriers4;
+          previous.names.add("PORTAVASOS CORTESÍA");
+        }else consume.set(key,{
+          locationId:loc.id,itemId:item.id,itemName:item.name,amount:courtesyCupCarriers4,
+          unit:"pz",names:new Set(["PORTAVASOS CORTESÍA"]),
+        });
+      }else cupCarrierWarning="Dar de alta un único PORTAVASOS 4 (pz) en Barra. Cortesía registrada, inventario pendiente.";
+    }
+
     const byStock=new Map(stocks.map(stock=>[mapKey(stock.locationId,stock.inventoryItemId),stock]));
     const stockShortages:Array<{ingredient:string;available:number;required:number;deficit:number;unit:string;products:string[]}>=[];
     for(const [key,requested] of consume){
@@ -528,6 +579,7 @@ export async function checkoutLiveOrder(input:{
       unitPrice:line.price.toFixed(2),quantity:String(line.quantity),lineTotal:line.total.toFixed(2),
       note:line.note,expectedConsumption:{
         mode:"LIVE",serviceMode:line.lineMode,extras:line.extraSnapshots,
+        courtesyCupCarriers4:lines.indexOf(line)===0?(input.courtesyCupCarriers4??0):0,
         customerContainer:line.customerContainer,
         discount:staffFree?{
           code:"STAFF_INCLUDED_DRINK",amountPerUnit:staffListedPrice,
@@ -650,6 +702,16 @@ export async function checkoutLiveOrder(input:{
           splitId:split?.id??null,warning:packagingWarning},
       });
     }
+    if(courtesyCupCarriers4>0){
+      await tx.insert(auditEvents).values({
+        organizationId:input.organizationId,storeId:input.storeId,
+        actorUserId:input.actorUserId,actorEmployeeId:input.employeeId,
+        action:cupCarrierWarning?"POS_COURTESY_CARRIER_PENDING_SETUP":"POS_COURTESY_CARRIER_CONSUMED",
+        entityType:"pos_order",entityId:order.id,
+        afterData:{folio:order.folio,quantity:courtesyCupCarriers4,capacity:4,
+          amountCharged:0,splitId:split?.id??null,warning:cupCarrierWarning},
+      });
+    }
     if(stockShortages.length){
       await tx.insert(auditEvents).values({
         organizationId:input.organizationId,storeId:input.storeId,
@@ -677,6 +739,7 @@ export async function checkoutLiveOrder(input:{
         nativeAutoResolved,
         customerId:input.customerId,inventoryEffectApplied:true,loyaltyEffectApplied:Boolean(input.customerId),
         automaticStockShortage:stockShortages.length>0,paperBags,
+        courtesyCupCarriers4,cupCarrierWarning,
         paperBagSetupWarning:packagingWarning},
     });
     return {id:order.id,alreadyRecorded:false};

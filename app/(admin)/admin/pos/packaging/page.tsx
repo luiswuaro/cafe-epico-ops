@@ -3,7 +3,7 @@ import {and,eq} from "drizzle-orm";
 import {requirePermission} from "@/src/infrastructure/auth/permissions";
 import {getDb} from "@/src/infrastructure/db/client";
 import {inventoryItems} from "@/src/infrastructure/db/schema";
-import {isPaperBagInventoryItem} from "@/src/domain/pos/paper-bag-packaging";
+import {isPaperBagInventoryItem,isFourCupCarrierInventoryItem} from "@/src/domain/pos/paper-bag-packaging";
 import {PackagingSimulator} from "./simulator";
 export const dynamic="force-dynamic";
 export default async function PackagingAdmin(){
@@ -16,6 +16,7 @@ export default async function PackagingAdmin(){
    name:i.name,unit:i.unit,trackingType:i.tracking,
  }));
  const canDeduct=matches.length===1;
+ const carriers=bags.filter(item=>isFourCupCarrierInventoryItem({name:item.name,unit:item.unit,trackingType:item.tracking}));
  return <main className="shell pos-shell">
    <header className="hero pos-hero"><div>
     <p className="eyebrow">CONTROL DE EMPAQUES · OPS</p>
@@ -32,6 +33,15 @@ export default async function PackagingAdmin(){
     <p><strong>Croissant de jamón y queso:</strong> una bolsa por pieza.</p>
     <p>Solo para llevar. Los productos para consumir aquí no utilizan bolsa.</p>
     <PackagingSimulator/>
+   </section>
+   <section className="card stack">
+    <h2>Portavasos de 4 · cortesía</h2>
+    <p>Se asignan manualmente al tomar un pedido con bebidas para llevar.
+       El barista decide si entrega 0, 1 o varias unidades. Precio al cliente: <strong>$0.00</strong>.</p>
+    {carriers.length===1?<p className="status-ok">Insumo listo: {carriers[0].name} (pz).
+      Descuento de inventario por cantidad efectivamente entregada.</p>:
+      <p className="status-warn">Pendiente: registra <strong>PORTAVASOS 4</strong> (pz) en inventario OPS,
+      ubicación Barra, con conteo real. No se descontará hasta tener una ficha única.</p>}
    </section>
    <section className="card stack">
     <h2>Control físico de bolsas</h2>

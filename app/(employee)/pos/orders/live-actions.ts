@@ -1,6 +1,7 @@
 "use server";
 
 import {assertNoPreviewMutation} from "@/src/shared/preview-guard";
+import {validateFreeCupCarriers} from "@/src/domain/pos/paper-bag-packaging";
 import { and, eq, sql } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { z } from "zod";
@@ -39,6 +40,8 @@ export async function addProductsToLiveCommand(data:FormData){
   const requestId=z.string().uuid().parse(data.get("requestId"));
   try{
     const cart=additionSchema.parse(JSON.parse(String(data.get("cart")??"[]")));
+    const requestedCarriers=z.coerce.number().int().min(0).max(10).parse(
+      data.get("courtesyCupCarriers4")??"0");
     const [catalog,readiness,extrasCatalog]=await Promise.all([
       getPosCatalog(employee.organizationId),
       getPosReadiness(employee.organizationId,employee.homeStoreId),
@@ -88,8 +91,10 @@ export async function addProductsToLiveCommand(data:FormData){
             [...recipe.components,...extras.components],customerContainer),
           unitPrice,lineTotal:Math.round(unitPrice*line.quantity*100)/100};
       });
+      const carrierCount=validateFreeCupCarriers(requestedCarriers,lines.some(line=>
+        line.lineMode==="TAKEAWAY"&&line.item.category!=="ALIMENTOS"));
       if(splits.length)await tx.delete(posOrderSplits).where(eq(posOrderSplits.orderId,order.id));
-      await tx.insert(posOrderLines).values(lines.map(line=>({
+      await tx.insert(posOrderLines).values(lines.map((line,index)=>({
         organizationId:employee.organizationId,orderId:order.id,
         catalogExternalId:line.item.id,variantExternalId:line.item.variantExternalId,
         nameSnapshot:line.item.name,categorySnapshot:line.item.category,
@@ -97,6 +102,7 @@ export async function addProductsToLiveCommand(data:FormData){
         lineTotal:line.lineTotal.toFixed(2),note:line.note,
         expectedConsumption:{
           mode:"LIVE",additionalRound:true,roundId:requestId,serviceMode:line.lineMode,
+          courtesyCupCarriers4:index===0?carrierCount:0,
           extras:line.extras,customerContainer:line.customerContainer,
           discount:line.customerContainer?{
             code:"OWN_THERMOS",amountPerUnit:OWN_CONTAINER_DISCOUNT_MXN,
