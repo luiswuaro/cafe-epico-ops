@@ -184,6 +184,11 @@ export default async function PosCatalogAdminPage({searchParams}:{
                 </p>
                 <button type="submit" disabled={preview}>Guardar receta</button>
               </form>
+              {preview&&<form action="/admin/pos/catalog" method="get" className="pos-preview-navigation-test">
+                <input type="hidden" name="saved" value={item.id}/>
+                <button className="button" type="submit">Probar regresar aquí tras guardar · sin escribir datos</button>
+                <small className="muted">Ensaya filtros, ficha expandida y posición sin modificar la receta real.</small>
+              </form>}
             </details>
             </article>
           ),
