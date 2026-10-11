@@ -697,7 +697,7 @@ export async function postMissingRoastedOutputs(formData: FormData) {
     throw new Error("El preview es de solo lectura para proteger el inventario real.");
   }
   const day = String(formData.get("roastedDay") ?? "").trim();
-  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(day) ||
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day) ||
       Number.isNaN(new Date(day + "T12:00:00-06:00").getTime()) ||
       formData.get("confirmed") !== "yes") {
     redirect("/admin/roasting?error=roasted-backfill-confirm");
