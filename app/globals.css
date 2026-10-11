@@ -2805,3 +2805,14 @@ details[open]>.ops-chevron,details[open]>summary>.ops-chevron{transform:rotate(1
 .ops-performance-table tr:hover{background:var(--epic-soft,#f3ede3)}
 .ops-performance-table a{font-weight:800;text-decoration:underline}
 @media(max-width:800px){.ops-performance-kpis{grid-template-columns:1fr}}
+
+/* Single-tap table selection and keyboard navigation, preserving mobile. */
+.pos-table-shortcuts{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:.3rem}
+.pos-table-shortcuts button{padding:.6rem .2rem;min-height:39px;border-radius:9px;
+  border:1px solid var(--epic-border,var(--line));background:var(--epic-field,var(--surface));
+  color:var(--epic-fg,var(--ink));font-weight:800}
+.pos-table-shortcuts button.active,.pos-table-shortcuts button[aria-pressed="true"]{
+  background:var(--epic-accent,var(--ink));color:var(--epic-accent-contrast,#fff);
+  border-color:var(--epic-accent,var(--ink))}
+.pos-table-shortcuts button:focus-visible{outline:3px solid var(--epic-accent,var(--ink));outline-offset:2px}
+@media(max-width:460px){.pos-table-shortcuts{grid-template-columns:repeat(3,minmax(0,1fr))}}

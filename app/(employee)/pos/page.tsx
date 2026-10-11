@@ -338,6 +338,7 @@ export default async function PosPage({
         <Link href="/pos/tickets" className="button">Historial de tickets</Link>
         <Link href="/pos/customers" className="button">Clientes y puntos</Link>
         <Link href="/pos/inventory-audit" className="button">Auditoría inventario</Link>
+        <Link href="/pos/performance" className="button">Tiempos y eficiencia</Link>
         <Link href="/pos/printer" className="button">
           Impresora
         </Link>

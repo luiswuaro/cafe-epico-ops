@@ -116,6 +116,7 @@ export function PosClient({
   const [checkoutOpen,setCheckoutOpen]=useState(false);
   const [mobileCartOpen,setMobileCartOpen]=useState(false);
   const mobileCartRef=useRef<HTMLElement>(null);
+  const searchRef=useRef<HTMLInputElement>(null);
   const mobileCartCloseRef=useRef<HTMLButtonElement>(null);
   const mobileSummaryRef=useRef<HTMLButtonElement>(null);
   const [ticketNameOption,setTicketNameOption]=useState("");
@@ -167,6 +168,27 @@ export function PosClient({
   const missingTable=!savedTicket&&ticketServiceMode==="DINE_IN"&&!tableLabel;
   const ticketNamePreview=tableLabel||
     (ticketServiceMode==="DINE_IN"?"Mesa obligatoria":"Folio automático de hoy");
+
+  useEffect(()=>{
+    function shortcuts(event:KeyboardEvent){
+      const target=event.target as HTMLElement|null;
+      const typing=target?.tagName==="INPUT"||target?.tagName==="TEXTAREA"||target?.tagName==="SELECT";
+      if(event.key==="F2"||((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==="k")){
+        event.preventDefault();
+        searchRef.current?.focus();
+        searchRef.current?.select();
+      }else if(event.key==="Escape"&&document.activeElement===searchRef.current){
+        setQuery("");
+        searchRef.current?.blur();
+      }else if(event.key==="F8"&&!typing){
+        event.preventDefault();
+        // F8 muestra la cuenta; nunca confirma un cobro sin autorización.
+        setMobileCartOpen(true);
+      }
+    }
+    window.addEventListener("keydown",shortcuts);
+    return ()=>window.removeEventListener("keydown",shortcuts);
+  },[]);
 
   useEffect(()=>{
     if(!mobileCartOpen)return;
@@ -554,13 +576,14 @@ export function PosClient({
       <section className="pos-catalog">
         <div className="card pos-toolbar">
           <input
+            ref={searchRef}
             type="search"
             value={query}
             onChange={(event) => {
               setQuery(event.target.value);
               if(event.target.value.trim()) setCategory("TODAS");
             }}
-            placeholder="Buscar bebida o alimento..."
+            placeholder="Buscar bebida o alimento... · F2 o Ctrl+K"
             aria-label="Buscar producto"
             autoComplete="off"
           />
@@ -815,6 +838,15 @@ export function PosClient({
           <input type="hidden" name="serviceMode" value={ticketServiceMode} />
           <input type="hidden" name="customerId" value={!liveEnabled&&createdCustomer?.id===customerId?"":customerId} />
 
+          {!savedTicket&&ticketServiceMode==="DINE_IN"&&<div className="pos-table-shortcuts"
+            aria-label="Seleccionar mesa en un toque">
+            {DINE_IN_TICKET_PRESETS.map(name=><button
+              key={name} type="button" aria-pressed={displayTicketNameOption===name}
+              className={displayTicketNameOption===name?"active":""}
+              onClick={()=>setTicketNameOption(name)}>
+              {name.replace("Mesa balcón ","B").replace("Mesa ","M")}
+            </button>)}
+          </div>}
           {!savedTicket && (
             <details className="pos-cancel-panel" style={{padding:"8px 12px"}}>
               <summary style={{cursor:"pointer",fontWeight:700}}>

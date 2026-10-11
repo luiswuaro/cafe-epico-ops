@@ -135,6 +135,9 @@ export default async function PosOrdersPage({
           <Link href="/pos" className="button">
             + Nueva orden
           </Link>
+          <Link href="/pos/performance" className="button">
+            Tiempos y eficiencia
+          </Link>
         </div>
       </section>
 
