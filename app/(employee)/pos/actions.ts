@@ -517,7 +517,9 @@ export async function updateCommandStatus(formData: FormData) {
     .limit(1);
 
   if (!order) throw new Error("Comanda no encontrada");
-  if (!["SENT", "PREPARING", "READY"].includes(order.status)) {
+  // El pago puede preceder a la preparación. Los pedidos para llevar PAID
+  // conservan su estado financiero, pero sí admiten eventos de barra.
+  if(!["SENT","PREPARING","READY","PAID"].includes(order.status)) {
     throw new Error("La comanda ya no está abierta");
   }
 
