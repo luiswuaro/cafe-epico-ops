@@ -2881,3 +2881,11 @@ main.pos-shell .pos-table-shortcuts button[aria-pressed="true"] {
 .recipe-ops-calculations p{margin:.8rem 0}
 .recipe-ops-source{font-size:.83rem;line-height:1.55;margin:1rem 0}
 @media(max-width:600px){.recipe-ops-amount{font-size:1.08rem}}
+
+.recipe-consistency-kpis{margin-bottom:.85rem}
+.recipe-consistency-scroll{overflow-x:auto;border:1px solid var(--epic-border);border-radius:12px;background:var(--epic-card)}
+.recipe-consistency-table{border-collapse:collapse;width:100%;text-align:left}
+.recipe-consistency-table th,.recipe-consistency-table td{
+  padding:.65rem .7rem;border-bottom:1px solid var(--epic-border);white-space:nowrap;color:var(--epic-fg)}
+.recipe-consistency-table th{background:var(--epic-soft)}
+.recipe-consistency-table tr:hover{background:var(--epic-soft)}
