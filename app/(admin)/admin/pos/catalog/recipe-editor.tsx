@@ -209,11 +209,11 @@ export function RecipeServiceEditor({
         value={JSON.stringify({ components: takeawayPayload })}
       />
 
-      <p className="status-warn">
-        Importante: para ingredientes fraccionarios de Loyverse
-        la cantidad editable está en kg (o L para leche deslactosada),
-        NO en gramos ni mililitros. 18 g = 0.018 kg; 200 ml = 0.200 L.
-        Cambiar sólo el texto de la unidad no realiza conversiones.
+      <p className="muted">
+        Recetas heredadas: las cantidades con unidad <strong>peso/volumen</strong> aún están
+        en kg o L (por ejemplo, 0.018 = 18 g). Elige un insumo OPS o pulsa
+        <strong> Vincular automáticamente </strong> para convertirlas a g, ml o pz.
+        Antes de guardar, comprueba el resultado de cada ingrediente.
       </p>
       <div className="recipe-service-tabs" role="tablist">
         <button
