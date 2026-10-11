@@ -22,6 +22,7 @@ export default async function PosCatalogAdminPage({searchParams}:{
   searchParams:Promise<Record<string,string|string[]|undefined>>;
 }) {
   const params=await searchParams;
+  const preview=process.env.VERCEL_ENV==="preview";
   const priceSaved=typeof params.priceSaved==="string"?params.priceSaved:null;
   const { organizationId } = await requirePermission("pos.catalog.manage");
   const catalog = await getPosCatalog(organizationId, {
@@ -52,6 +53,7 @@ export default async function PosCatalogAdminPage({searchParams}:{
         </p>
       </section>
 
+      {preview&&<section className="card status-warn" role="status">PREVIEW · Solo simulación visual. Este dominio comparte inventario con producción: botones de guardado desactivados.</section>}
       {priceSaved && <section className="card" role="status">
         <p className="status-ok">Precio actualizado en OPS. Los tickets existentes mantienen su valor guardado.</p>
       </section>}
@@ -92,7 +94,7 @@ export default async function PosCatalogAdminPage({searchParams}:{
                   legacyMappings={native.legacyMappings}
           />
 
-          <button type="submit">Crear producto</button>
+          <button type="submit" disabled={preview}>Crear producto</button>
         </form>
       </details>
 
@@ -133,7 +135,7 @@ export default async function PosCatalogAdminPage({searchParams}:{
                   name="enabled"
                   value={item.active ? "false" : "true"}
                 />
-                <button type="submit">
+                <button type="submit" disabled={preview}>
                   {item.active ? "Quitar del POS" : "Volver a mostrar"}
                 </button>
               </form>
@@ -154,7 +156,7 @@ export default async function PosCatalogAdminPage({searchParams}:{
                     :"Precio de producto creado en OPS."}
                   {" "}Los tickets guardados conservan su precio original.
                 </p>
-                <button type="submit">Guardar precio</button>
+                <button type="submit" disabled={preview}>Guardar precio</button>
               </form>
             </details>
             <details className="pos-recipe-editor">
@@ -175,7 +177,7 @@ export default async function PosCatalogAdminPage({searchParams}:{
                   cantidad, unidad e ingrediente sin obligarte a escribir
                   fórmulas de texto.
                 </p>
-                <button type="submit">Guardar receta</button>
+                <button type="submit" disabled={preview}>Guardar receta</button>
               </form>
             </details>
             </article>
