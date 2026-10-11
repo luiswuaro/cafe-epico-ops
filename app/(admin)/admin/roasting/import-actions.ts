@@ -12,6 +12,7 @@ import {
   auditEvents,
   inventoryBalances,
   inventoryMovements,
+  inventoryItems,
   roastBatches,
   roastCoffeeLots,
   roastGreenInventoryConfirmations,
@@ -251,6 +252,7 @@ export async function stageHiBeanRoastImport(formData: FormData): Promise<string
 export async function confirmHiBeanRoastImport(formData: FormData) {
   const draftId = String(formData.get("draftId") ?? "").trim();
   const requestedLotId = String(formData.get("coffeeLotId") ?? "").trim();
+  const requestedRoastedItemId = String(formData.get("roastedInventoryItemId") ?? "").trim();
   const profileIdRaw = String(formData.get("profileId") ?? "").trim();
   const profileId = profileIdRaw || null;
   const inventoryConfirmed =
@@ -269,6 +271,23 @@ export async function confirmHiBeanRoastImport(formData: FormData) {
   const { user, employeeId, organizationId } =
     await requirePermission("roast.manage");
   const db = getDb();
+
+  // La importación debe tener un destino explícito en el inventario OPS.
+  // Se valida organización, unidad y seguimiento para impedir vínculos ajenos.
+  const [selectedRoastedItem] = await db
+    .select({ id: inventoryItems.id })
+    .from(inventoryItems)
+    .where(and(
+      eq(inventoryItems.id, requestedRoastedItemId),
+      eq(inventoryItems.organizationId, organizationId),
+      eq(inventoryItems.canonicalUnit, "g"),
+      eq(inventoryItems.trackingType, "QUANTITY"),
+      eq(inventoryItems.isActive, true),
+    ))
+    .limit(1);
+  if (!selectedRoastedItem) {
+    redirect("/admin/roasting/import/" + encodeURIComponent(draftId) + "?error=roasted-item");
+  }
 
   const [draft] = await db
     .select()
@@ -515,6 +534,7 @@ export async function confirmHiBeanRoastImport(formData: FormData) {
                 hibeanBeanName: beanName,
               }
             : {}),
+          roastedInventoryItemId: selectedRoastedItem.id,
           hibeanGreenInventoryG: String(confirmedInventoryG),
           hibeanInventoryReportedG:
             reportedInventoryG == null
@@ -546,6 +566,7 @@ export async function confirmHiBeanRoastImport(formData: FormData) {
           targetUse: "OMNI",
           hibeanBeanCloudId: linkBean ? beanCloudId : null,
           hibeanBeanName: beanName,
+          roastedInventoryItemId: selectedRoastedItem.id,
           hibeanGreenInventoryG: String(confirmedInventoryG),
           hibeanInventoryReportedG:
             reportedInventoryG == null
@@ -702,7 +723,7 @@ export async function confirmHiBeanRoastImport(formData: FormData) {
     // el tostado usa la ubicación del insumo (normalmente Barra).
     let roastedInventoryProducedG = 0;
     if (
-      existingLot?.roastedInventoryItemId &&
+      selectedRoastedItem.id &&
       settings?.defaultStoreId
     ) {
       const roastedBalances = await tx
@@ -714,7 +735,7 @@ export async function confirmHiBeanRoastImport(formData: FormData) {
             eq(inventoryBalances.storeId, settings.defaultStoreId),
             eq(
               inventoryBalances.inventoryItemId,
-              existingLot.roastedInventoryItemId,
+              selectedRoastedItem.id,
             ),
           ),
         )
@@ -741,7 +762,7 @@ export async function confirmHiBeanRoastImport(formData: FormData) {
           organizationId,
           storeId: settings.defaultStoreId,
           locationId: roastedLocationId,
-          inventoryItemId: existingLot.roastedInventoryItemId,
+          inventoryItemId: selectedRoastedItem.id,
           movementType: "PRODUCTION_OUTPUT",
           quantityDelta: String(roastedWeightG),
           sourceType: "ROAST_BATCH",
@@ -762,7 +783,7 @@ export async function confirmHiBeanRoastImport(formData: FormData) {
             organizationId,
             storeId: settings.defaultStoreId,
             locationId: roastedLocationId,
-            inventoryItemId: existingLot.roastedInventoryItemId,
+            inventoryItemId: selectedRoastedItem.id,
             theoreticalQuantity: String(roastedWeightG),
           })
           .onConflictDoUpdate({
