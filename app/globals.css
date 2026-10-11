@@ -2776,3 +2776,19 @@ details[open]>.ops-chevron,details[open]>summary>.ops-chevron{transform:rotate(1
   .pos-fast-tickets{flex-wrap:wrap}
   .pos-fast-tickets-scroll{order:3;flex-basis:100%}
 }
+
+/* OPS Fast Lane: medidores de barra y mesas, con contrastes accesibles. */
+.command-live-timing{display:flex;flex-wrap:wrap;gap:.35rem .8rem;
+  padding:.52rem .62rem;background:var(--epic-soft,#f1ece2);
+  border:1px solid var(--epic-border,var(--line));border-radius:10px;
+  font-size:.82rem;font-variant-numeric:tabular-nums}
+.command-live-timing span{white-space:nowrap}
+.command-live-timing strong{font-weight:800}
+.command-live-timing-attention{border-inline-start:4px solid #b87916}
+.command-live-timing-late{border-inline-start:4px solid #aa3939}
+.command-card .section-heading h2{font-size:1.08rem;margin:0}
+@media(min-width:1200px){
+  .command-board{grid-template-columns:repeat(auto-fill,minmax(325px,1fr))}
+  .command-card{gap:.5rem;padding:.75rem}
+  .command-status-actions button{padding:.65rem .75rem}
+}

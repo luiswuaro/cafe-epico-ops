@@ -215,10 +215,12 @@ export async function printKitchenSlip(
   return result.printer||"impresora";
 }
 
+import {acknowledgeKitchenPrint} from "./print-timing-actions";
+
 export function KitchenPrintButton({
-  slip,viewUrl,compact=false,
+  slip,viewUrl,compact=false,orderId,
 }:{
-  slip:KitchenSlip;viewUrl:string;compact?:boolean;
+  slip:KitchenSlip;viewUrl:string;compact?:boolean;orderId?:string;
 }){
   const [selection,setSelection]=useState<"latest"|"all">("latest");
   const [status,setStatus]=useState<"idle"|"printing"|"ok"|"error">("idle");
@@ -230,6 +232,12 @@ export function KitchenPrintButton({
     setStatus("printing");setMessage("");
     try{
       const printer=await printKitchenSlip(slip,selection);
+      // Tiempo de salida sólo cuando el puente ESC/POS respondió OK.
+      if(orderId){
+        const roundId=slip.lines.at(-1)?.roundId||"INITIAL";
+        try{await acknowledgeKitchenPrint({orderId,roundId,printer});}
+        catch{setStatus("ok");setMessage("Enviada a "+printer+"; sin registro de hora.");return;}
+      }
       setStatus("ok");setMessage("Enviada a "+printer);
     }catch(e){
       setStatus("error");

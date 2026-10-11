@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { printKitchenSlip } from "./kitchen-print-button";
+import {acknowledgeKitchenPrint} from "./print-timing-actions";
 import { type KitchenSlip } from "@/src/application/pos/kitchen-slip";
 import {autoKitchenModes,type KitchenAutoEvent} from "@/src/domain/pos/kitchen-auto-policy";
 import {
@@ -13,7 +14,7 @@ import {
 export type AutoKitchenEvent = KitchenAutoEvent;
 
 export function AutoKitchenPrint({
-  slip,event,eventId,roundId,
+  slip,event,eventId,roundId,orderId,
 }:{
   slip:KitchenSlip;
   event:AutoKitchenEvent;
@@ -21,6 +22,7 @@ export function AutoKitchenPrint({
   // orden + pago o ID del split para cobro. Nunca un timestamp de página.
   eventId:string;
   roundId?:string;
+  orderId?:string;
 }){
   const handled=useRef<string|null>(null);
   const [message,setMessage]=useState<string|null>(null);
@@ -54,8 +56,17 @@ export function AutoKitchenPrint({
 
     let active=true;
     void printKitchenSlip(slip,event==="saved"?"latest":"all",serviceFilter,roundId)
-      .then(printer=>{
-        if(active){setError(false);setMessage("Comanda enviada automáticamente a "+printer);}
+      .then(async printer=>{
+        let logged=true;
+        if(orderId){
+          try{await acknowledgeKitchenPrint({orderId,roundId:roundId??"INITIAL",printer});}
+          catch{logged=false;}
+        }
+        if(active){
+          setError(!logged);
+          setMessage(logged?"Comanda enviada automáticamente a "+printer:
+            "Comanda enviada a "+printer+", pero no se pudo registrar el acuse horario.");
+        }
       })
       .catch(cause=>{
         if(active){
@@ -66,7 +77,7 @@ export function AutoKitchenPrint({
         }
       });
     return ()=>{active=false;};
-  },[event,eventId,roundId,slip]);
+  },[event,eventId,orderId,roundId,slip]);
 
   return message?<div role={error?"alert":"status"}
     className={"card no-print "+(error?"status-warn":"status-ok")}
