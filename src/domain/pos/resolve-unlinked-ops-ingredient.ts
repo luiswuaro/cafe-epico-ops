@@ -49,6 +49,8 @@ export function resolveUnlinkedOpsIngredient(
  const bar=candidates.filter(c=>c.bar);
  const pool=bar.length?bar:candidates;
  if(pool.length!==1)return null;
- const {bar:_bar,...resolved}=pool[0];
- return resolved;
+ const selected=pool[0];
+ return {inventoryItemId:selected.inventoryItemId,locationId:selected.locationId,
+   itemName:selected.itemName,unit:selected.unit,factor:selected.factor,
+   resolution:"OPS_NAME_EXACT"};
 }
