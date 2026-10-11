@@ -90,7 +90,7 @@ function storedRecipe(value: unknown, byUniqueName?: Map<string,{itemId:string;v
     return [{
       inventoryItemId:typeof component.inventoryItemId==="string"?component.inventoryItemId:null,
       inventoryLocationId:typeof component.inventoryLocationId==="string"?component.inventoryLocationId:null,
-      costOnlyCode:component.costOnlyCode==="WATER"||component.costOnlyCode==="ICE"?component.costOnlyCode:null,
+      costOnlyCode:component.costOnlyCode==="WATER"?"WATER" as const:component.costOnlyCode==="ICE"?"ICE" as const:null,
       variantExternalId:
         typeof component.variantExternalId === "string"
           ? component.variantExternalId
