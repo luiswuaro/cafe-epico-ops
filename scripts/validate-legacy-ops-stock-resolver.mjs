@@ -42,9 +42,9 @@ try{
  assert.match(checkout,/nativeAutoResolved/);
  assert.match(checkout,/for\("update"\)/);
  assert.match(readiness,/resolveUnlinkedOpsIngredient\(component,nativeItems,locations,balances\)/);
- assert.doesNotMatch(checkout,/if\\(stockShortages.length&&!input.allowStockShortage\\)/);
+ assert.doesNotMatch(checkout,/if\(stockShortages.length&&!input.allowStockShortage\)/);
  assert.match(checkout,/POS_LIVE_INVENTORY_SHORTAGE_AUTO_RECORDED/);
  assert.match(checkout,/theoreticalQuantity:"0"/);
- assert.match(checkout,/onConflictDoNothing\\(\\)/);
+ assert.match(checkout,/onConflictDoNothing\(\)/);
  console.log("OPS checkout legacy resolver: PASS (CAPUCCINO 2 shots, ICEE mineral, no guesses, no duplicate, units, COST_ONLY)");
 }finally{fs.rmSync(dir,{recursive:true,force:true});}
