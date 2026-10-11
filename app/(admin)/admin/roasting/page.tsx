@@ -75,12 +75,12 @@ export default async function RoastingPage({
         )
         .slice(0, 5)
     : [];
-  const yesterday = new Intl.DateTimeFormat("sv-SE", {
+  // Fecha inicial: último batch registrado, sin usar Date.now() durante render.
+  const mostRecentRoastDay = data.batches[0]?.roastedAt.toLocaleDateString("sv-SE", {
     timeZone: "America/Mexico_City",
-    year: "numeric", month: "2-digit", day: "2-digit",
-  }).format(new Date(Date.now() - 86_400_000));
+  }) ?? "";
   const dayParam = typeof params.backfillDay === "string" ? params.backfillDay : "";
-  const backfillDay = /^\d{4}-\d{2}-\d{2}$/.test(dayParam) ? dayParam : yesterday;
+  const backfillDay = /^\d{4}-\d{2}-\d{2}$/.test(dayParam) ? dayParam : mostRecentRoastDay;
   const pendingRoastedOutputs = data.batches.filter(
     (batch) =>
       batch.roastedAt.toLocaleDateString("sv-SE", {
