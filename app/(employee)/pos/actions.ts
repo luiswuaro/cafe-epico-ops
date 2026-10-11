@@ -599,7 +599,7 @@ export async function markTakeawayDispatched(formData:FormData){
       sql`${auditEvents.afterData}->>'status' = 'READY'`,
       sql`COALESCE(${auditEvents.afterData}->>'roundId','INITIAL') = ${roundId}`,
     )).limit(1);
-    if(!ready && order.status!=="READY")
+    if(!ready)
       throw new Error("Primero marca la comanda Lista antes de entregarla.");
     const [previous]=await tx.select({id:auditEvents.id}).from(auditEvents).where(and(
       eq(auditEvents.organizationId,employee.organizationId),
