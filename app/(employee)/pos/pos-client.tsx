@@ -454,7 +454,7 @@ export function PosClient({
       <section className="card stack" style={{maxWidth:780,margin:"0 auto",width:"100%"}}>
         <p className="eyebrow">POS · COBRAR</p>
         <h2>Elegir método de pago</h2>
-        <p className="muted">Ticket: <strong>{ticketNamePreview}</strong> · {ticketServiceMode==="DINE_IN"?"Aquí":"Para llevar"}</p>
+        <p className="muted">Ticket: <strong>{staffFreeCheckout?"Consumo personal":ticketNamePreview}</strong> · {ticketServiceMode==="DINE_IN"?"Aquí":"Para llevar"}</p>
         <p className="muted">El pedido sigue en memoria hasta confirmar el cobro. Puedes volver sin perder productos ni notas.</p>
         {checkoutState.error&&<div className="status-bad" role="alert">
           No se cobró. {checkoutState.error}
@@ -492,7 +492,7 @@ export function PosClient({
           <input type="hidden" name="redeemPoints" value={redemption.points.toFixed(2)}/>
           <input type="hidden" name="staffFreeEmployeeId"
             value={staffFreeCheckout?(freeStaffLine?.employeeId??""):""}/>
-          <input type="hidden" name="tableLabel" value={tableLabel}/>
+          <input type="hidden" name="tableLabel" value={staffFreeCheckout?"Consumo personal":tableLabel}/>
           <input type="hidden" name="note" value={orderNote}/>
           {monetaryDue>0?<label>Forma de pago
             <select value={paymentMethod}
@@ -527,7 +527,7 @@ export function PosClient({
             <small className="muted">Registra inventario negativo y auditoría; exige reconteo posterior. No crea existencias ficticias.</small>
           </label>}
           <button className="pos-pay-button" type="submit" disabled={checkoutPending ||
-            missingTable || pointCheckout || (staffSelected&&!staffFreeCheckout) ||
+            (missingTable&&!staffFreeCheckout) || pointCheckout || (staffSelected&&!staffFreeCheckout) ||
             (monetaryDue>0&&paymentMethod==="CASH"&&(!tendered.trim()||Number(tendered)<monetaryDue))}>
             {checkoutPending?"Registrando...":staffFreeCheckout
               ?"Registrar bebida gratis · $0.00":"Confirmar cobro · "+money.format(monetaryDue)}
