@@ -175,6 +175,11 @@ export default async function ReceiptPage({
   });
 
   const total = split ? Number(split.total) : Number(order.order.total);
+  const staffFreeReceipt=!split&&order.order.mode==="LIVE"&&lines.some(line=>{
+    const discount=line.expectedConsumption?.discount;
+    return typeof discount==="object"&&discount!==null&&
+      "code" in discount&&discount.code==="STAFF_INCLUDED_DRINK";
+  });
   const pointPayment=payments.filter(payment=>payment.method==="POINTS")
     .reduce((sum,payment)=>sum+Number(payment.amount),0);
   const moneyPayment=payments.filter(payment=>payment.method!=="POINTS")
@@ -393,7 +398,8 @@ export default async function ReceiptPage({
           )}
           <p className="receipt-document-type">
             {order.order.mode==="SHADOW"?"PRUEBA · PAGO SIMULADO":
-              order.order.status==="CANCELLED"?"TICKET CANCELADO":"TICKET DE VENTA · PAGADO"}
+              order.order.status==="CANCELLED"?"TICKET CANCELADO":
+              staffFreeReceipt?"CONSUMO INTERNO · CORTESÍA SIN COBRO":"TICKET DE VENTA · PAGADO"}
           </p>
           {split && <p><strong>{split.label} · ticket separado</strong></p>}
         </header>
@@ -442,6 +448,9 @@ export default async function ReceiptPage({
               <div className="receipt-line-note">
                 {line.expectedConsumption?.serviceMode==="TAKEAWAY"?"Para llevar":"Para consumir aquí"}
               </div>
+              {staffFreeReceipt&&<div className="receipt-line-note">
+                ↳ Bebida incluida de personal · sin puntos
+              </div>}
               {extraLabels(line.expectedConsumption,{showPrices:true}).map((label,i)=>
                 <div key={i} className="receipt-line-note">↳ {label}</div>)}
               {printSettings.showItemNotes && line.note && (
@@ -451,6 +460,10 @@ export default async function ReceiptPage({
           ))}
         </div>
 
+        {staffFreeReceipt&&<div className="receipt-meta">
+          <span>Precio de lista</span><strong>{money.format(Number(order.order.subtotal))}</strong>
+          <span>Cortesía de personal</span><strong>−{money.format(Number(order.order.subtotal))}</strong>
+        </div>}
         <div className="receipt-total">
           <span>{order.order.status === "CANCELLED" ? "TOTAL ORIGINAL" : "TOTAL"}</span>
           <strong>{money.format(total)}</strong>
@@ -458,7 +471,7 @@ export default async function ReceiptPage({
 
         <div className="receipt-meta">
           <span>{order.order.status === "CANCELLED" ? "Pago original" : "Pago"}</span>
-          <span>{paymentMethod || "—"}</span>
+          <span>{paymentMethod || (staffFreeReceipt?"Sin cobro · cortesía":"—")}</span>
           {pointPayment>0&&<>
             <span>Puntos canjeados (1 punto = $1)</span>
             <strong>−{pointPayment.toFixed(2)} pts</strong>
