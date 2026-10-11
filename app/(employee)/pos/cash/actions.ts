@@ -1,5 +1,6 @@
 "use server";
 
+import {assertNoPreviewMutation} from "@/src/shared/preview-guard";
 import { and, eq, sql } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { z } from "zod";
@@ -17,6 +18,7 @@ function parseMoney(value:FormDataEntryValue|null){
 }
 
 export async function openCashSession(formData: FormData) {
+  assertNoPreviewMutation();
   const {user,employee}=await getCurrentEmployee();
   if(!employee.homeStoreId)throw new Error("Sin sucursal asignada");
   await assertEmployeePermission(employee.id,"pos.cash.manage",employee.homeStoreId);
@@ -46,6 +48,7 @@ export async function openCashSession(formData: FormData) {
 }
 
 export async function recordCashMovement(formData: FormData) {
+  assertNoPreviewMutation();
   const {user,employee}=await getCurrentEmployee();
   if(!employee.homeStoreId)throw new Error("Sin sucursal asignada");
   await assertEmployeePermission(employee.id,"pos.cash.manage",employee.homeStoreId);
@@ -79,6 +82,7 @@ export async function recordCashMovement(formData: FormData) {
 }
 
 export async function closeCashSession(formData: FormData) {
+  assertNoPreviewMutation();
   const {user,employee}=await getCurrentEmployee();
   if(!employee.homeStoreId)throw new Error("Sin sucursal asignada");
   await assertEmployeePermission(employee.id,"pos.cash.manage",employee.homeStoreId);

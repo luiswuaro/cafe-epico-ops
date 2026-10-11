@@ -1,5 +1,6 @@
 "use server";
 
+import {assertNoPreviewMutation} from "@/src/shared/preview-guard";
 import {and,eq,sql} from "drizzle-orm";
 import {revalidatePath} from "next/cache";
 import {z} from "zod";
@@ -14,6 +15,7 @@ import {assertEmployeePermission} from "@/src/infrastructure/auth/permissions";
 export async function acknowledgeKitchenPrint(input:{
   orderId:string;roundId:string;printer:string;
 }){
+  assertNoPreviewMutation();
   const parsed=z.object({
     orderId:z.string().uuid(),
     roundId:z.string().min(1).max(120),

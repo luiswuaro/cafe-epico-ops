@@ -1,4 +1,5 @@
 import { and, eq, sql } from "drizzle-orm";
+import {assertNoPreviewMutation} from "@/src/shared/preview-guard";
 import { getPosCatalog, type PosServiceMode } from "@/src/application/pos/catalog";
 import {priceExtras, readExtraSnapshots, type ExtraRequest} from "@/src/application/pos/extras";
 import {getPosExtraCatalog} from "@/src/application/pos/extra-catalog";
@@ -59,6 +60,7 @@ export async function checkoutLiveOrder(input:{
   note:string|null;
   allowStockShortage?:boolean;
 }) {
+  assertNoPreviewMutation();
   if(!isPosLiveEnabled()) throw new Error("Cobros LIVE deshabilitados por seguridad.");
   if(input.cart.length===0 || input.cart.length>30) throw new Error("Carrito inválido.");
   const db=getDb();

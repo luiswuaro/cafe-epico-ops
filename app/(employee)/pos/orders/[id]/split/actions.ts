@@ -1,5 +1,6 @@
 "use server";
 
+import {assertNoPreviewMutation} from "@/src/shared/preview-guard";
 import { and, eq, inArray, ne, sql } from "drizzle-orm";
 import { checkoutLiveOrder } from "@/src/application/pos/live";
 import { redirect } from "next/navigation";
@@ -29,6 +30,7 @@ const allocationSchema = z.array(
 const paymentSchema = z.enum(["CASH", "CARD", "TRANSFER"]);
 
 async function saveOrderSplitUnsafe(formData: FormData) {
+  assertNoPreviewMutation();
   const { user, employee } = await getCurrentEmployee();
   if (!employee.homeStoreId) throw new Error("Sin sucursal asignada");
 
@@ -216,6 +218,7 @@ export async function saveOrderSplit(formData:FormData){
 }
 
 async function payOrderSplitUnsafe(formData: FormData) {
+  assertNoPreviewMutation();
   const { user, employee } = await getCurrentEmployee();
   if (!employee.homeStoreId) throw new Error("Sin sucursal asignada");
 
@@ -407,6 +410,7 @@ export async function payOrderSplit(formData:FormData){
 }
 
 async function resetUnpaidOrderSplitUnsafe(formData:FormData){
+  assertNoPreviewMutation();
   const {user,employee}=await getCurrentEmployee();
   if(!employee.homeStoreId)throw new Error("Sin sucursal.");
   await assertEmployeePermission(employee.id,"pos.sell",employee.homeStoreId);

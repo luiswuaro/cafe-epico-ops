@@ -1,5 +1,6 @@
 "use server";
 
+import {assertNoPreviewMutation} from "@/src/shared/preview-guard";
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { redirect } from "next/navigation";
@@ -175,6 +176,7 @@ async function createShadowOrder(
   paymentMethod?: "CASH" | "CARD" | "TRANSFER",
   orderMode:"SHADOW"|"LIVE"="SHADOW",
 ) {
+  assertNoPreviewMutation();
   const { user, employee } = await getCurrentEmployee();
   if (!employee.homeStoreId) {
     throw new Error("El empleado no tiene sucursal asignada");
@@ -477,6 +479,7 @@ export async function payLiveCommand(formData:FormData) {
 }
 
 export async function updateCommandStatus(formData: FormData) {
+  assertNoPreviewMutation();
   const { user, employee } = await getCurrentEmployee();
   if (!employee.homeStoreId) throw new Error("Sin sucursal asignada");
 
@@ -533,6 +536,7 @@ export async function updateCommandStatus(formData: FormData) {
 }
 
 export async function payShadowCommand(formData: FormData) {
+  assertNoPreviewMutation();
   const { user, employee } = await getCurrentEmployee();
   if (!employee.homeStoreId) throw new Error("Sin sucursal asignada");
 
@@ -633,6 +637,7 @@ export async function payShadowCommand(formData: FormData) {
 }
 
 export async function createPosCustomer(formData: FormData) {
+  assertNoPreviewMutation();
   const { user, employee } = await getCurrentEmployee();
   if (!employee.homeStoreId) throw new Error("Sin sucursal asignada");
 
@@ -675,6 +680,7 @@ export async function createPosCustomer(formData: FormData) {
 }
 
 async function cancelPosOrderUnsafe(formData: FormData) {
+  assertNoPreviewMutation();
   const { user, employee } = await getCurrentEmployee();
   if (!employee.homeStoreId) {
     throw new Error("El empleado no tiene sucursal asignada");
@@ -852,6 +858,7 @@ export async function cancelPosOrder(formData:FormData){
 }
 
 export async function refreshShadowMirror(formData: FormData) {
+  assertNoPreviewMutation();
   const { employee } = await getCurrentEmployee();
   if (!employee.homeStoreId) {
     throw new Error("El empleado no tiene sucursal asignada");

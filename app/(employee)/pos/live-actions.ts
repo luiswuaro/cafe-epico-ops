@@ -1,5 +1,6 @@
 "use server";
 
+import {assertNoPreviewMutation} from "@/src/shared/preview-guard";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { checkoutLiveOrder } from "@/src/application/pos/live";
@@ -17,6 +18,7 @@ const cartSchema = z.array(z.object({
 })).min(1).max(30);
 
 export async function submitLiveSale(_previous:{error:string|null},formData:FormData):Promise<{error:string|null}> {
+  assertNoPreviewMutation();
   const {user,employee}=await getCurrentEmployee();
   if(!employee.homeStoreId) throw new Error("No hay sucursal asignada.");
   await assertEmployeePermission(employee.id,"pos.sell",employee.homeStoreId);

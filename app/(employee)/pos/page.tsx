@@ -112,6 +112,9 @@ export default async function PosPage({
          }}
        />}
 
+      {process.env.VERCEL_ENV==="preview"&&<div className="card status-warn" role="status">
+        PREVIEW DE OPS · SOLO LECTURA. Las ventas, comandas, caja y ajustes de inventario están desactivados para proteger la base de producción.
+      </div>}
       <section className="hero pos-hero">
         <div>
           <p className="eyebrow">{liveEnabled ? "POS · LIVE" : "POS V0.1 · MODO ESPEJO"}</p>
