@@ -9,7 +9,7 @@ import {
   inventoryBalances, inventoryItems, inventoryLocations,
   inventoryMovements,
 } from "@/src/infrastructure/db/schema";
-import { createOpsInventoryItem, registerOpsInventoryMovement } from "./actions";
+import { createOpsInventoryItem, registerOpsInventoryMovement,updateOpsInventoryItem } from "./actions";
 
 export const dynamic = "force-dynamic";
 const qty = new Intl.NumberFormat("es-MX", {maximumFractionDigits:3});
@@ -80,10 +80,11 @@ export default async function OpsInventoryPage({
       </div>
       <div className="pos-result-actions">
         <Link className="button" href="/pos/inventory-audit">Auditar recetas</Link>
+        <Link className="button" href="/admin/pos/catalog">Editar recetas de bebidas →</Link>
       </div>
     </section>
-    {(params.posted||params.created)&&<section className="card status-ok" role="status">
-      {params.created?"Insumo creado y saldo inicial registrado.":params.posted==="nochange"?"Conteo sin diferencias; no se creó movimiento.":"Movimiento de inventario registrado y auditado."}
+    {(params.posted||params.created||params.updated)&&<section className="card status-ok" role="status">
+      {params.updated?"Ficha del insumo actualizada sin alterar su existencia.":params.created?"Insumo creado y saldo inicial registrado.":params.posted==="nochange"?"Conteo sin diferencias; no se creó movimiento.":"Movimiento de inventario registrado y auditado."}
     </section>}
     <section className="card stack">
       <h2>Existencias OPS · {available.length} renglones</h2>
@@ -115,6 +116,28 @@ export default async function OpsInventoryPage({
           </summary>
           <div className="stack" style={{marginTop:12}}>
             <p className="muted">Existencia actual: {qty.format(current)} {item.unit}. Cada movimiento conserva cantidad anterior, diferencia, responsable y motivo.</p>
+            {canCreate&&<details className="card">
+              <summary>Editar ficha del insumo (no altera existencias)</summary>
+              <form action={updateOpsInventoryItem} className="stack">
+                <input type="hidden" name="itemId" value={item.id}/>
+                <label>Nombre
+                  <input name="name" defaultValue={item.name} required minLength={2}/>
+                </label>
+                <label>Categoría
+                  <input name="category" defaultValue={item.category} required/>
+                </label>
+                <label>SKU
+                  <input name="sku" defaultValue={item.sku??""}/>
+                </label>
+                <label>Mínimo en {item.unit}
+                  <input name="minimumStock" type="number" step="0.001" min="0"
+                    defaultValue={item.minimum??""}/>
+                </label>
+                <p className="muted">La unidad {item.unit} es fija porque ya existen movimientos históricos.
+                  Puedes editar receta y cantidades de consumo desde Catálogo y recetas.</p>
+                <button type="submit">Guardar ficha</button>
+              </form>
+            </details>}
             {canAdjust
               ? <form action={registerOpsInventoryMovement} className="stack">
                 <input type="hidden" name="operationId" value={randomUUID()}/>
@@ -155,6 +178,12 @@ export default async function OpsInventoryPage({
         <label>Unidad de control<select name="unit" defaultValue="g">
           <option value="g">Gramos</option><option value="ml">Mililitros</option><option value="pz">Piezas</option>
         </select></label>
+        <label>Control de inventario
+          <select name="trackingType" defaultValue="QUANTITY">
+            <option value="QUANTITY">Controlar existencias</option>
+            <option value="COST_ONLY">Solo costo (agua/hielo), sin descuento</option>
+          </select>
+        </label>
         <label>Saldo inicial físico<input name="initialQuantity" type="number" min="0" step="0.001" required defaultValue="0"/></label>
         <label>Ubicación<select name="locationId" required>
           {locations.map(location=><option key={location.id} value={location.id}>{location.name}</option>)}
