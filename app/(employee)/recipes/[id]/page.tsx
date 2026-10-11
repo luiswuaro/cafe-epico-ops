@@ -38,9 +38,28 @@ export default async function RecipeDetail({params,searchParams}:{
       Esta modalidad aún no tiene una receta OPS configurada. No uses un gramaje histórico.
       Solicita que el administrador la configure en Catálogo POS.
     </section>:<>
+      {current.coffeeExtraction&&<section className="card recipe-ops-extraction" aria-label="Extracción de café requerida">
+        <p className="eyebrow">PASO 1 · EXTRACCIÓN REQUERIDA</p>
+        <div className="recipe-ops-extraction-heading">
+          <div><h2>{current.coffeeExtraction.label}</h2>
+            <p>Prepara <strong>1 extracción doble</strong> antes de montar la bebida.</p>
+          </div>
+          <span className="recipe-ops-extraction-tag">BARRA</span>
+        </div>
+        <div className="recipe-ops-extraction-metrics">
+          <div><small>Canasta · dosis</small><strong>{current.coffeeExtraction.doseG} g</strong></div>
+          <div><small>Rendimiento en taza</small><strong>{number.format(current.coffeeExtraction.yieldMinG)}–{number.format(current.coffeeExtraction.yieldMaxG)} g</strong></div>
+          <div><small>Tiempo objetivo</small><strong>{current.coffeeExtraction.secondsMin}–{current.coffeeExtraction.secondsMax} s</strong></div>
+        </div>
+        <p className="recipe-ops-extraction-stock">
+          <strong>Control de inventario:</strong> OPS descuenta {number.format(current.coffeeExtraction.stockQuantityG)} g
+          de {current.coffeeExtraction.stockIngredientName} por esta bebida. Esta cantidad es
+          consumo contable y <strong>no sustituye la dosis de la canasta</strong>.
+        </p>
+      </section>}
       <section className="card recipe-ops-list">
         <p className="eyebrow">PREPARACIÓN · MEDIDAS EXACTAS</p>
-        <h2>Ingredientes</h2>
+        <h2>{current.coffeeExtraction?"Resto de ingredientes":"Ingredientes"}</h2>
         {current.ingredients.length?
           current.ingredients.map((component,i)=><div className="recipe-ops-line" key={i}>
             <span><strong>{component.name}</strong>

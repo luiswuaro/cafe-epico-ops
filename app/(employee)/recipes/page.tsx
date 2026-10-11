@@ -151,6 +151,8 @@ export default async function RecipesPage({
                   <article className="card recipe-card" key={recipe.id}>
                     <h3>{recipe.name}</h3>
                     <p className="muted">
+                      {recipe.serviceRecipes.DINE_IN.coffeeExtraction?.label?
+                        recipe.serviceRecipes.DINE_IN.coffeeExtraction.label+" · ":""}
                       {recipe.serviceRecipes.DINE_IN.ingredients.length} ingrediente(s) ·
                       {recipe.serviceRecipes.TAKEAWAY.configured?" Aquí / Llevar":" Pendiente de configuración"}
                     </p>

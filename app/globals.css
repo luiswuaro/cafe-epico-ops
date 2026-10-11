@@ -2914,3 +2914,23 @@ main.pos-shell .pos-table-shortcuts button[aria-pressed="true"] {
  font-weight:800;color:var(--epic-fg);background:var(--epic-soft);
  border:1px solid var(--epic-border);text-decoration:none}
 .pos-inline-recipe:hover,.pos-inline-recipe:focus-visible{outline:2px solid var(--epic-accent)}
+
+/* Receta operativa: extracción explícita sin cambiar el escandallo nativo OPS. */
+.recipe-ops-extraction{margin-bottom:.78rem;padding:1rem;
+  background:var(--epic-card);color:var(--epic-fg);border:2px solid var(--epic-accent)}
+.recipe-ops-extraction-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:.9rem}
+.recipe-ops-extraction-heading h2{font-size:clamp(1.5rem,2.3vw,2.2rem);margin:.1rem 0 .35rem}
+.recipe-ops-extraction-heading p{margin:.3rem 0;color:var(--epic-secondary)}
+.recipe-ops-extraction-tag{border-radius:7px;padding:.27rem .6rem;white-space:nowrap;
+  background:var(--epic-accent);color:var(--epic-accent-contrast);font-size:.7rem;font-weight:850}
+.recipe-ops-extraction-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.5rem;margin:.9rem 0}
+.recipe-ops-extraction-metrics>div{display:grid;gap:.3rem;padding:.7rem;border-radius:9px;
+  background:var(--epic-soft);color:var(--epic-fg)}
+.recipe-ops-extraction-metrics small{color:var(--epic-secondary);font-size:.76rem}
+.recipe-ops-extraction-metrics strong{font-size:1.25rem;font-variant-numeric:tabular-nums}
+.recipe-ops-extraction-stock{font-size:.78rem;line-height:1.5;
+  color:var(--epic-secondary);border-top:1px solid var(--epic-border);padding-top:.75rem;margin-bottom:0}
+.recipe-ops-extraction-stock strong{color:var(--epic-fg)}
+@media(max-width:520px){.recipe-ops-extraction-metrics{grid-template-columns:1fr}
+ .recipe-ops-extraction-metrics>div{display:flex;justify-content:space-between;align-items:center;gap:.5rem}
+ .recipe-ops-extraction-metrics strong{font-size:1.05rem}}

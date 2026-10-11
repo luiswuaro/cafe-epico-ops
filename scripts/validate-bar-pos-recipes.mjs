@@ -36,16 +36,55 @@ try{
     },
   };
   const result=projectBarRecipe(item);
+  assert.equal(result.serviceRecipes.DINE_IN.coffeeExtraction?.label,"Espresso doble");
+  assert.equal(result.serviceRecipes.TAKEAWAY.coffeeExtraction?.stockQuantityG,20);
+  assert.ok(!result.serviceRecipes.DINE_IN.ingredients.some(c=>c.name==="Café espresso en grano"),
+    "El café debe leerse como extracción y no como gramaje de canasta");
   assert.equal(result.serviceRecipes.DINE_IN.ingredients.find(c=>c.name==="LECHE CONDENSADA")?.quantity,40);
   assert.equal(result.serviceRecipes.TAKEAWAY.ingredients.find(c=>c.name==="LECHE CONDENSADA")?.quantity,40);
   assert.equal(result.serviceRecipes.DINE_IN.service.some(c=>c.name.includes("POPOTE")),true);
   assert.equal(result.serviceRecipes.TAKEAWAY.service.some(c=>c.name.includes("VASO")),true);
   assert.equal(result.serviceRecipes.DINE_IN.costOnly.find(c=>c.name==="AGUA")?.quantity,80);
+  const sample=(name,caffeine=20)=>{
+    const recipe={...item,name,serviceRecipes:{
+      DINE_IN:{configured:true,components:[component("Café espresso en grano",caffeine)]},
+      TAKEAWAY:{configured:true,components:[component("Café espresso en grano",caffeine)]},
+    }};
+    return projectBarRecipe(recipe);
+  };
+  for(const name of ["FLAT WHITE","Flat white"]){
+    const r=sample(name);
+    assert.equal(r.serviceRecipes.DINE_IN.coffeeExtraction?.type,"RISTRETTO");
+    assert.equal(r.serviceRecipes.DINE_IN.coffeeExtraction?.yieldMinG,18);
+    assert.equal(r.serviceRecipes.DINE_IN.coffeeExtraction?.yieldMaxG,27);
+  }
+  for(const name of ["AMERICANO","AMERICANO FRIO","Americano caliente"]){
+    const r=sample(name);
+    assert.equal(r.serviceRecipes.TAKEAWAY.coffeeExtraction?.type,"LUNGO");
+    assert.equal(r.serviceRecipes.TAKEAWAY.coffeeExtraction?.secondsMax,40);
+  }
+  for(const name of ["LATTE","LATTE ESPAÑOL FRÍO","MOKA","DIRTY CHAI CALIENTE",
+    "ESPRESSO TONICO NARANJA","CARAJILLO","FRAPPE CAPUCCINO","ESPRESSO"]){
+    const r=sample(name);
+    assert.equal(r.serviceRecipes.DINE_IN.coffeeExtraction?.type,"ESPRESSO");
+    assert.equal(r.serviceRecipes.DINE_IN.coffeeExtraction?.doseG,18);
+  }
+  assert.equal(sample("LATTE",19).serviceRecipes.DINE_IN.coffeeExtraction,null,
+    "La transformación solo aplica a 20g configurados, no a otra cantidad.");
+  assert.ok(sample("LATTE",19).serviceRecipes.DINE_IN.ingredients.some(c=>c.quantity===19),
+    "Otros gramajes deben quedar como ingredientes sin alterarse.");
+  const noCoffee=projectBarRecipe({...item,serviceRecipes:{
+    DINE_IN:{configured:true,components:[component("MATCHA",5)]},
+    TAKEAWAY:{configured:true,components:[component("MATCHA",5)]},
+  }});
+  assert.equal(noCoffee.serviceRecipes.DINE_IN.coffeeExtraction,null);
   const page=fs.readFileSync("app/(employee)/recipes/page.tsx","utf8");
   const details=fs.readFileSync("app/(employee)/recipes/[id]/page.tsx","utf8");
   const book=fs.readFileSync("src/application/recipes/pos-bar-book.ts","utf8");
   assert.ok(page.includes("getEmployeePosRecipeBook"));
   assert.ok(details.includes("getEmployeePosRecipe"));
+  assert.ok(details.includes("current.coffeeExtraction.label"));
+  assert.ok(details.includes("no sustituye la dosis de la canasta"));
   assert.ok(book.includes("getPosCatalog(organizationId)"));
   assert.ok(!page.includes('getEmployeeRecipeBook'));
   const auditText=fs.readFileSync("src/domain/recipes/consistency-audit.ts","utf8")
@@ -64,5 +103,5 @@ try{
   assert.equal(audited.differences[0].historical,45);
   assert.equal(audited.differences[0].live,40);
   assert.equal(audited.differences[0].unit,"g");
-  console.log("Bar recipe: POS single source, serve modes, historical 45 g vs POS 40 g audited PASS");
+  console.log("Bar recipe: 22 coffee drinks use extraction types without altering 20g stock; 40g condensada PASS");
 }finally{fs.rmSync(dir,{recursive:true,force:true});}
