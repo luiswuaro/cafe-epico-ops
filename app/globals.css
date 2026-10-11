@@ -2792,3 +2792,16 @@ details[open]>.ops-chevron,details[open]>summary>.ops-chevron{transform:rotate(1
   .command-card{gap:.5rem;padding:.75rem}
   .command-status-actions button{padding:.65rem .75rem}
 }
+
+/* OPS service time analytics — wide, readable, no invented metrics. */
+.ops-performance-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.7rem;margin-bottom:.7rem}
+.ops-performance-kpis .metric{font-size:clamp(1.35rem,2.4vw,2.2rem);display:block}
+.ops-performance-method{font-size:.82rem;line-height:1.55}
+.ops-performance-scroll{max-width:100%;overflow-x:auto;border:1px solid var(--epic-border,var(--line));border-radius:14px;background:var(--epic-card,var(--surface))}
+.ops-performance-table{width:100%;border-collapse:collapse;font-size:.83rem;text-align:left}
+.ops-performance-table th,.ops-performance-table td{padding:.7rem;border-bottom:1px solid var(--epic-border,var(--line));white-space:nowrap}
+.ops-performance-table td small{display:block;color:var(--epic-secondary,var(--muted));font-size:.7rem;margin-top:.2rem}
+.ops-performance-table thead{background:var(--epic-soft,#f3ede3)}
+.ops-performance-table tr:hover{background:var(--epic-soft,#f3ede3)}
+.ops-performance-table a{font-weight:800;text-decoration:underline}
+@media(max-width:800px){.ops-performance-kpis{grid-template-columns:1fr}}
