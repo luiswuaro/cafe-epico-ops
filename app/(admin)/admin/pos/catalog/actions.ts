@@ -20,6 +20,7 @@ const priceSchema = z.number().finite().positive().max(100000).refine(
 );
 
 export async function updatePosCatalogPrice(formData: FormData) {
+  if(process.env.VERCEL_ENV==="preview")throw new Error("Preview de catálogo: solo lectura para proteger el POS productivo.");
   const { user, employee } = await getCurrentEmployee();
   await assertEmployeePermission(
     employee.id, "pos.catalog.manage", employee.homeStoreId ?? undefined,
@@ -132,6 +133,7 @@ async function validateNativeRecipes(
 }
 
 export async function togglePosCatalogItem(formData: FormData) {
+  if(process.env.VERCEL_ENV==="preview")throw new Error("Preview de catálogo: solo lectura para proteger el POS productivo.");
   const { user, employee } = await getCurrentEmployee();
   await assertEmployeePermission(
     employee.id,
