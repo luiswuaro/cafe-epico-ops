@@ -1,7 +1,7 @@
 "use client";
 import {useEffect,useRef,useState} from "react";
 import {getPrintStationJobs,claimPrintStationJob,finishPrintStationJob,
-  type HubJob} from "./hub-actions";
+} from "./hub-actions";
 import {printKitchenSlip} from "../orders/kitchen-print-button";
 import {acknowledgeKitchenPrint} from "../orders/print-timing-actions";
 import {printReceiptWithBridge,type DirectReceiptTemplate} from "../receipt/[id]/direct-print-button";
@@ -43,7 +43,7 @@ export function PrintStation({template,preview}:{
  }
  useEffect(()=>{
   if(!state?.enabled||preview)return;
-  let alive=true;let timer:number|undefined;
+  let alive=true;
   const tick=async()=>{
     if(!alive||working.current)return;
     working.current=true;
@@ -81,8 +81,8 @@ export function PrintStation({template,preview}:{
     }finally{working.current=false;}
   };
   void tick();
-  timer=window.setInterval(()=>void tick(),4000);
-  return ()=>{alive=false;if(timer)window.clearInterval(timer)};
+  const timer=window.setInterval(()=>void tick(),4000);
+  return ()=>{alive=false;window.clearInterval(timer)};
  },[state?.enabled,state?.since,state?.stationId,preview,template]);
  const enabled=Boolean(state?.enabled)&&!preview;
  return <section className="card stack pos-print-station">
