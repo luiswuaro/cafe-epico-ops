@@ -17,13 +17,15 @@ function median(values:number[]){
   return v.length%2?v[m]:Math.round((v[m-1]+v[m])/2);
 }
 const formatted=(seconds:number|null)=>seconds===null?"Sin muestras":durationText(seconds);
+function reportClock(){return new Date();}
 
 export default async function PosPerformance(){
   const {employee}=await getCurrentEmployee();
   if(!employee.homeStoreId)throw new Error("Sin sucursal asignada.");
   await assertEmployeePermission(employee.id,"pos.sell",employee.homeStoreId);
   const db=getDb();
-  const cutoff=new Date(Date.now()-7*86400000);
+  const now=reportClock();
+  const cutoff=new Date(now.getTime()-7*86400000);
   const orders=await db.select({
     id:posOrders.id,folio:posOrders.folio,mode:posOrders.mode,
     serviceMode:posOrders.serviceMode,tableLabel:posOrders.tableLabel,
@@ -50,7 +52,6 @@ export default async function PosPerformance(){
         inArray(auditEvents.action,["POS_COMMAND_PRINT_ACKNOWLEDGED","POS_COMMAND_STATUS_CHANGED"]),
       )),
   ]):[[],[]];
-  const now=new Date();
   const details=orders.map(order=>{
     const orderLines=lines.filter(line=>line.orderId===order.id)
       .sort((a,b)=>a.createdAt.getTime()-b.createdAt.getTime());
