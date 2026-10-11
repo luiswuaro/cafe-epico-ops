@@ -1,5 +1,6 @@
 import { and, eq, sql } from "drizzle-orm";
 import {assertNoPreviewMutation} from "@/src/shared/preview-guard";
+import {calculatePaperBagPlan,incrementalPaperBags,type PackagingLine} from "@/src/domain/pos/paper-bag-packaging";
 import { getPosCatalog, type PosServiceMode } from "@/src/application/pos/catalog";
 import {priceExtras, readExtraSnapshots, type ExtraRequest} from "@/src/application/pos/extras";
 import {getPosExtraCatalog} from "@/src/application/pos/extra-catalog";
@@ -441,6 +442,48 @@ export async function checkoutLiveOrder(input:{
       }
     }
 
+    // Empaque a nivel de ticket: las bolsas de hojaldra se comparten entre piezas.
+    // En cuentas divididas descontar sólo bolsas adicionales respecto a cuentas ya pagadas.
+    const packagingNow:PackagingLine[]=lines.map(line=>({
+      name:line.item.name,category:line.item.category,
+      serviceMode:line.lineMode,quantity:line.quantity,
+    }));
+    let previousPackaging:PackagingLine[]=[];
+    if(split&&pending){
+      const alreadyPaid=await tx.select({
+        name:posOrderLines.nameSnapshot,category:posOrderLines.categorySnapshot,
+        qty:posOrderSplitLines.quantity,expected:posOrderLines.expectedConsumption,
+      }).from(posOrderSplitLines)
+        .innerJoin(posOrderSplits,eq(posOrderSplits.id,posOrderSplitLines.splitId))
+        .innerJoin(posOrderLines,eq(posOrderLines.id,posOrderSplitLines.orderLineId))
+        .where(and(eq(posOrderSplits.orderId,pending.id),eq(posOrderSplits.status,"PAID")));
+      previousPackaging=alreadyPaid.map(row=>({
+        name:row.name,category:row.category,quantity:Number(row.qty),
+        serviceMode:row.expected?.serviceMode==="TAKEAWAY"?"TAKEAWAY":"DINE_IN",
+      }));
+    }
+    const paperBags=split
+      ?incrementalPaperBags(previousPackaging,packagingNow)
+      :calculatePaperBagPlan(packagingNow).bags;
+    let packagingWarning:string|null=null;
+    if(paperBags>0){
+      const bagCandidates=nativeItems.filter(item=>
+        item.name.normalize("NFD").replace(/[\\u0300-\\u036f]/g,"")
+          .toUpperCase().trim()==="BOLSA DE PAPEL"&&
+        item.trackingType==="QUANTITY"&&item.unit==="pz");
+      const barLocations=locations.filter(loc=>loc.name.normalize("NFD")
+        .replace(/[\\u0300-\\u036f]/g,"").toUpperCase().trim()==="BARRA");
+      if(bagCandidates.length===1&&barLocations.length===1){
+        const bag=bagCandidates[0],loc=barLocations[0],key=mapKey(loc.id,bag.id);
+        const existing=consume.get(key);
+        if(existing){
+          existing.amount+=paperBags;
+          existing.names.add("EMPAQUE DE ALIMENTOS");
+        }else consume.set(key,{locationId:loc.id,itemId:bag.id,
+          itemName:bag.name,amount:paperBags,unit:"pz",names:new Set(["EMPAQUE DE ALIMENTOS"])});
+      }else packagingWarning="Configura un único insumo activo BOLSA DE PAPEL (pz) en Barra. El empaque físico no se descontó.";
+    }
+
     const byStock=new Map(stocks.map(stock=>[mapKey(stock.locationId,stock.inventoryItemId),stock]));
     const stockShortages:Array<{ingredient:string;available:number;required:number;deficit:number;unit:string;products:string[]}>=[];
     for(const [key,requested] of consume){
@@ -599,6 +642,17 @@ export async function checkoutLiveOrder(input:{
         });
       }
     }
+    if(paperBags>0){
+      await tx.insert(auditEvents).values({
+        organizationId:input.organizationId,storeId:input.storeId,
+        actorUserId:input.actorUserId,actorEmployeeId:input.employeeId,
+        action:packagingWarning?"POS_PAPER_BAG_PENDING_SETUP":"POS_PAPER_BAG_CONSUMED",
+        entityType:"pos_order",entityId:order.id,
+        afterData:{folio:order.folio,bags:paperBags,
+          policy:"HOJALDRA_3_CROISSANT_JAMON_1",
+          splitId:split?.id??null,warning:packagingWarning},
+      });
+    }
     if(stockShortages.length){
       await tx.insert(auditEvents).values({
         organizationId:input.organizationId,storeId:input.storeId,
@@ -625,7 +679,8 @@ export async function checkoutLiveOrder(input:{
         splitId:split?.id??null,finalPayment:!split||finalSplitPayment,consumptionCount:consume.size,costOnlyComponents,
         nativeAutoResolved,
         customerId:input.customerId,inventoryEffectApplied:true,loyaltyEffectApplied:Boolean(input.customerId),
-        automaticStockShortage:stockShortages.length>0},
+        automaticStockShortage:stockShortages.length>0,paperBags,
+        paperBagSetupWarning:packagingWarning},
     });
     return {id:order.id,alreadyRecorded:false};
   });

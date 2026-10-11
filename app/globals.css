@@ -2942,3 +2942,9 @@ main.pos-shell .pos-table-shortcuts button[aria-pressed="true"] {
  main:has(.pos-admin-list) .pos-admin-item{min-width:0}
 }
 .pos-admin-item{scroll-margin-top:5.25rem}
+
+.packaging-simulator{display:grid;gap:.6rem;padding:.9rem;border-radius:12px;
+ background:var(--epic-soft);color:var(--epic-fg)}
+.packaging-simulator-result{font-size:clamp(1.4rem,2.5vw,2rem);
+ border-top:1px solid var(--epic-border);padding-top:.45rem}
+@media(min-width:1024px){main:has(.packaging-simulator){width:100%;max-width:1280px}}

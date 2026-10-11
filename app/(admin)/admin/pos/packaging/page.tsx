@@ -2,7 +2,7 @@ import Link from "next/link";
 import {and,eq} from "drizzle-orm";
 import {requirePermission} from "@/src/infrastructure/auth/permissions";
 import {getDb} from "@/src/infrastructure/db/client";
-import {inventoryItems,inventoryBalances} from "@/src/infrastructure/db/schema";
+import {inventoryItems} from "@/src/infrastructure/db/schema";
 import {calculatePaperBagPlan} from "@/src/domain/pos/paper-bag-packaging";
 import {PackagingSimulator} from "./simulator";
 export const dynamic="force-dynamic";
