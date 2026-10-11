@@ -2823,3 +2823,43 @@ details[open]>.ops-chevron,details[open]>summary>.ops-chevron{transform:rotate(1
 .pos-optional-customer summary strong{font-weight:750;color:var(--epic-secondary,var(--muted))}
 .pos-optional-customer[open] summary{margin-bottom:.7rem}
 .pos-optional-customer .pos-customer-box{box-shadow:none;border:0;padding:.35rem}
+
+/* Fast Lane theme parity: controls, text and surfaces share appearance tokens. */
+main.pos-shell .pos-fast-tickets,
+main.pos-shell .pos-optional-customer,
+main.pos-shell .ops-performance-scroll {
+  background:var(--epic-card);color:var(--epic-fg);border-color:var(--epic-border);
+}
+main.pos-shell .pos-fast-ticket,
+main.pos-shell .pos-fast-all {
+  color:var(--epic-fg);
+}
+main.pos-shell .pos-fast-ticket {
+  background:var(--epic-field);border-color:var(--epic-border);
+}
+main.pos-shell .pos-secondary-links summary,
+main.pos-shell .pos-optional-customer summary strong {
+  color:var(--epic-secondary);
+}
+main.pos-shell .pos-optional-customer summary,
+main.pos-shell .pos-cart :is(h2,h3,.pos-total,.pos-total strong,summary),
+main.pos-shell .command-live-timing,
+main.pos-shell .ops-performance-table {
+  color:var(--epic-fg);
+}
+main.pos-shell .command-live-timing,
+main.pos-shell .ops-performance-table thead {
+  background:var(--epic-soft);
+}
+main.pos-shell .ops-performance-table {
+  background:var(--epic-card);
+}
+main.pos-shell .pos-table-shortcuts button:not(.active) {
+  color:var(--epic-fg);background:var(--epic-field);border-color:var(--epic-border);
+}
+main.pos-shell .pos-table-shortcuts button.active,
+main.pos-shell .pos-table-shortcuts button[aria-pressed="true"] {
+  color:var(--epic-accent-contrast);background:var(--epic-accent);border-color:var(--epic-accent);
+}
+/* Both manual themes and system appearance take their palette from these
+   semantic variables, not from fixed light-mode colors. */
