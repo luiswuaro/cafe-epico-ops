@@ -86,7 +86,9 @@ function storedRecipe(value: unknown, byUniqueName?: Map<string,{itemId:string;v
         : "u.";
     if (!name || !Number.isFinite(quantity) || quantity <= 0) return [];
 
-    const matched=byUniqueName?.get(normalize(name));
+    // No rehidratar IDs Loyverse en componentes con identidad OPS ni costo puro.
+    const matched=(component.inventoryItemId || component.costOnlyCode)
+      ?undefined:byUniqueName?.get(normalize(name));
     return [{
       inventoryItemId:typeof component.inventoryItemId==="string"?component.inventoryItemId:null,
       inventoryLocationId:typeof component.inventoryLocationId==="string"?component.inventoryLocationId:null,
