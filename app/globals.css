@@ -2863,3 +2863,21 @@ main.pos-shell .pos-table-shortcuts button[aria-pressed="true"] {
 }
 /* Both manual themes and system appearance take their palette from these
    semantic variables, not from fixed light-mode colors. */
+
+/* Barra: recetario vivo de OPS (la misma receta que descuenta inventario). */
+.recipe-ops-shell .hero{padding-bottom:.6rem}
+.recipe-ops-modes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.45rem;margin-bottom:.8rem}
+.recipe-ops-modes a{padding:.78rem;border:1px solid var(--epic-border);border-radius:11px;
+  text-align:center;font-weight:800;background:var(--epic-card);color:var(--epic-fg)}
+.recipe-ops-modes a.active{background:var(--epic-accent);color:var(--epic-accent-contrast);border-color:var(--epic-accent)}
+.recipe-ops-list{margin-bottom:.75rem}
+.recipe-ops-list h2{font-size:1.18rem;margin:.2rem 0}
+.recipe-ops-line{display:flex;align-items:center;justify-content:space-between;gap:1rem;
+  padding:.7rem 0;border-bottom:1px solid var(--epic-border);color:var(--epic-fg)}
+.recipe-ops-line:last-child{border-bottom:0}
+.recipe-ops-line span{display:grid;gap:.15rem}
+.recipe-ops-amount{font-size:1.3rem;font-variant-numeric:tabular-nums;white-space:nowrap}
+.recipe-ops-calculations summary{color:var(--epic-secondary);cursor:pointer;font-weight:750}
+.recipe-ops-calculations p{margin:.8rem 0}
+.recipe-ops-source{font-size:.83rem;line-height:1.55;margin:1rem 0}
+@media(max-width:600px){.recipe-ops-amount{font-size:1.08rem}}
