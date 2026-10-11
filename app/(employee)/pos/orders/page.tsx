@@ -185,7 +185,7 @@ export default async function PosOrdersPage({
                   preparingAt={order.preparingAt?.toISOString()??null}
                   readyAt={order.readyAt?.toISOString()??null}
                   dispatchedAt={order.dispatchedAt?.toISOString()??null}
-                  serviceMode={order.serviceMode} status={order.status}
+                  serviceMode={order.serviceMode} hasTakeaway={order.hasTakeaway} status={order.status}
                 />
                 <div className="command-lines">
                   {order.lines.map((line,index) => (
@@ -250,7 +250,7 @@ export default async function PosOrdersPage({
                   Puntos acreditados por cuenta pagada.
                 </p>}
 
-                {(!partiallyPaid && (order.status!=="PAID"||order.mode==="LIVE"&&order.serviceMode==="TAKEAWAY")) && (
+                {(!partiallyPaid && (order.status!=="PAID"||order.mode==="LIVE"&&order.hasTakeaway)) && (
                   <div className="command-status-actions">
                     {(order.status==="PAID"?!order.preparingAt:order.status !== "PREPARING") && (
                       <form action={updateCommandStatus}>
@@ -282,7 +282,7 @@ export default async function PosOrdersPage({
                 )}
 
                 {order.mode==="LIVE"&&order.status==="PAID"&&order.readyAt&&
-                  order.serviceMode==="TAKEAWAY"&&!order.dispatchedAt&&
+                  order.hasTakeaway&&!order.dispatchedAt&&
                   <form action={markTakeawayDispatched} className="command-takeaway-handoff">
                     <input type="hidden" name="orderId" value={order.id}/>
                     <button type="submit">Entregado al cliente · cerrar despacho</button>

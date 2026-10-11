@@ -66,18 +66,19 @@ export default async function PosPerformance(){
     // Apertura de ticket -> cobro. No mide entrada/salida física del cliente.
     const tableSeconds=order.serviceMode==="DINE_IN"
       ?durationSeconds(order.createdAt,order.paidAt??now):null;
-    const receivedToDispatch=order.serviceMode==="TAKEAWAY"&&timing.dispatchedAt
+    const receivedToDispatch=orderLines.some(line=>line.expectedConsumption?.serviceMode==="TAKEAWAY")&&timing.dispatchedAt
       ?durationSeconds(order.createdAt,timing.dispatchedAt):null;
-    const readyToDispatch=order.serviceMode==="TAKEAWAY"&&timing.readyAt&&timing.dispatchedAt
+    const readyToDispatch=orderLines.some(line=>line.expectedConsumption?.serviceMode==="TAKEAWAY")&&timing.readyAt&&timing.dispatchedAt
       ?durationSeconds(timing.readyAt,timing.dispatchedAt):null;
-    return {...order,...timing,printToReady,prep,tableSeconds,receivedToDispatch,readyToDispatch};
+    const hasTakeaway=orderLines.some(line=>line.expectedConsumption?.serviceMode==="TAKEAWAY");
+    return {...order,...timing,hasTakeaway,printToReady,prep,tableSeconds,receivedToDispatch,readyToDispatch};
   });
   const valid=(values:(number|null)[])=>values.filter((n):n is number=>n!==null);
   const barValues=valid(details.map(d=>d.printToReady));
   const prepValues=valid(details.map(d=>d.prep));
   const paidTableValues=valid(details.filter(d=>d.paidAt!==null).map(d=>d.tableSeconds));
   const openTableCount=details.filter(d=>d.serviceMode==="DINE_IN"&&!d.paidAt).length;
-  const takeaway=details.filter(d=>d.serviceMode==="TAKEAWAY");
+  const takeaway=details.filter(d=>d.hasTakeaway);
   const dispatched=valid(takeaway.map(d=>d.receivedToDispatch));
   const handoff=valid(takeaway.map(d=>d.readyToDispatch));
   return <main className="shell pos-shell ops-performance">
@@ -125,7 +126,7 @@ export default async function PosPerformance(){
           <th>Preparación</th><th>Pedido → entregado</th><th>Listo → entregado</th><th>Mesa abierta / duración</th><th>Acción</th></tr></thead>
         <tbody>{details.map(d=><tr key={d.id}>
           <td><strong>{d.tableLabel||d.folio}</strong><small>{d.createdAt.toLocaleString("es-MX",{timeZone:"America/Mexico_City"})}</small></td>
-          <td>{d.serviceMode==="TAKEAWAY"?"Para llevar":"Aquí"}</td>
+          <td>{d.serviceMode==="TAKEAWAY"?"Para llevar":d.hasTakeaway?"Mixto":"Aquí"}</td>
           <td>{d.status==="PAID"?"Cobrado":d.status==="READY"?"Listo":d.status==="PREPARING"?"Preparando":"Pendiente"}</td>
           <td>{d.printToReady!==null?durationText(d.printToReady):"—"}</td>
           <td>{d.prep!==null?durationText(d.prep):"—"}</td>

@@ -42,7 +42,6 @@ export async function getOpenPosOrders(
         eq(posOrders.storeId, storeId),
         or(inArray(posOrders.status, [...OPEN_STATUSES]),
           and(eq(posOrders.mode,"LIVE"),eq(posOrders.status,"PAID"),
-            eq(posOrders.serviceMode,"TAKEAWAY"),
             gte(posOrders.paidAt,new Date(Date.now()-12*60*60*1000))))!,
       ),
     )
@@ -82,12 +81,13 @@ export async function getOpenPosOrders(
     const timing=deriveCommandTimeline(row.createdAt,
       orderLines.map(line=>({createdAt:line.createdAt,expectedConsumption:line.expectedConsumption})),
       events.filter(event=>event.entityId===row.id));
-    return {...row,...timing,
+    const hasTakeaway=orderLines.some(l=>l.expectedConsumption?.serviceMode==="TAKEAWAY");
+    return {...row,...timing,hasTakeaway,
       lines:orderLines.map(line=>({
         ...line,isAdditionalRound:line.expectedConsumption?.additionalRound===true,
       })),
     };
   }).filter(row=>!(row.status==="PAID" &&
     (row.dispatchedAt!==null||
-     !row.lines.some(line=>line.expectedConsumption?.serviceMode==="TAKEAWAY"))));
+     !row.hasTakeaway)));
 }
