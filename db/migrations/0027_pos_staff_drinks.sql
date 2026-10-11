@@ -1,6 +1,6 @@
 -- Una bebida de cortesía por empleado y día operativo (Tepexi).
 -- Registro nominal, independiente de ingresos, puntos y caja.
-create table if not exists public.pos_staff_drinks (
+create table if not exists pos_staff_drinks (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references public.organizations(id) on delete cascade,
   store_id uuid not null references public.stores(id) on delete restrict,
