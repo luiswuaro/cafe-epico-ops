@@ -11,6 +11,7 @@ import {
   auditEvents,
   inventoryBalances,
   inventoryMovements,
+  inventoryItems,
   roastBarAssignments,
   roastBatches,
   roastCoffeeLots,
@@ -686,6 +687,169 @@ export async function recordRoastBatch(formData: FormData) {
     }
     throw error;
   }
+}
+
+// Se ejecuta sólo por acción explícita del administrador. Sirve para
+// regularizar batches HiBean antiguos que consumieron verde pero no
+// registraron la entrada de café tostado. Idempotencia: ROASTED por batch.
+export async function postMissingRoastedOutputs(formData: FormData) {
+  if (process.env.VERCEL_ENV === "preview") {
+    throw new Error("El preview es de solo lectura para proteger el inventario real.");
+  }
+  const day = String(formData.get("roastedDay") ?? "").trim();
+  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(day) ||
+      Number.isNaN(new Date(day + "T12:00:00-06:00").getTime()) ||
+      formData.get("confirmed") !== "yes") {
+    redirect("/admin/roasting?error=roasted-backfill-confirm");
+  }
+
+  const { user, employeeId, organizationId } =
+    await requirePermission("roast.manage");
+  const db = getDb();
+  const total = await db.transaction(async (tx) => {
+    const [settings] = await tx
+      .select()
+      .from(roastSettings)
+      .where(eq(roastSettings.organizationId, organizationId))
+      .limit(1);
+    if (!settings?.defaultStoreId || !settings.defaultLocationId) {
+      throw new Error("Configura sucursal y ubicación en el módulo de tueste.");
+    }
+
+    const rows = await tx
+      .select({
+        id: roastBatches.id,
+        batchCode: roastBatches.batchCode,
+        roastedAt: roastBatches.roastedAt,
+        roastedWeightG: roastBatches.roastedWeightG,
+        roastedInventoryItemId: roastCoffeeLots.roastedInventoryItemId,
+      })
+      .from(roastBatches)
+      .innerJoin(
+        roastCoffeeLots,
+        and(
+          eq(roastCoffeeLots.id, roastBatches.coffeeLotId),
+          eq(roastCoffeeLots.organizationId, organizationId),
+        ),
+      )
+      .where(
+        and(
+          eq(roastBatches.organizationId, organizationId),
+          sql`(${roastBatches.roastedAt} AT TIME ZONE 'America/Mexico_City')::date = ${day}::date`,
+        ),
+      );
+
+    let postedCount = 0;
+    let postedWeightG = 0;
+    for (const batch of rows) {
+      if (!batch.roastedInventoryItemId) continue;
+      const roastedWeightG = Number(batch.roastedWeightG);
+      if (!Number.isFinite(roastedWeightG) || roastedWeightG <= 0) {
+        throw new Error("Batch con rendimiento tostado inválido: " + batch.batchCode);
+      }
+
+      const [item] = await tx
+        .select({
+          id: inventoryItems.id,
+          unit: inventoryItems.canonicalUnit,
+          trackingType: inventoryItems.trackingType,
+        })
+        .from(inventoryItems)
+        .where(and(
+          eq(inventoryItems.id, batch.roastedInventoryItemId),
+          eq(inventoryItems.organizationId, organizationId),
+          eq(inventoryItems.isActive, true),
+        ))
+        .limit(1);
+      if (!item || item.unit !== "g" || item.trackingType !== "QUANTITY") {
+        throw new Error("Configura un insumo tostado de inventario en gramos para " + batch.batchCode);
+      }
+
+      const balances = await tx
+        .select({ locationId: inventoryBalances.locationId })
+        .from(inventoryBalances)
+        .where(and(
+          eq(inventoryBalances.organizationId, organizationId),
+          eq(inventoryBalances.storeId, settings.defaultStoreId),
+          eq(inventoryBalances.inventoryItemId, item.id),
+        ))
+        .limit(2);
+      if (balances.length > 1) {
+        throw new Error("Existen varias ubicaciones del insumo " + item.id + "; elige un destino único.");
+      }
+      const locationId = balances[0]?.locationId ?? settings.defaultLocationId;
+
+      const [movement] = await tx
+        .insert(inventoryMovements)
+        .values({
+          organizationId,
+          storeId: settings.defaultStoreId,
+          locationId,
+          inventoryItemId: item.id,
+          movementType: "PRODUCTION_OUTPUT",
+          quantityDelta: String(roastedWeightG),
+          sourceType: "ROAST_BATCH",
+          sourceId: batch.id,
+          occurredAt: batch.roastedAt,
+          employeeId,
+          note: "Regularización café tostado HiBean del batch " + batch.batchCode,
+          externalProvider: "ROASTING",
+          externalId: batch.id + ":ROASTED",
+        })
+        .onConflictDoNothing()
+        .returning({ id: inventoryMovements.id });
+
+      // Si otro proceso ya contabilizó el mismo batch, no se suma otra vez.
+      if (!movement) continue;
+      await tx
+        .insert(inventoryBalances)
+        .values({
+          organizationId,
+          storeId: settings.defaultStoreId,
+          locationId,
+          inventoryItemId: item.id,
+          theoreticalQuantity: String(roastedWeightG),
+        })
+        .onConflictDoUpdate({
+          target: [
+            inventoryBalances.storeId,
+            inventoryBalances.locationId,
+            inventoryBalances.inventoryItemId,
+          ],
+          set: {
+            theoreticalQuantity: sql`${inventoryBalances.theoreticalQuantity} + ${roastedWeightG}`,
+            updatedAt: new Date(),
+          },
+        });
+
+      await tx
+        .update(roastBatches)
+        .set({ inventoryPosted: true, updatedAt: new Date() })
+        .where(eq(roastBatches.id, batch.id));
+      postedCount += 1;
+      postedWeightG += roastedWeightG;
+    }
+
+    await tx.insert(auditEvents).values({
+      organizationId,
+      storeId: settings.defaultStoreId,
+      actorUserId: user.id,
+      actorEmployeeId: employeeId,
+      action: "ROAST_OUTPUT_BACKFILL",
+      entityType: "roast_batch",
+      afterData: { roastedDay: day, postedCount, postedWeightG },
+    });
+    return { postedCount, postedWeightG };
+  });
+
+  revalidatePath("/admin/roasting");
+  revalidatePath("/inventory/ops");
+  revalidatePath("/admin/decision-center");
+  redirect(
+    "/admin/roasting?backfillDay=" + encodeURIComponent(day) +
+    "&saved=roasted-backfill&postedCount=" + total.postedCount +
+    "&postedWeight=" + total.postedWeightG,
+  );
 }
 
 const sensoryScore = z.preprocess(
