@@ -164,9 +164,10 @@ export async function claimPrintStationJob(jobKey:string,stationId:string){
     .orderBy(desc(auditEvents.createdAt)).limit(8);
   if(events.some(e=>e.action==="POS_PRINT_HUB_DONE"||
       e.action==="POS_PRINT_HUB_FAILED"))return false;
-  const last=events[0];
-  if(last?.action==="POS_PRINT_HUB_CLAIMED"&&
-    Date.now()-last.createdAt.getTime()<120000)return false;
+  // Seguridad primero: si una estación reclamó un trabajo y se desconectó,
+  // NO enviarlo otra vez automáticamente. Puede haber impreso papel antes de
+  // perder el ACK. Exige conciliación y reimpresión manual supervisada.
+  if(events.some(e=>e.action==="POS_PRINT_HUB_CLAIMED"))return false;
   await tx.insert(auditEvents).values({
     organizationId:employee.organizationId,storeId,
     actorUserId:user.id,actorEmployeeId:employee.id,

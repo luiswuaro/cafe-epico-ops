@@ -9,6 +9,8 @@ assert.ok(hub.includes("POS_PRINT_HUB_CLAIMED"));
 assert.ok(hub.includes("POS_PRINT_HUB_DONE"));
 assert.ok(hub.includes("POS_PRINT_HUB_FAILED"));
 assert.ok(hub.includes("pg_advisory_xact_lock"));
+assert.ok(hub.includes('events.some(e=>e.action==="POS_PRINT_HUB_CLAIMED")'),
+  "Nunca volver a reclamar automáticamente un trabajo de impresión incierto");
 assert.ok(hub.includes("allowedSince(since)"));
 assert.ok(client.includes("window.setInterval(()=>void tick(),4000)"));
 assert.ok(client.includes("claimPrintStationJob(job.key,state.stationId)"));

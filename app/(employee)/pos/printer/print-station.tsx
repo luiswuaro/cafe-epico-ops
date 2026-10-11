@@ -104,8 +104,9 @@ export function PrintStation({template,preview}:{
     activará únicamente después de publicar en producción.</p>}
    <p role="status" className="muted">{status}</p>
    {enabled&&<small className="muted">
-    Pendientes consultados: {pending}. No se reimprimen trabajos confirmados.
-    Los fallidos se dejan pendientes de revisión manual para evitar copias dobles.
+    Eventos encontrados: {pending}. Una impresión confirmada jamás se repite.
+    Si el puente o internet falla después de reclamar el trabajo,
+    OPS no lo reintenta a ciegas: revisa el papel e imprime manualmente si corresponde.
    </small>}
    {processed.length>0&&<details><summary>Últimas impresiones confirmadas</summary>
     <ul>{processed.map((name,i)=><li key={i}>{name}</li>)}</ul></details>}
