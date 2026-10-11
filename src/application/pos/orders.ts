@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, or } from "drizzle-orm";
 import {deriveCommandTimeline} from "@/src/domain/pos/command-timing";
 import { getDb } from "@/src/infrastructure/db/client";
 import {
@@ -40,7 +40,9 @@ export async function getOpenPosOrders(
       and(
         eq(posOrders.organizationId, organizationId),
         eq(posOrders.storeId, storeId),
-        inArray(posOrders.status, [...OPEN_STATUSES]),
+        or(inArray(posOrders.status, [...OPEN_STATUSES]),
+          and(eq(posOrders.mode,"LIVE"),eq(posOrders.status,"PAID"),
+            gte(posOrders.paidAt,new Date(Date.now()-12*60*60*1000))))!,
       ),
     )
     .orderBy(asc(posOrders.createdAt));
@@ -72,17 +74,20 @@ export async function getOpenPosOrders(
     eq(auditEvents.organizationId,organizationId),
     eq(auditEvents.entityType,"pos_order"),
     inArray(auditEvents.entityId,rows.map(row=>row.id)),
-    inArray(auditEvents.action,["POS_COMMAND_PRINT_ACKNOWLEDGED","POS_COMMAND_STATUS_CHANGED"]),
+    inArray(auditEvents.action,["POS_COMMAND_PRINT_ACKNOWLEDGED","POS_COMMAND_STATUS_CHANGED","POS_TAKEAWAY_DISPATCHED"]),
   ));
   return rows.map(row=>{
     const orderLines=lines.filter(line=>line.orderId===row.id);
     const timing=deriveCommandTimeline(row.createdAt,
       orderLines.map(line=>({createdAt:line.createdAt,expectedConsumption:line.expectedConsumption})),
       events.filter(event=>event.entityId===row.id));
-    return {...row,...timing,
+    const hasTakeaway=orderLines.some(l=>l.expectedConsumption?.serviceMode==="TAKEAWAY");
+    return {...row,...timing,hasTakeaway,
       lines:orderLines.map(line=>({
         ...line,isAdditionalRound:line.expectedConsumption?.additionalRound===true,
       })),
     };
-  });
+  }).filter(row=>!(row.status==="PAID" &&
+    (row.dispatchedAt!==null||
+     !row.hasTakeaway)));
 }

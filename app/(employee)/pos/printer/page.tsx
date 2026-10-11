@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { PrinterBridgeSetup, KitchenPrinterSetup, AutoKitchenPrintSettings } from "./printer-client";
+import {PrintStation} from "./print-station";
+import {getPosPrintSettings} from "@/src/application/pos/print-settings";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
 import { assertEmployeePermission } from "@/src/infrastructure/auth/permissions";
 
@@ -15,6 +17,7 @@ export default async function PosPrinterPage() {
     employee.homeStoreId,
   );
 
+  const printSettings=await getPosPrintSettings(employee.organizationId);
   return (
     <main className="shell pos-shell">
       <section className="hero pos-hero">
@@ -76,6 +79,8 @@ export default async function PosPrinterPage() {
           <p className="muted">El puente de comandas usa 127.0.0.1:9138 y un token nuevo. La impresora de tickets continúa en 9137 sin cambios. Si reinstalas la impresora de barra, se conserva su token salvo que uses -ResetToken.</p>
         </details>
       </section>
+
+      <PrintStation template={printSettings} preview={process.env.VERCEL_ENV==="preview"}/>
 
       <section className="card">
         <p className="eyebrow">MANTENIMIENTO</p>

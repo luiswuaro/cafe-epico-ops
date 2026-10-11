@@ -37,6 +37,7 @@ export async function submitLiveSale(_previous:{error:string|null},formData:Form
     customerId:z.union([z.string().uuid(),z.literal("")]),
     tableLabel:z.string().max(100),
     note:z.string().max(300),
+    courtesyCupCarriers4:z.coerce.number().int().min(0).max(10),
   }).parse({
     clientOrderId:String(formData.get("clientOrderId")??""),
     cart:JSON.parse(String(formData.get("cart")??"[]")),
@@ -48,6 +49,7 @@ export async function submitLiveSale(_previous:{error:string|null},formData:Form
     customerId:String(formData.get("customerId")??""),
     tableLabel:String(formData.get("tableLabel")??""),
     note:String(formData.get("note")??""),
+    courtesyCupCarriers4:String(formData.get("courtesyCupCarriers4")??"0"),
   });
   const resolvedMode=effectiveOrderServiceMode(parsed.serviceMode,parsed.cart);
   const resolvedLabel=validateTicketLabel(resolvedMode,parsed.tableLabel);
@@ -63,6 +65,7 @@ export async function submitLiveSale(_previous:{error:string|null},formData:Form
       ? Number(parsed.tenderedAmount) : null,
     customerId:parsed.customerId||null,tableLabel:resolvedLabel,
     note:parsed.note||null,
+    courtesyCupCarriers4:parsed.courtesyCupCarriers4,
     });
   savedOrderId=result.id;
   newlyPaid=!result.alreadyRecorded;

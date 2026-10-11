@@ -1,4 +1,5 @@
 import Link from "next/link";
+import {OpsWorkspaceNav} from "@/components/ops-workspace-nav";
 import { SearchableCollection } from "@/components/searchable-collection";
 import { randomUUID } from "node:crypto";
 import { and, desc, eq } from "drizzle-orm";
@@ -71,7 +72,7 @@ export default async function OpsInventoryPage({
   ]);
   const locationNames=new Map(locations.map(l=>[l.id,l.name]));
   const available=balances.filter(b=>b.trackingType==="QUANTITY");
-  return <main className="shell pos-shell">
+  return <main className="shell pos-shell ops-admin-workspace"><OpsWorkspaceNav active="/inventory/ops"/>
     <section className="hero pos-hero">
       <div>
         <p className="eyebrow">CAFÉ ÉPICO · INVENTARIO INTERNO</p>

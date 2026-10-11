@@ -122,6 +122,7 @@ export function PosClient({
   const [ticketNameOption,setTicketNameOption]=useState("");
   const [customTicketName,setCustomTicketName]=useState("");
   const [orderNote,setOrderNote]=useState("");
+  const [courtesyCupCarriers4,setCourtesyCupCarriers4]=useState(0);
   const [checkoutState,checkoutAction,checkoutPending]=useActionState(submitLiveSale,{error:null});
   const [saveState,saveAction,savePending]=useActionState(saveLiveCommand,{error:null});
   const [shadowState,shadowAction]=useActionState(submitShadowSale,{error:null});
@@ -154,6 +155,11 @@ export function PosClient({
   const newSubtotal=cartLines.reduce((sum,line)=>sum+unitPrice(line),0);
   const total=(savedTicket?.total??0)+newSubtotal;
   const units=(savedTicket?.lines.reduce((sum,line)=>sum+line.quantity,0)??0)+cartLines.length;
+  const hasTakeawayDrinks=cartLines.some(line=>line.item.category==="FRÍAS"&&
+    line.serviceMode==="TAKEAWAY" || line.item.category==="CALIENTES"&&line.serviceMode==="TAKEAWAY") ||
+    Boolean(savedTicket?.lines.some(line=>line.serviceMode==="TAKEAWAY"&&
+      // En tickets guardados la categoría se consulta en el catálogo vigente.
+      catalog.some(item=>item.name===line.name&&item.category!=="ALIMENTOS")));
   const ticketServiceMode=cartLines.length
     ?effectiveOrderServiceMode(serviceMode,cartLines):serviceMode;
   const namePresets=ticketServiceMode==="DINE_IN"
@@ -417,6 +423,7 @@ export function PosClient({
           Este preview está en modo espejo. El simulador NO cobra, no crea tickets,
           no registra ventas, no modifica caja ni descuenta inventario.
         </p>
+        {hasTakeawayDrinks&&courtesyCupCarriers4>0&&<p className="status-ok">Cortesía: {courtesyCupCarriers4} portavasos de 4 espacios · $0.00</p>}
         <p className="muted">Pedido: <strong>{ticketNamePreview}</strong>
           {" · "}{ticketServiceMode==="TAKEAWAY"?"Para llevar":"Aquí"}
         </p>
@@ -473,6 +480,7 @@ export function PosClient({
       <section className="card stack" style={{maxWidth:780,margin:"0 auto",width:"100%"}}>
         <p className="eyebrow">POS · COBRAR</p>
         <h2>Elegir método de pago</h2>
+        {hasTakeawayDrinks&&courtesyCupCarriers4>0&&<p className="status-ok">Cortesía: {courtesyCupCarriers4} portavasos de 4 espacios · $0.00</p>}
         <p className="muted">Ticket: <strong>{staffFreeCheckout?"Consumo personal":ticketNamePreview}</strong> · {ticketServiceMode==="DINE_IN"?"Aquí":"Para llevar"}</p>
         <p className="muted">El pedido sigue en memoria hasta confirmar el cobro. Puedes volver sin perder productos ni notas.</p>
         {checkoutState.error&&<div className="status-bad" role="alert">
@@ -513,6 +521,7 @@ export function PosClient({
             value={staffFreeCheckout?(freeStaffLine?.employeeId??""):""}/>
           <input type="hidden" name="tableLabel" value={staffFreeCheckout?"Consumo personal":tableLabel}/>
           <input type="hidden" name="note" value={orderNote}/>
+          <input type="hidden" name="courtesyCupCarriers4" value={hasTakeawayDrinks?courtesyCupCarriers4:0}/>
           {monetaryDue>0?<label>Forma de pago
             <select value={paymentMethod}
               onChange={e=>setPaymentMethod(e.target.value as "CASH"|"CARD"|"TRANSFER")}>
@@ -846,6 +855,21 @@ export function PosClient({
           />
           <input type="hidden" name="serviceMode" value={ticketServiceMode} />
           <input type="hidden" name="customerId" value={!liveEnabled&&createdCustomer?.id===customerId?"":customerId} />
+          {hasTakeawayDrinks&&<div className="pos-courtesy-carrier">
+            <div><strong>Portavasos de 4 · cortesía</strong>
+              <small className="muted">Solo si realmente se entrega al cliente. Sin cargo.</small></div>
+            <div className="pos-courtesy-carrier-count">
+              <button type="button" disabled={courtesyCupCarriers4===0}
+                onClick={()=>setCourtesyCupCarriers4(v=>Math.max(0,v-1))}
+                aria-label="Quitar un portavasos">−</button>
+              <strong>{courtesyCupCarriers4}</strong>
+              <button type="button" disabled={courtesyCupCarriers4===10}
+                onClick={()=>setCourtesyCupCarriers4(v=>Math.min(10,v+1))}
+                aria-label="Añadir un portavasos">+</button>
+            </div>
+          </div>}
+          <input type="hidden" name="courtesyCupCarriers4"
+            value={hasTakeawayDrinks?courtesyCupCarriers4:0}/>
 
           {!savedTicket&&ticketServiceMode==="DINE_IN"&&<div className="pos-table-shortcuts"
             aria-label="Seleccionar mesa en un toque">

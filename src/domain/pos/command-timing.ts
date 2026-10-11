@@ -24,11 +24,14 @@ export function deriveCommandTimeline(
   const printed=matching.find(e=>e.action==="POS_COMMAND_PRINT_ACKNOWLEDGED" &&
     e.afterData?.roundId===roundId);
   const preparing=matching.find(e=>e.action==="POS_COMMAND_STATUS_CHANGED"&&
-    e.afterData?.status==="PREPARING");
+    e.afterData?.status==="PREPARING"&&(!e.afterData?.roundId||e.afterData.roundId===roundId));
   const ready=matching.find(e=>e.action==="POS_COMMAND_STATUS_CHANGED"&&
-    e.afterData?.status==="READY");
+    e.afterData?.status==="READY"&&(!e.afterData?.roundId||e.afterData.roundId===roundId));
+  const dispatched=matching.find(e=>e.action==="POS_TAKEAWAY_DISPATCHED"&&
+    e.afterData?.roundId===roundId);
   return {roundId,roundStartedAt,printAckAt:printed?.createdAt??null,
-    preparingAt:preparing?.createdAt??null,readyAt:ready?.createdAt??null};
+    preparingAt:preparing?.createdAt??null,readyAt:ready?.createdAt??null,
+    dispatchedAt:dispatched?.createdAt??null};
 }
 export function durationSeconds(from:Date,to:Date){
   return Math.max(0,Math.floor((to.getTime()-from.getTime())/1000));

@@ -15,6 +15,7 @@ import { cancelLiveOrder } from "@/src/application/pos/live-cancellation";
 import { checkoutLiveOrder, isPosLiveEnabled } from "@/src/application/pos/live";
 import { getPosReadiness } from "@/src/application/pos/readiness";
 import {shadowPaymentFields} from "@/src/domain/pos/shadow-payment";
+import {validateFreeCupCarriers} from "@/src/domain/pos/paper-bag-packaging";
 import { syncLoyverseReceipts } from "@/src/application/loyverse/sync";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
 import { assertEmployeePermission, employeeHasPermission } from "@/src/infrastructure/auth/permissions";
@@ -116,6 +117,7 @@ async function buildOrderInput(
       unitPrice,extras:extras.extras,
       expectedConsumption: {
         mode,
+        courtesyCupCarriers4:0,
         serviceMode: lineMode,extras:extras.extras,
         customerContainer,
         discount:customerContainer?{
@@ -138,6 +140,13 @@ async function buildOrderInput(
     };
   });
 
+  const carrierCount=validateFreeCupCarriers(
+    z.coerce.number().int().min(0).max(10).parse(formData.get("courtesyCupCarriers4")??"0"),
+    lines.some(line=>line.lineMode==="TAKEAWAY"&&line.item.category!=="ALIMENTOS"),
+  );
+  if(lines.length&&carrierCount){
+    lines[0].expectedConsumption.courtesyCupCarriers4=carrierCount;
+  }
   const total = lines.reduce((sum, line) => sum + line.lineTotal, 0);
 
   if (customerId) {
@@ -508,7 +517,9 @@ export async function updateCommandStatus(formData: FormData) {
     .limit(1);
 
   if (!order) throw new Error("Comanda no encontrada");
-  if (!["SENT", "PREPARING", "READY"].includes(order.status)) {
+  // El pago puede preceder a la preparación. Los pedidos para llevar PAID
+  // conservan su estado financiero, pero sí admiten eventos de barra.
+  if(!["SENT","PREPARING","READY","PAID"].includes(order.status)) {
     throw new Error("La comanda ya no está abierta");
   }
 
@@ -518,21 +529,94 @@ export async function updateCommandStatus(formData: FormData) {
       eq(posOrders.id,order.id),eq(posOrders.organizationId,employee.organizationId),
       eq(posOrders.storeId,employee.homeStoreId!),
     )).for("update").limit(1);
-    if(!current || !["SENT","PREPARING","READY"].includes(current.status))
+    if(!current || !["SENT","PREPARING","READY","PAID"].includes(current.status))
       throw new Error("La comanda cambió y ya no admite cambios de preparación.");
+    // Un ticket ya cobrado conserva PAID y registra la fase de preparación
+    // únicamente por eventos: no alterar el estado financiero.
+    const orderLines=await tx.select({expected:posOrderLines.expectedConsumption,
+      createdAt:posOrderLines.createdAt,category:posOrderLines.categorySnapshot})
+      .from(posOrderLines).where(eq(posOrderLines.orderId,current.id))
+      .orderBy(posOrderLines.createdAt);
+    const latest=orderLines.at(-1);
+    const roundId=typeof latest?.expected?.roundId==="string"?latest.expected.roundId:"INITIAL";
+    if(current.status==="PAID" && !(current.mode==="LIVE"&&
+      orderLines.some(l=>l.expected?.serviceMode==="TAKEAWAY")))
+      throw new Error("La preparación de tickets pagados sólo aplica para llevar.");
+    const [recent]=await tx.select({id:auditEvents.id}).from(auditEvents).where(and(
+      eq(auditEvents.organizationId,employee.organizationId),
+      eq(auditEvents.entityType,"pos_order"),eq(auditEvents.entityId,current.id),
+      eq(auditEvents.action,"POS_COMMAND_STATUS_CHANGED"),
+      sql`${auditEvents.afterData}->>'status' = ${status}`,
+      sql`COALESCE(${auditEvents.afterData}->>'roundId','INITIAL') = ${roundId}`,
+    )).limit(1);
+    if(recent) return;
     if(current.status===status)return;
-    await tx.update(posOrders)
-      .set({status,updatedAt:new Date()})
-      .where(and(eq(posOrders.id,current.id),eq(posOrders.status,current.status)));
+    if(current.status!=="PAID"){
+      await tx.update(posOrders)
+        .set({status,updatedAt:new Date()})
+        .where(and(eq(posOrders.id,current.id),eq(posOrders.status,current.status)));
+    }
     await tx.insert(auditEvents).values({
       organizationId:employee.organizationId,storeId:employee.homeStoreId,
       actorUserId:user.id,actorEmployeeId:employee.id,
       action:"POS_COMMAND_STATUS_CHANGED",entityType:"pos_order",entityId:current.id,
-      beforeData:{status:current.status},afterData:{status},
+      beforeData:{status:current.status},afterData:{status,roundId},
     });
   });
 
   revalidatePath("/pos/orders");
+}
+
+/** Marca entrega física en mostrador; separa preparación de despacho.
+ * Nunca equivale a cobrar y no altera la situación financiera del ticket.
+ */
+export async function markTakeawayDispatched(formData:FormData){
+  assertNoPreviewMutation();
+  const {user,employee}=await getCurrentEmployee();
+  if(!employee.homeStoreId)throw new Error("Sin sucursal.");
+  await assertEmployeePermission(employee.id,"pos.sell",employee.homeStoreId);
+  const orderId=z.string().uuid().parse(String(formData.get("orderId")??""));
+  const db=getDb();
+  await db.transaction(async tx=>{
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${employee.homeStoreId!}))`);
+    const [order]=await tx.select().from(posOrders).where(and(
+      eq(posOrders.id,orderId),eq(posOrders.organizationId,employee.organizationId),
+      eq(posOrders.storeId,employee.homeStoreId!),eq(posOrders.mode,"LIVE")
+    )).for("update").limit(1);
+    if(!order || order.status!=="PAID")
+      throw new Error("Para entregar, primero cobra la cuenta para llevar.");
+    const lines=await tx.select({expected:posOrderLines.expectedConsumption,
+      createdAt:posOrderLines.createdAt}).from(posOrderLines)
+      .where(eq(posOrderLines.orderId,orderId)).orderBy(posOrderLines.createdAt);
+    if(!lines.some(line=>line.expected?.serviceMode==="TAKEAWAY"))
+      throw new Error("Este ticket no incluye productos para llevar.");
+    const last=lines.at(-1),roundId=typeof last?.expected?.roundId==="string"
+      ?last.expected.roundId:"INITIAL";
+    const [ready]=await tx.select({id:auditEvents.id}).from(auditEvents).where(and(
+      eq(auditEvents.organizationId,employee.organizationId),
+      eq(auditEvents.entityType,"pos_order"),eq(auditEvents.entityId,orderId),
+      eq(auditEvents.action,"POS_COMMAND_STATUS_CHANGED"),
+      sql`${auditEvents.afterData}->>'status' = 'READY'`,
+      sql`COALESCE(${auditEvents.afterData}->>'roundId','INITIAL') = ${roundId}`,
+    )).limit(1);
+    if(!ready)
+      throw new Error("Primero marca la comanda Lista antes de entregarla.");
+    const [previous]=await tx.select({id:auditEvents.id}).from(auditEvents).where(and(
+      eq(auditEvents.organizationId,employee.organizationId),
+      eq(auditEvents.entityType,"pos_order"),eq(auditEvents.entityId,orderId),
+      eq(auditEvents.action,"POS_TAKEAWAY_DISPATCHED"),
+      sql`${auditEvents.afterData}->>'roundId' = ${roundId}`,
+    )).limit(1);
+    if(previous)return;
+    await tx.insert(auditEvents).values({
+      organizationId:employee.organizationId,storeId:employee.homeStoreId,
+      actorUserId:user.id,actorEmployeeId:employee.id,
+      entityType:"pos_order",entityId:orderId,action:"POS_TAKEAWAY_DISPATCHED",
+      afterData:{roundId,mode:"TAKEAWAY",handoff:"ENTREGADO_AL_CLIENTE",
+        financialStatusUnchanged:true},
+    });
+  });
+  revalidatePath("/pos/orders");revalidatePath("/pos/performance");
 }
 
 export async function payShadowCommand(formData: FormData) {

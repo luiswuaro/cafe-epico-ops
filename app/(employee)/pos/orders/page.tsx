@@ -1,4 +1,5 @@
 import Link from "next/link";
+import {ReabastoQuickPanel} from "../reabasto/quick-panel";
 import { CommandBoardAutoRefresh } from "./auto-refresh";
 import {CommandTimer} from "./command-timer";
 import { KitchenPrintButton } from "./kitchen-print-button";
@@ -14,6 +15,7 @@ import {
   cancelPosOrder,
   payShadowCommand,
   updateCommandStatus,
+  markTakeawayDispatched,
 } from "../actions";
 import { getCashState } from "@/src/application/pos/cash";
 import { getOpenPosOrders } from "@/src/application/pos/orders";
@@ -139,9 +141,7 @@ export default async function PosOrdersPage({
           <Link href="/pos/performance" className="button">
             Tiempos y eficiencia
           </Link>
-          <Link href="/pos/reabasto" className="button" target="_blank" rel="noopener noreferrer">
-            Reabasto rápido
-          </Link>
+          <ReabastoQuickPanel label="Reabasto"/>
         </div>
       </section>
 
@@ -184,7 +184,8 @@ export default async function PosOrdersPage({
                   printAckAt={order.printAckAt?.toISOString()??null}
                   preparingAt={order.preparingAt?.toISOString()??null}
                   readyAt={order.readyAt?.toISOString()??null}
-                  serviceMode={order.serviceMode} status={order.status}
+                  dispatchedAt={order.dispatchedAt?.toISOString()??null}
+                  serviceMode={order.serviceMode} hasTakeaway={order.hasTakeaway} status={order.status}
                 />
                 <div className="command-lines">
                   {order.lines.map((line,index) => (
@@ -249,9 +250,9 @@ export default async function PosOrdersPage({
                   Puntos acreditados por cuenta pagada.
                 </p>}
 
-                {!partiallyPaid && (
+                {(!partiallyPaid && (order.status!=="PAID"||order.mode==="LIVE"&&order.hasTakeaway)) && (
                   <div className="command-status-actions">
-                    {order.status !== "PREPARING" && (
+                    {(order.status==="PAID"?!order.preparingAt:order.status !== "PREPARING") && (
                       <form action={updateCommandStatus}>
                         <input
                           type="hidden"
@@ -266,7 +267,7 @@ export default async function PosOrdersPage({
                         <button type="submit">Preparando</button>
                       </form>
                     )}
-                    {order.status !== "READY" && (
+                    {(order.status==="PAID"?!order.readyAt:order.status !== "READY") && (
                       <form action={updateCommandStatus}>
                         <input
                           type="hidden"
@@ -280,6 +281,12 @@ export default async function PosOrdersPage({
                   </div>
                 )}
 
+                {order.mode==="LIVE"&&order.status==="PAID"&&order.readyAt&&
+                  order.hasTakeaway&&!order.dispatchedAt&&
+                  <form action={markTakeawayDispatched} className="command-takeaway-handoff">
+                    <input type="hidden" name="orderId" value={order.id}/>
+                    <button type="submit">Entregado al cliente · cerrar despacho</button>
+                  </form>}
                 {(order.mode==="LIVE"||order.mode==="SHADOW")&&
                   <KitchenPrintButton
                     orderId={order.id}

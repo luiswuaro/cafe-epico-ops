@@ -29,6 +29,9 @@ export function AutoKitchenPrint({
   const [error,setError]=useState(false);
 
   useEffect(()=>{
+    // Estación central evita que esta pestaña dispare la misma comanda dos veces.
+    try{const hub=JSON.parse(window.localStorage.getItem("cafe-epico-print-hub-pc-v1")||"null");
+      if(hub?.enabled)return;}catch{/* seguir el modo local anterior */}
     const id=event+":"+eventId;
     if(handled.current===id)return;
     handled.current=id;

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import {OpsWorkspaceNav} from "@/components/ops-workspace-nav";
 import { HiBeanImportForm } from "./hibean-import-form";
 import { RoastingSessionPlanner } from "./session-planner";
 
@@ -94,7 +95,7 @@ export default async function RoastingPage({
   );
 
   return (
-    <main className="shell">
+    <main className="shell ops-admin-workspace"><OpsWorkspaceNav active="/admin/roasting"/>
       <section className="hero">
         <p className="eyebrow">PRODUCCIÓN · TUESTE · CALIDAD</p>
         <h1>Ingeniería de tueste</h1>

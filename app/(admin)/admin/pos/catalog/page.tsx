@@ -1,4 +1,5 @@
 import Link from "next/link";
+import {OpsWorkspaceNav} from "@/components/ops-workspace-nav";
 import {
   createManualPosProduct,
   savePosRecipe,
@@ -43,12 +44,12 @@ export default async function PosCatalogAdminPage({searchParams}:{
   ).sort((a, b) => a.localeCompare(b, "es-MX"));
 
   return (
-    <main className="shell">
+    <main className="shell ops-admin-workspace"><OpsWorkspaceNav active="/admin/pos/catalog"/>
       <section className="hero">
         <p className="eyebrow">POS · ADMINISTRACIÓN</p>
         <h1>Catálogo y recetas</h1>
         <p className="muted">Nuevo: vincula las recetas directamente con los insumos y ubicaciones reales de Inventario OPS; sin equivalencias obligatorias de Loyverse.</p>
-        <p><Link className="button" href="/admin/recipes/consistency">Auditar diferencias: barra histórica vs. inventario OPS</Link></p>
+        <p><Link className="button" href="/admin/pos/packaging">Bolsas y empaques</Link>{" "}<Link className="button" href="/admin/recipes/consistency">Auditar diferencias: barra histórica vs. inventario OPS</Link></p>
         <p className="muted">
           Un producto, una ficha. La receta se edita por insumos y sólo
           personalizas “Para llevar” cuando realmente cambia el consumo.
@@ -104,6 +105,8 @@ export default async function PosCatalogAdminPage({searchParams}:{
         label="bebidas y productos"
         placeholder="Ej. maracuyá, latte, moka, jarabe, hielo..."
         listClassName="pos-admin-list"
+        persistKey="ops-admin-pos-catalog"
+        resumeId={typeof params.saved==="string"?params.saved:priceSaved}
         entries={catalog.map((item) => ({
           id: item.id,
           name: item.name,
@@ -143,7 +146,7 @@ export default async function PosCatalogAdminPage({searchParams}:{
               </form>
             </div>
 
-            <details className="pos-recipe-editor">
+            <details className="pos-recipe-editor" data-save-state="precio">
               <summary>Editar precio de venta</summary>
               <form action={updatePosCatalogPrice} className="stack pos-price-edit">
                 <input type="hidden" name="catalogId" value={item.id}/>
@@ -161,7 +164,7 @@ export default async function PosCatalogAdminPage({searchParams}:{
                 <button type="submit" disabled={preview}>Guardar precio</button>
               </form>
             </details>
-            <details className="pos-recipe-editor">
+            <details className="pos-recipe-editor" data-save-state="receta">
               <summary>Editar receta</summary>
               <form action={savePosRecipe} className="stack">
                 <input type="hidden" name="catalogId" value={item.id} />
@@ -181,6 +184,11 @@ export default async function PosCatalogAdminPage({searchParams}:{
                 </p>
                 <button type="submit" disabled={preview}>Guardar receta</button>
               </form>
+              {preview&&<form action="/admin/pos/catalog" method="get" className="pos-preview-navigation-test">
+                <input type="hidden" name="saved" value={item.id}/>
+                <button className="button" type="submit">Probar regresar aquí tras guardar · sin escribir datos</button>
+                <small className="muted">Ensaya filtros, ficha expandida y posición sin modificar la receta real.</small>
+              </form>}
             </details>
             </article>
           ),

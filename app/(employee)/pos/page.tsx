@@ -1,4 +1,5 @@
 import Link from "next/link";
+import {ReabastoQuickPanel} from "./reabasto/quick-panel";
 import {and,eq,or,isNull,asc} from "drizzle-orm";
 import {getDb} from "@/src/infrastructure/db/client";
 import {employees,posStaffDrinks} from "@/src/infrastructure/db/schema";
@@ -83,7 +84,9 @@ export default async function PosPage({
         eq(posStaffDrinks.businessDate,today),
       )):Promise.resolve([]),
   ]);
-  const liveTickets=openOrders.filter(order=>order.mode==="LIVE");
+  // Los pedidos pagados siguen visibles en Comandas hasta despacho, pero NO
+  // deben aparecer como tickets abiertos para reabrir/editar desde el POS.
+  const liveTickets=openOrders.filter(order=>order.mode==="LIVE"&&order.status!=="PAID");
   const selectedTicket=liveEnabled&&selectedTicketId
     ? liveTickets.find(order=>order.id===selectedTicketId)??null : null;
 
@@ -279,7 +282,7 @@ export default async function PosPage({
           </Link>)}
           {liveTickets.length===0&&<span className="muted">Sin mesas pendientes</span>}
         </div>
-        <Link className="pos-fast-all" href="/pos/reabasto" target="_blank" rel="noopener noreferrer">Insumos <span aria-hidden="true">↗</span></Link>
+        <ReabastoQuickPanel label="Insumos"/>
         <Link className="pos-fast-all" href="/pos/orders">Comandas y cobro →</Link>
       </section>}
       {selectedTicketId&&!selectedTicket&&<p className="status-warn">
@@ -341,7 +344,7 @@ export default async function PosPage({
         </Link>
         <Link href="/pos/tickets" className="button">Historial de tickets</Link>
         <Link href="/pos/customers" className="button">Clientes y puntos</Link>
-        <Link href="/pos/reabasto" className="button" target="_blank" rel="noopener noreferrer">Reabasto rápido</Link>
+        <Link href="/pos/reabasto" className="button">Reabasto detallado</Link>
         <Link href="/pos/inventory-audit" className="button">Auditoría inventario</Link>
         <Link href="/pos/performance" className="button">Tiempos y eficiencia</Link>
         <Link href="/pos/printer" className="button">
