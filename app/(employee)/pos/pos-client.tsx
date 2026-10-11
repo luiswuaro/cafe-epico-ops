@@ -48,6 +48,7 @@ type Props = {
   extrasOptions:ExtraOption[];
   customers: Customer[];
   staffEmployees:Array<{id:string;name:string}>;
+  usedStaffDrinkEmployeeIds:string[];
   selectedCustomerId?: string | null;
   cashOpen: boolean;
   liveEnabled: boolean;
@@ -71,6 +72,7 @@ export function PosClient({
   extrasOptions,
   customers,
   staffEmployees,
+  usedStaffDrinkEmployeeIds,
   selectedCustomerId = null,
   cashOpen,
   liveEnabled,
@@ -210,6 +212,8 @@ export function PosClient({
     employeeId:lineBenefits[line.key]?.employeeId||null,
   })),customerId||null);
   const staffSelected=staffTicket.perLine.some(line=>line.staffBenefit!=="NONE");
+  const freeStaffLine=staffTicket.perLine[0];
+  const usedStaffDrinkIds=new Set(usedStaffDrinkEmployeeIds);
   const selectedCustomer =
     customers.find((customer) => customer.id === customerId) ??
     (createdCustomer?.id===customerId?createdCustomer:null);
@@ -222,6 +226,15 @@ export function PosClient({
   const pointsEarned=selectedCustomer?(mixedSettlement?.earnedPoints??0):0;
   const pointCheckout=!staffTicket.valid || !redemption.valid ||
     (redemption.points>0&&!selectedCustomer);
+  // La bebida incluida LIVE exige ticket individual y sin extras.
+  const staffCheckoutError=!staffSelected?null:
+    cartLines.length!==1?"Registra la bebida gratuita en un ticket individual.":
+    freeStaffLine?.staffBenefit!=="INCLUDED_DRINK"?"El descuento adicional del 10% todavía no está habilitado para cobro LIVE.":
+    !freeStaffLine.employeeId?"Selecciona al trabajador que consume la bebida.":
+    usedStaffDrinkIds.has(freeStaffLine.employeeId)?"La bebida gratuita de este trabajador ya se registró hoy.":
+    staffTicket.totalBeforePoints!==0?"La cortesía cubre la bebida base; retira los extras para registrar $0.00.":
+    !staffTicket.valid?"Revisa los datos de la cortesía.":null;
+  const staffFreeCheckout=staffSelected&&!staffCheckoutError&&!customerId&&redemption.points===0;
   const assignBenefits=<section className="card stack" style={{padding:14,gap:12}}>
     <strong>Beneficios de personal · por bebida</strong>
     {selectedCustomer?<div className="stack" style={{gap:8}}>
@@ -260,17 +273,21 @@ export function PosClient({
           <select value={assigned.employeeId}
             onChange={e=>assignLineBenefit(line.key,{employeeId:e.target.value})}>
             <option value="">Selecciona empleado…</option>
-            {staffEmployees.map(worker=><option key={worker.id} value={worker.id}>
-              {worker.name}
+            {staffEmployees.map(worker=><option key={worker.id} value={worker.id}
+              disabled={assigned.kind==="INCLUDED_DRINK"&&usedStaffDrinkIds.has(worker.id)}>
+              {worker.name}{usedStaffDrinkIds.has(worker.id)?" · cortesía usada hoy":""}
             </option>)}
           </select>
         </label>}
       </div>;
     })}
     {staffTicket.warnings.map((warning,i)=><p key={i} className="status-warn" role="alert">{warning}</p>)}
-    {staffSelected&&<p className="status-warn">
-      Beneficios de empleados: solo simulación. Falta el control diario y el
-      registro de inventario para habilitarlos en cobros LIVE.
+    {staffSelected&&staffCheckoutError&&<p className="status-warn" role="alert">
+      {staffCheckoutError}
+    </p>}
+    {staffFreeCheckout&&<p className="status-ok">
+      Cortesía diaria lista: OPS registrará el ticket por $0.00, descontará la receta
+      y marcará el beneficio de hoy como utilizado, sin cobrar ni otorgar puntos.
     </p>}
   </section>;
   const breakdown=<div className="stack" style={{gap:7}}>
@@ -460,9 +477,8 @@ export function PosClient({
           total={staffTicket.customerEligibleTotal} liveEnabled={liveEnabled}
           identityOnly={staffTicket.customerEligibleTotal===0}/>} 
         {breakdown}
-        {staffSelected&&<p className="status-warn" role="alert">
-          Consumo de personal todavía en validación. El cobro LIVE de este
-          pedido está bloqueado hasta habilitar el registro diario y de inventario.
+        {staffSelected&&staffCheckoutError&&<p className="status-warn" role="alert">
+          {staffCheckoutError}
         </p>}
         <form action={checkoutAction} className="stack">
           <input type="hidden" name="clientOrderId" value={liveClientOrderId}/>
@@ -474,6 +490,8 @@ export function PosClient({
           <input type="hidden" name="serviceMode" value={ticketServiceMode}/>
           <input type="hidden" name="customerId" value={customerId}/>
           <input type="hidden" name="redeemPoints" value={redemption.points.toFixed(2)}/>
+          <input type="hidden" name="staffFreeEmployeeId"
+            value={staffFreeCheckout?freeStaffLine.employeeId??"":""}/>
           <input type="hidden" name="tableLabel" value={tableLabel}/>
           <input type="hidden" name="note" value={orderNote}/>
           {monetaryDue>0?<label>Forma de pago
@@ -483,9 +501,11 @@ export function PosClient({
               <option value="CARD">Tarjeta · cobrar primero en la terminal</option>
               <option value="TRANSFER">Transferencia · confirmar depósito</option>
             </select>
-          </label>:<div className="status-ok">Cubierta al 100% con puntos. No se realiza cargo monetario.</div>}
+          </label>:<div className="status-ok">{staffFreeCheckout
+            ?"Cortesía de personal · $0.00. Sin pago monetario ni canje de puntos."
+            :"Cubierta al 100% con puntos. No se realiza cargo monetario."}</div>}
           <input type="hidden" name="paymentMethod"
-            value={monetaryDue===0?"POINTS":paymentMethod}/>
+            value={staffFreeCheckout?"STAFF_BENEFIT":monetaryDue===0?"POINTS":paymentMethod}/>
           {monetaryDue>0&&paymentMethod==="CASH"?<div className="stack">
             <label>Efectivo recibido
               <input name="tenderedAmount" inputMode="decimal" type="number" min={monetaryDue}
@@ -505,7 +525,7 @@ export function PosClient({
             <small className="muted">Registra inventario negativo y auditoría; exige reconteo posterior. No crea existencias ficticias.</small>
           </label>}
           <button className="pos-pay-button" type="submit" disabled={checkoutPending ||
-            missingTable || pointCheckout || staffSelected ||
+            missingTable || pointCheckout || (staffSelected&&!staffFreeCheckout) ||
             (monetaryDue>0&&paymentMethod==="CASH"&&(!tendered.trim()||Number(tendered)<monetaryDue))}>
             {checkoutPending?"Procesando...":"Confirmar cobro · "+money.format(monetaryDue)}
           </button>
