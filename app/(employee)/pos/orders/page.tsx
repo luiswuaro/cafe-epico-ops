@@ -1,4 +1,5 @@
 import Link from "next/link";
+import {ReabastoQuickPanel} from "../reabasto/quick-panel";
 import { CommandBoardAutoRefresh } from "./auto-refresh";
 import {CommandTimer} from "./command-timer";
 import { KitchenPrintButton } from "./kitchen-print-button";
@@ -139,9 +140,7 @@ export default async function PosOrdersPage({
           <Link href="/pos/performance" className="button">
             Tiempos y eficiencia
           </Link>
-          <Link href="/pos/reabasto" className="button" target="_blank" rel="noopener noreferrer">
-            Reabasto rápido
-          </Link>
+          <ReabastoQuickPanel label="Reabasto"/>
         </div>
       </section>
 
