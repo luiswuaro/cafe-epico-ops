@@ -5,12 +5,12 @@ export function PackagingSimulator(){
  const [hojaldras,setHojaldras]=useState(5);
  const [croissants,setCroissants]=useState(1);
  const plan=calculatePaperBagPlan([
-  {name:"HOJALDRA",category:"ALIMENTOS",serviceMode:"TAKEAWAY",quantity:hojaldras},
+  {name:"Pan SOLO",category:"ALIMENTOS",serviceMode:"TAKEAWAY",quantity:hojaldras},
   {name:"CROISSANT JAMÓN Y QUESO",category:"ALIMENTOS",serviceMode:"TAKEAWAY",quantity:croissants},
  ]);
  return <div className="packaging-simulator">
   <div className="form-grid">
-   <label>Hojaldras<input type="number" min="0" max="99" step="1" value={hojaldras}
+   <label>Pan SOLO · hojaldras<input type="number" min="0" max="99" step="1" value={hojaldras}
     onChange={e=>setHojaldras(Math.max(0,Math.min(99,Math.floor(Number(e.target.value)||0))))}/></label>
    <label>Croissants jamón/queso<input type="number" min="0" max="99" step="1" value={croissants}
     onChange={e=>setCroissants(Math.max(0,Math.min(99,Math.floor(Number(e.target.value)||0))))}/></label>

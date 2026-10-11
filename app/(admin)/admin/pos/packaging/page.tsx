@@ -29,7 +29,7 @@ export default async function PackagingAdmin(){
    </header>
    <section className="card stack">
     <h2>Reglas operativas</h2>
-    <p><strong>Hojaldra:</strong> hasta tres piezas por bolsa. Se redondea hacia arriba.</p>
+    <p><strong>Pan SOLO (hojaldra):</strong> hasta tres piezas por bolsa. Se redondea hacia arriba.</p>
     <p><strong>Croissant de jamón y queso:</strong> una bolsa por pieza.</p>
     <p>Solo para llevar. Los productos para consumir aquí no utilizan bolsa.</p>
     <PackagingSimulator/>
