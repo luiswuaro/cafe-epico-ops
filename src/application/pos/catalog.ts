@@ -305,7 +305,7 @@ export async function getPosCatalog(
     const override = overrideBySource.get(item.externalId);
     const dineIn = storedRecipe(override?.recipeDineIn,byUniqueName);
     const takeaway = storedRecipe(override?.recipeTakeaway,byUniqueName);
-    const singlePiece = !asBool(item.payload.sold_by_weight) ? [{
+    const singlePiece:PosRecipeComponent[] = !asBool(item.payload.sold_by_weight) ? [{
       variantExternalId: variant.externalId,
       itemExternalId: item.externalId,
       name: item.itemName,
