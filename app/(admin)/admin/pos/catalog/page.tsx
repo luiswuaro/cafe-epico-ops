@@ -1,3 +1,4 @@
+import Link from "next/link";
 import {
   createManualPosProduct,
   savePosRecipe,
@@ -47,6 +48,7 @@ export default async function PosCatalogAdminPage({searchParams}:{
         <p className="eyebrow">POS · ADMINISTRACIÓN</p>
         <h1>Catálogo y recetas</h1>
         <p className="muted">Nuevo: vincula las recetas directamente con los insumos y ubicaciones reales de Inventario OPS; sin equivalencias obligatorias de Loyverse.</p>
+        <p><Link className="button" href="/admin/recipes/consistency">Auditar diferencias: barra histórica vs. inventario OPS</Link></p>
         <p className="muted">
           Un producto, una ficha. La receta se edita por insumos y sólo
           personalizas “Para llevar” cuando realmente cambia el consumo.

@@ -1,4 +1,5 @@
 import { and, eq, sql } from "drizzle-orm";
+import {assertNoPreviewMutation} from "@/src/shared/preview-guard";
 import { getPosCatalog, type PosServiceMode } from "@/src/application/pos/catalog";
 import {priceExtras, readExtraSnapshots, type ExtraRequest} from "@/src/application/pos/extras";
 import {getPosExtraCatalog} from "@/src/application/pos/extra-catalog";
@@ -59,6 +60,7 @@ export async function checkoutLiveOrder(input:{
   note:string|null;
   allowStockShortage?:boolean;
 }) {
+  assertNoPreviewMutation();
   if(!isPosLiveEnabled()) throw new Error("Cobros LIVE deshabilitados por seguridad.");
   if(input.cart.length===0 || input.cart.length>30) throw new Error("Carrito inválido.");
   const db=getDb();
@@ -443,9 +445,8 @@ export async function checkoutLiveOrder(input:{
     const stockShortages:Array<{ingredient:string;available:number;required:number;deficit:number;unit:string;products:string[]}>=[];
     for(const [key,requested] of consume){
       const stock=byStock.get(key);
-      if(!stock)throw new Error("Falta confirmar el saldo inicial de "+requested.itemName+
-        " utilizado en "+[...requested.names].join(", "));
-      const available=Number(stock.theoreticalQuantity);
+      // Un saldo teórico sin existencia o sin conteo inicial jamás frena el cobro.
+      const available=stock?Number(stock.theoreticalQuantity):0;
       if(available+0.000001<requested.amount){
         const deficit=Math.round((requested.amount-available)*1000)/1000;
         stockShortages.push({
@@ -454,12 +455,8 @@ export async function checkoutLiveOrder(input:{
         });
       }
     }
-    if(stockShortages.length&&!input.allowStockShortage){
-      const x=stockShortages[0];
-      throw new Error("Falta "+x.ingredient+": hay "+x.available+" "+x.unit+
-        ", se requieren "+x.required+" "+x.unit+" (faltan "+x.deficit+" "+x.unit+
-        "). Corrige el conteo físico o solicita autorización del propietario para registrar el faltante.");
-    }
+    // Saldos negativos permitidos para todos los operadores; rastreo obligatorio.
+    // No se relajan las validaciones de receta, unidad, insumo ni ubicación.
 
     const [order]=pending
       ? await tx.update(posOrders).set({
@@ -562,6 +559,14 @@ export async function checkoutLiveOrder(input:{
     }
 
     for(const item of consume.values()){
+      // Si nunca hubo conteo inicial, iniciar en cero de forma idempotente.
+      if(!byStock.has(mapKey(item.locationId,item.itemId))){
+        await tx.insert(inventoryBalances).values({
+          organizationId:input.organizationId,storeId:input.storeId,
+          locationId:item.locationId,inventoryItemId:item.itemId,
+          theoreticalQuantity:"0",
+        }).onConflictDoNothing();
+      }
       await tx.insert(inventoryMovements).values({
         organizationId:input.organizationId,storeId:input.storeId,
         locationId:item.locationId,inventoryItemId:item.itemId,
@@ -598,11 +603,11 @@ export async function checkoutLiveOrder(input:{
       await tx.insert(auditEvents).values({
         organizationId:input.organizationId,storeId:input.storeId,
         actorUserId:input.actorUserId,actorEmployeeId:input.employeeId,
-        action:"POS_LIVE_INVENTORY_SHORTAGE_AUTHORIZED",
+        action:"POS_LIVE_INVENTORY_SHORTAGE_AUTO_RECORDED",
         entityType:"pos_order",entityId:order.id,
         afterData:{folio:order.folio,shortages:stockShortages,
-          reason:"Producto físicamente entregado; ajuste de existencia pendiente",
-          requiresPhysicalCount:true},
+          reason:"Venta permitida sin bloqueo por falta de saldo teórico",
+          requiresPhysicalCount:true,automaticForAllOperators:true},
       });
     }
     await tx.insert(auditEvents).values({
@@ -620,7 +625,7 @@ export async function checkoutLiveOrder(input:{
         splitId:split?.id??null,finalPayment:!split||finalSplitPayment,consumptionCount:consume.size,costOnlyComponents,
         nativeAutoResolved,
         customerId:input.customerId,inventoryEffectApplied:true,loyaltyEffectApplied:Boolean(input.customerId),
-        stockShortageOverride:stockShortages.length>0},
+        automaticStockShortage:stockShortages.length>0},
     });
     return {id:order.id,alreadyRecorded:false};
   });

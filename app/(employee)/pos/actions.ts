@@ -1,5 +1,6 @@
 "use server";
 
+import {assertNoPreviewMutation} from "@/src/shared/preview-guard";
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { redirect } from "next/navigation";
@@ -175,6 +176,7 @@ async function createShadowOrder(
   paymentMethod?: "CASH" | "CARD" | "TRANSFER",
   orderMode:"SHADOW"|"LIVE"="SHADOW",
 ) {
+  assertNoPreviewMutation();
   const { user, employee } = await getCurrentEmployee();
   if (!employee.homeStoreId) {
     throw new Error("El empleado no tiene sucursal asignada");
@@ -453,11 +455,6 @@ export async function payLiveCommand(formData:FormData) {
   if(!lines.length)throw new Error("Comanda sin productos.");
   let result:{id:string;alreadyRecorded:boolean};
   try{
-    const allowStockShortage=formData.get("allowStockShortage")==="on";
-    if(allowStockShortage){
-      const allowed=await employeeHasPermission(employee.id,"inventory.adjust",employee.homeStoreId);
-      if(!allowed)throw new Error("Sólo el propietario puede autorizar cobro con diferencia de inventario.");
-    }
     result=await checkoutLiveOrder({
     organizationId:employee.organizationId,storeId:employee.homeStoreId,
     actorUserId:user.id,employeeId:employee.id,
@@ -472,7 +469,6 @@ export async function payLiveCommand(formData:FormData) {
     serviceMode:order.serviceMode as PosServiceMode,
     paymentMethod,tenderedAmount,
     tableLabel:order.tableLabel,note:order.note,
-    allowStockShortage,
     });
   }catch(error){
     const message=error instanceof Error?error.message:"No se pudo cobrar la comanda.";
@@ -483,6 +479,7 @@ export async function payLiveCommand(formData:FormData) {
 }
 
 export async function updateCommandStatus(formData: FormData) {
+  assertNoPreviewMutation();
   const { user, employee } = await getCurrentEmployee();
   if (!employee.homeStoreId) throw new Error("Sin sucursal asignada");
 
@@ -539,6 +536,7 @@ export async function updateCommandStatus(formData: FormData) {
 }
 
 export async function payShadowCommand(formData: FormData) {
+  assertNoPreviewMutation();
   const { user, employee } = await getCurrentEmployee();
   if (!employee.homeStoreId) throw new Error("Sin sucursal asignada");
 
@@ -639,6 +637,7 @@ export async function payShadowCommand(formData: FormData) {
 }
 
 export async function createPosCustomer(formData: FormData) {
+  assertNoPreviewMutation();
   const { user, employee } = await getCurrentEmployee();
   if (!employee.homeStoreId) throw new Error("Sin sucursal asignada");
 
@@ -681,6 +680,7 @@ export async function createPosCustomer(formData: FormData) {
 }
 
 async function cancelPosOrderUnsafe(formData: FormData) {
+  assertNoPreviewMutation();
   const { user, employee } = await getCurrentEmployee();
   if (!employee.homeStoreId) {
     throw new Error("El empleado no tiene sucursal asignada");
@@ -858,6 +858,7 @@ export async function cancelPosOrder(formData:FormData){
 }
 
 export async function refreshShadowMirror(formData: FormData) {
+  assertNoPreviewMutation();
   const { employee } = await getCurrentEmployee();
   if (!employee.homeStoreId) {
     throw new Error("El empleado no tiene sucursal asignada");

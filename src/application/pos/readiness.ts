@@ -63,6 +63,7 @@ export async function getPosReadiness(organizationId:string,storeId:string) {
   const products=catalog.map(product=>{
     const recipes=modes.map(mode=>{
       const errors:string[]=[];
+      const warnings:string[]=[];
       const consumption=new Map<string,{name:string;required:number;unit:string}>();
       const components=product.serviceRecipes[mode].components;
       if(!components.length)errors.push("Falta configurar receta.");
@@ -119,11 +120,12 @@ export async function getPosReadiness(organizationId:string,storeId:string) {
       }
       for(const [key,needed] of consumption){
         const balance=stock.get(key);
-        if(balance==null)errors.push("Sin saldo inicial: "+needed.name);
-        else if(balance+0.000001<needed.required)errors.push(
-          "Sin existencias: "+needed.name+" (requiere "+needed.required+" "+needed.unit+")");
+        // Stock teórico incompleto o negativo es alerta de reabasto, NO bloqueo.
+        if(balance==null)warnings.push("Sin conteo inicial: "+needed.name);
+        else if(balance+0.000001<needed.required)warnings.push(
+          "Reabastecer: "+needed.name+" (requiere "+needed.required+" "+needed.unit+")");
       }
-      return {mode,ready:errors.length===0,errors,trackedCount:consumption.size,
+      return {mode,ready:errors.length===0,errors,warnings,trackedCount:consumption.size,
         costOnlyCount:components.filter(isCostOnlyComponent).length};
     });
     return {id:product.id,name:product.name,category:product.category,price:product.price,recipes};

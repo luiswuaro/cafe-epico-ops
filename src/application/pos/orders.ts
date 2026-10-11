@@ -1,6 +1,8 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
+import {deriveCommandTimeline} from "@/src/domain/pos/command-timing";
 import { getDb } from "@/src/infrastructure/db/client";
 import {
+  auditEvents,
   employees,
   posCustomers,
   posOrderLines,
@@ -48,6 +50,7 @@ export async function getOpenPosOrders(
   const lines = await db
     .select({
       id: posOrderLines.id,
+      catalogId: posOrderLines.catalogExternalId,
       orderId: posOrderLines.orderId,
       name: posOrderLines.nameSnapshot,
       category: posOrderLines.categorySnapshot,
@@ -62,10 +65,24 @@ export async function getOpenPosOrders(
     .where(inArray(posOrderLines.orderId, rows.map((row) => row.id)))
     .orderBy(asc(posOrderLines.createdAt));
 
-  return rows.map((row) => ({
-    ...row,
-    lines: lines.filter((line) => line.orderId === row.id).map(line=>({
-      ...line,isAdditionalRound:line.expectedConsumption?.additionalRound===true,
-    })),
-  }));
+  const events=await db.select({
+    entityId:auditEvents.entityId,action:auditEvents.action,
+    createdAt:auditEvents.createdAt,afterData:auditEvents.afterData,
+  }).from(auditEvents).where(and(
+    eq(auditEvents.organizationId,organizationId),
+    eq(auditEvents.entityType,"pos_order"),
+    inArray(auditEvents.entityId,rows.map(row=>row.id)),
+    inArray(auditEvents.action,["POS_COMMAND_PRINT_ACKNOWLEDGED","POS_COMMAND_STATUS_CHANGED"]),
+  ));
+  return rows.map(row=>{
+    const orderLines=lines.filter(line=>line.orderId===row.id);
+    const timing=deriveCommandTimeline(row.createdAt,
+      orderLines.map(line=>({createdAt:line.createdAt,expectedConsumption:line.expectedConsumption})),
+      events.filter(event=>event.entityId===row.id));
+    return {...row,...timing,
+      lines:orderLines.map(line=>({
+        ...line,isAdditionalRound:line.expectedConsumption?.additionalRound===true,
+      })),
+    };
+  });
 }

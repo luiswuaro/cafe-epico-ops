@@ -1,5 +1,6 @@
 "use server";
 
+import {assertNoPreviewMutation} from "@/src/shared/preview-guard";
 import { and, eq, sql } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { z } from "zod";
@@ -29,6 +30,7 @@ function message(error:unknown) {
 }
 
 export async function addProductsToLiveCommand(data:FormData){
+  assertNoPreviewMutation();
   const {user,employee}=await getCurrentEmployee();
   if(!employee.homeStoreId)throw new Error("Sin sucursal.");
   await assertEmployeePermission(employee.id,"pos.sell",employee.homeStoreId);
@@ -134,6 +136,7 @@ export async function addProductsToLiveCommand(data:FormData){
 }
 
 export async function setLiveCommandCustomer(data:FormData){
+  assertNoPreviewMutation();
   const {user,employee}=await getCurrentEmployee();
   if(!employee.homeStoreId)throw new Error("Sin sucursal.");
   await assertEmployeePermission(employee.id,"pos.sell",employee.homeStoreId);
@@ -174,6 +177,7 @@ export async function setLiveCommandCustomer(data:FormData){
 }
 
 export async function createLiveCommandCustomer(data:FormData){
+  assertNoPreviewMutation();
   const {user,employee}=await getCurrentEmployee();
   if(!employee.homeStoreId)throw new Error("Sin sucursal.");
   await assertEmployeePermission(employee.id,"pos.sell",employee.homeStoreId);

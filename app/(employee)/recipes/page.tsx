@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getEmployeeRecipeBook } from "@/src/application/loyverse/recipe-book";
+import { getEmployeePosRecipeBook } from "@/src/application/recipes/pos-bar-book";
 import {
   isOperationalRecipeCategory,
   OPERATIONAL_RECIPE_CATEGORIES,
@@ -23,7 +23,7 @@ export default async function RecipesPage({
 }) {
   const params = await searchParams;
   const { employee } = await getCurrentEmployee();
-  const recipes = await getEmployeeRecipeBook(employee.organizationId);
+  const recipes = await getEmployeePosRecipeBook(employee.organizationId);
 
   const query =
     typeof params.q === "string" ? normalize(params.q) : "";
@@ -53,8 +53,8 @@ export default async function RecipesPage({
         <p className="eyebrow">RECETARIO DE BARRA</p>
         <h1>Recetas</h1>
         <p className="muted">
-          Una receta operativa por bebida o alimento. El recetario solo usa
-          tres categorías: Calientes, Frías y Alimentos.
+          Recetas sincronizadas con el inventario del POS. Selecciona Aquí o Para llevar
+          para ver exactamente los componentes registrados para cada servicio.
         </p>
       </section>
 
@@ -151,9 +151,12 @@ export default async function RecipesPage({
                   <article className="card recipe-card" key={recipe.id}>
                     <h3>{recipe.name}</h3>
                     <p className="muted">
-                      {recipe.components.length} componente(s) de operación
+                      {recipe.serviceRecipes.DINE_IN.coffeeExtraction?.label?
+                        recipe.serviceRecipes.DINE_IN.coffeeExtraction.label+" · ":""}
+                      {recipe.serviceRecipes.DINE_IN.ingredients.length} ingrediente(s) ·
+                      {recipe.serviceRecipes.TAKEAWAY.configured?" Aquí / Llevar":" Pendiente de configuración"}
                     </p>
-                    <Link href={"/recipes/" + recipe.id} className="button">
+                    <Link href={"/recipes/" + encodeURIComponent(recipe.id)} className="button">
                       Ver receta
                     </Link>
                   </article>

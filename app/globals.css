@@ -2740,3 +2740,197 @@ details[open]>.ops-chevron,details[open]>summary>.ops-chevron{transform:rotate(1
   outline:2px solid var(--epic-accent);
   outline-offset:2px;
 }
+
+/* OPS FAST LANE · preview desktop: desktop-first POS, no wasted outer margins. */
+@media (min-width: 1024px){
+  main.pos-shell{max-width:none;width:100%;padding:.55rem clamp(.6rem,1.15vw,1.5rem) 1rem}
+  main.pos-shell .pos-hero{padding:.1rem 0 .45rem;gap:.35rem;align-items:center}
+  main.pos-shell .pos-hero h1{font-size:clamp(1.4rem,2vw,2rem);margin:0}
+  main.pos-shell .pos-hero .muted{font-size:.77rem;line-height:1.25;margin:0}
+  main.pos-shell .pos-hero .eyebrow{display:none}
+  main.pos-shell .pos-layout.pos-layout-mobile-cart{display:grid;grid-template-columns:minmax(0,1fr) minmax(330px,29%);gap:.75rem;align-items:start}
+  main.pos-shell .pos-catalog{min-width:0}
+  main.pos-shell .pos-product-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:.45rem}
+  main.pos-shell .pos-product-card{min-height:92px;padding:.62rem .7rem;border-radius:11px}
+  main.pos-shell .pos-product-card strong{font-size:.91rem}
+  main.pos-shell .pos-product-card .eyebrow{font-size:.63rem}
+  main.pos-shell .pos-toolbar{padding:.5rem .65rem;margin-bottom:.48rem}
+  main.pos-shell .pos-toolbar input{margin-top:0;padding:.52rem .7rem}
+  main.pos-shell .pos-category-tabs{margin-top:.35rem}
+  main.pos-shell .pos-category-tabs button{padding:.34rem .6rem;font-size:.83rem}
+  main.pos-shell .pos-cart{position:sticky;top:4.1rem;max-height:calc(100dvh - 4.7rem);overflow-y:auto;overscroll-behavior:contain}
+}
+.pos-fast-tickets{display:flex;align-items:center;gap:.65rem;padding:.45rem .6rem;
+  border:1px solid var(--epic-border,var(--line));background:var(--epic-card,var(--surface));
+  border-radius:12px;margin:.25rem 0 .6rem;font-size:.84rem;min-width:0}
+.pos-fast-tickets>strong{white-space:nowrap}
+.pos-fast-tickets-scroll{display:flex;align-items:center;gap:.32rem;min-width:0;flex:1;overflow-x:auto;scrollbar-width:thin}
+.pos-fast-ticket{flex:none;padding:.4rem .65rem;border-radius:9px;
+  border:1px solid var(--epic-border,var(--line));font-weight:750;white-space:nowrap}
+.pos-fast-ticket:hover,.pos-fast-ticket:focus-visible{outline:2px solid var(--epic-accent,var(--ink))}
+.pos-fast-all{font-weight:750;white-space:nowrap;padding:.35rem .5rem}
+.pos-secondary-links{margin:.8rem 0 0;border-top:1px solid var(--epic-border,var(--line));padding:.65rem 0}
+.pos-secondary-links summary{cursor:pointer;font-weight:700;color:var(--epic-secondary,var(--muted));font-size:.84rem}
+.pos-secondary-links .pos-context-links{margin-top:.6rem}
+@media(max-width:700px){
+  .pos-fast-tickets{flex-wrap:wrap}
+  .pos-fast-tickets-scroll{order:3;flex-basis:100%}
+}
+
+/* OPS Fast Lane: medidores de barra y mesas, con contrastes accesibles. */
+.command-live-timing{display:flex;flex-wrap:wrap;gap:.35rem .8rem;
+  padding:.52rem .62rem;background:var(--epic-soft,#f1ece2);
+  border:1px solid var(--epic-border,var(--line));border-radius:10px;
+  font-size:.82rem;font-variant-numeric:tabular-nums}
+.command-live-timing span{white-space:nowrap}
+.command-live-timing strong{font-weight:800}
+.command-live-timing-attention{border-inline-start:4px solid #b87916}
+.command-live-timing-late{border-inline-start:4px solid #aa3939}
+.command-card .section-heading h2{font-size:1.08rem;margin:0}
+@media(min-width:1200px){
+  .command-board{grid-template-columns:repeat(auto-fill,minmax(325px,1fr))}
+  .command-card{gap:.5rem;padding:.75rem}
+  .command-status-actions button{padding:.65rem .75rem}
+}
+
+/* OPS service time analytics — wide, readable, no invented metrics. */
+.ops-performance-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.7rem;margin-bottom:.7rem}
+.ops-performance-kpis .metric{font-size:clamp(1.35rem,2.4vw,2.2rem);display:block}
+.ops-performance-method{font-size:.82rem;line-height:1.55}
+.ops-performance-scroll{max-width:100%;overflow-x:auto;border:1px solid var(--epic-border,var(--line));border-radius:14px;background:var(--epic-card,var(--surface))}
+.ops-performance-table{width:100%;border-collapse:collapse;font-size:.83rem;text-align:left}
+.ops-performance-table th,.ops-performance-table td{padding:.7rem;border-bottom:1px solid var(--epic-border,var(--line));white-space:nowrap}
+.ops-performance-table td small{display:block;color:var(--epic-secondary,var(--muted));font-size:.7rem;margin-top:.2rem}
+.ops-performance-table thead{background:var(--epic-soft,#f3ede3)}
+.ops-performance-table tr:hover{background:var(--epic-soft,#f3ede3)}
+.ops-performance-table a{font-weight:800;text-decoration:underline}
+@media(max-width:800px){.ops-performance-kpis{grid-template-columns:1fr}}
+
+/* Single-tap table selection and keyboard navigation, preserving mobile. */
+.pos-table-shortcuts{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:.3rem}
+.pos-table-shortcuts button{padding:.6rem .2rem;min-height:39px;border-radius:9px;
+  border:1px solid var(--epic-border,var(--line));background:var(--epic-field,var(--surface));
+  color:var(--epic-fg,var(--ink));font-weight:800}
+.pos-table-shortcuts button.active,.pos-table-shortcuts button[aria-pressed="true"]{
+  background:var(--epic-accent,var(--ink));color:var(--epic-accent-contrast,#fff);
+  border-color:var(--epic-accent,var(--ink))}
+.pos-table-shortcuts button:focus-visible{outline:3px solid var(--epic-accent,var(--ink));outline-offset:2px}
+@media(max-width:460px){.pos-table-shortcuts{grid-template-columns:repeat(3,minmax(0,1fr))}}
+
+/* El cliente es opcional; no ocupar un tercio de la cuenta en ventas rápidas. */
+.pos-optional-customer{border:1px solid var(--epic-border,var(--line));border-radius:10px;padding:.65rem .7rem}
+.pos-optional-customer summary{cursor:pointer;display:flex;justify-content:space-between;gap:1rem;font-size:.83rem;font-weight:750}
+.pos-optional-customer summary strong{font-weight:750;color:var(--epic-secondary,var(--muted))}
+.pos-optional-customer[open] summary{margin-bottom:.7rem}
+.pos-optional-customer .pos-customer-box{box-shadow:none;border:0;padding:.35rem}
+
+/* Fast Lane theme parity: controls, text and surfaces share appearance tokens. */
+main.pos-shell .pos-fast-tickets,
+main.pos-shell .pos-optional-customer,
+main.pos-shell .ops-performance-scroll {
+  background:var(--epic-card);color:var(--epic-fg);border-color:var(--epic-border);
+}
+main.pos-shell .pos-fast-ticket,
+main.pos-shell .pos-fast-all {
+  color:var(--epic-fg);
+}
+main.pos-shell .pos-fast-ticket {
+  background:var(--epic-field);border-color:var(--epic-border);
+}
+main.pos-shell .pos-secondary-links summary,
+main.pos-shell .pos-optional-customer summary strong {
+  color:var(--epic-secondary);
+}
+main.pos-shell .pos-optional-customer summary,
+main.pos-shell .pos-cart :is(h2,h3,.pos-total,.pos-total strong,summary),
+main.pos-shell .command-live-timing,
+main.pos-shell .ops-performance-table {
+  color:var(--epic-fg);
+}
+main.pos-shell .command-live-timing,
+main.pos-shell .ops-performance-table thead {
+  background:var(--epic-soft);
+}
+main.pos-shell .ops-performance-table {
+  background:var(--epic-card);
+}
+main.pos-shell .pos-table-shortcuts button:not(.active) {
+  color:var(--epic-fg);background:var(--epic-field);border-color:var(--epic-border);
+}
+main.pos-shell .pos-table-shortcuts button.active,
+main.pos-shell .pos-table-shortcuts button[aria-pressed="true"] {
+  color:var(--epic-accent-contrast);background:var(--epic-accent);border-color:var(--epic-accent);
+}
+/* Both manual themes and system appearance take their palette from these
+   semantic variables, not from fixed light-mode colors. */
+
+/* Barra: recetario vivo de OPS (la misma receta que descuenta inventario). */
+.recipe-ops-shell .hero{padding-bottom:.6rem}
+.recipe-ops-modes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.45rem;margin-bottom:.8rem}
+.recipe-ops-modes a{padding:.78rem;border:1px solid var(--epic-border);border-radius:11px;
+  text-align:center;font-weight:800;background:var(--epic-card);color:var(--epic-fg)}
+.recipe-ops-modes a.active{background:var(--epic-accent);color:var(--epic-accent-contrast);border-color:var(--epic-accent)}
+.recipe-ops-list{margin-bottom:.75rem}
+.recipe-ops-list h2{font-size:1.18rem;margin:.2rem 0}
+.recipe-ops-line{display:flex;align-items:center;justify-content:space-between;gap:1rem;
+  padding:.7rem 0;border-bottom:1px solid var(--epic-border);color:var(--epic-fg)}
+.recipe-ops-line:last-child{border-bottom:0}
+.recipe-ops-line span{display:grid;gap:.15rem}
+.recipe-ops-amount{font-size:1.3rem;font-variant-numeric:tabular-nums;white-space:nowrap}
+.recipe-ops-calculations summary{color:var(--epic-secondary);cursor:pointer;font-weight:750}
+.recipe-ops-calculations p{margin:.8rem 0}
+.recipe-ops-source{font-size:.83rem;line-height:1.55;margin:1rem 0}
+@media(max-width:600px){.recipe-ops-amount{font-size:1.08rem}}
+
+.recipe-consistency-kpis{margin-bottom:.85rem}
+.recipe-consistency-scroll{overflow-x:auto;border:1px solid var(--epic-border);border-radius:12px;background:var(--epic-card)}
+.recipe-consistency-table{border-collapse:collapse;width:100%;text-align:left}
+.recipe-consistency-table th,.recipe-consistency-table td{
+  padding:.65rem .7rem;border-bottom:1px solid var(--epic-border);white-space:nowrap;color:var(--epic-fg)}
+.recipe-consistency-table th{background:var(--epic-soft)}
+.recipe-consistency-table tr:hover{background:var(--epic-soft)}
+
+/* Fast Lane: reabasto de 1 vistazo, semántica de color compatible con ambos temas. */
+.pos-replenishment-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.65rem;margin:.7rem 0}
+.pos-replenishment-kpis .metric{display:block;font-size:clamp(1.6rem,2.5vw,2.3rem)}
+.pos-replenishment-method{font-size:.81rem;line-height:1.5;margin:.65rem 0}
+.pos-replenishment-copy{display:flex;gap:.65rem;align-items:center;margin:.7rem 0}
+.pos-replenishment-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,330px),1fr));gap:.55rem;margin-top:.6rem}
+.pos-replenishment-item{padding:.85rem;display:grid;gap:.65rem;background:var(--epic-card);border-color:var(--epic-border);color:var(--epic-fg)}
+.pos-replenishment-top{display:flex;align-items:flex-start;justify-content:space-between;gap:.7rem}
+.pos-replenishment-top h2{font-size:1.02rem;margin:.4rem 0 0}
+.pos-replenishment-stock{font-size:1.11rem;white-space:nowrap;font-variant-numeric:tabular-nums}
+.pos-replenishment-state{display:inline-block;padding:.22rem .55rem;border-radius:7px;
+  font-size:.7rem;font-weight:800;background:var(--epic-soft);color:var(--epic-fg);border:1px solid var(--epic-border)}
+.pos-replenishment-state-AGOTADO,.pos-replenishment-state-SIN_CONTEO{border-left:4px solid #b64936}
+.pos-replenishment-state-BAJO_MINIMO,.pos-replenishment-state-POCAS_PORCIONES{border-left:4px solid #b78720}
+.pos-replenishment-bottom{display:grid;gap:.28rem;color:var(--epic-secondary);font-size:.79rem}
+.pos-replenishment-bottom strong{color:var(--epic-fg)}
+@media(max-width:700px){.pos-replenishment-kpis{grid-template-columns:1fr}.pos-replenishment-top{flex-wrap:wrap}}
+
+/* Barista: lectura de receta sin abandonar la captura ni la comanda activa. */
+.pos-inline-recipe{display:inline-block;margin:.22rem 0 .4rem;
+ padding:.2rem .36rem;border-radius:6px;font-size:.75rem;
+ font-weight:800;color:var(--epic-fg);background:var(--epic-soft);
+ border:1px solid var(--epic-border);text-decoration:none}
+.pos-inline-recipe:hover,.pos-inline-recipe:focus-visible{outline:2px solid var(--epic-accent)}
+
+/* Receta operativa: extracción explícita sin cambiar el escandallo nativo OPS. */
+.recipe-ops-extraction{margin-bottom:.78rem;padding:1rem;
+  background:var(--epic-card);color:var(--epic-fg);border:2px solid var(--epic-accent)}
+.recipe-ops-extraction-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:.9rem}
+.recipe-ops-extraction-heading h2{font-size:clamp(1.5rem,2.3vw,2.2rem);margin:.1rem 0 .35rem}
+.recipe-ops-extraction-heading p{margin:.3rem 0;color:var(--epic-secondary)}
+.recipe-ops-extraction-tag{border-radius:7px;padding:.27rem .6rem;white-space:nowrap;
+  background:var(--epic-accent);color:var(--epic-accent-contrast);font-size:.7rem;font-weight:850}
+.recipe-ops-extraction-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.5rem;margin:.9rem 0}
+.recipe-ops-extraction-metrics>div{display:grid;gap:.3rem;padding:.7rem;border-radius:9px;
+  background:var(--epic-soft);color:var(--epic-fg)}
+.recipe-ops-extraction-metrics small{color:var(--epic-secondary);font-size:.76rem}
+.recipe-ops-extraction-metrics strong{font-size:1.25rem;font-variant-numeric:tabular-nums}
+.recipe-ops-extraction-stock{font-size:.78rem;line-height:1.5;
+  color:var(--epic-secondary);border-top:1px solid var(--epic-border);padding-top:.75rem;margin-bottom:0}
+.recipe-ops-extraction-stock strong{color:var(--epic-fg)}
+@media(max-width:520px){.recipe-ops-extraction-metrics{grid-template-columns:1fr}
+ .recipe-ops-extraction-metrics>div{display:flex;justify-content:space-between;align-items:center;gap:.5rem}
+ .recipe-ops-extraction-metrics strong{font-size:1.05rem}}

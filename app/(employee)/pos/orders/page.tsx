@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { CommandBoardAutoRefresh } from "./auto-refresh";
+import {CommandTimer} from "./command-timer";
 import { KitchenPrintButton } from "./kitchen-print-button";
 import { AutoKitchenPrint } from "./auto-kitchen-print";
 import { kitchenOrderIdentity } from "@/src/application/pos/kitchen-slip";
@@ -28,10 +29,6 @@ const money = new Intl.NumberFormat("es-MX", {
   style: "currency",
   currency: "MXN",
 });
-
-function elapsedMinutes(date: Date) {
-  return Math.max(0, Math.floor((Date.now() - date.getTime()) / 60_000));
-}
 
 function statusLabel(status: string) {
   if (status === "SENT") return "NUEVA";
@@ -70,6 +67,7 @@ export default async function PosOrdersPage({
     getPosExtraCatalog(employee.organizationId),
   ]);
 
+  const knownRecipes=new Set(catalog.map(product=>product.id));
   // Sólo acciones de guardado confirmadas incluyen autoKitchen=saved.
   // Nunca iniciar una impresión al abrir / refrescar Comandas normalmente.
   const autoId=typeof params.created==="string"?params.created
@@ -91,6 +89,7 @@ export default async function PosOrdersPage({
       {autoOrder&&autoRoundId&&autoOrder.lines.some(line=>
         (line.expectedConsumption?.roundId||"INITIAL")===autoRoundId
       )&&<AutoKitchenPrint
+        orderId={autoOrder.id}
         event="saved"
         eventId={autoOrder.id+":"+autoRoundId}
         roundId={autoRoundId}
@@ -137,6 +136,12 @@ export default async function PosOrdersPage({
           <Link href="/pos" className="button">
             + Nueva orden
           </Link>
+          <Link href="/pos/performance" className="button">
+            Tiempos y eficiencia
+          </Link>
+          <Link href="/pos/reabasto" className="button" target="_blank" rel="noopener noreferrer">
+            Reabasto rápido
+          </Link>
         </div>
       </section>
 
@@ -160,8 +165,7 @@ export default async function PosOrdersPage({
                 <div className="section-heading">
                   <div>
                     <p className="eyebrow">
-                      {order.mode === "LIVE" ? "LIVE · " : "ESPEJO · "}{statusLabel(order.status)} ·{" "}
-                      {elapsedMinutes(order.createdAt)} min
+                      {order.mode === "LIVE" ? "LIVE · " : "ESPEJO · "}{statusLabel(order.status)}
                     </p>
                     <h2>
                       {kitchenOrderIdentity({
@@ -174,6 +178,14 @@ export default async function PosOrdersPage({
                   <strong>{money.format(Number(order.total))}</strong>
                 </div>
 
+                <CommandTimer
+                  createdAt={order.createdAt.toISOString()}
+                  roundStartedAt={order.roundStartedAt.toISOString()}
+                  printAckAt={order.printAckAt?.toISOString()??null}
+                  preparingAt={order.preparingAt?.toISOString()??null}
+                  readyAt={order.readyAt?.toISOString()??null}
+                  serviceMode={order.serviceMode} status={order.status}
+                />
                 <div className="command-lines">
                   {order.lines.map((line,index) => (
                     <div key={line.id}>
@@ -196,6 +208,12 @@ export default async function PosOrdersPage({
                         {extraLabels(line.expectedConsumption,{showPrices:true}).map((label,i)=>
                           <div key={i} className="command-line-note">↳ {label}</div>)}
                         {line.note && <div className="command-line-note">↳ {line.note}</div>}
+                        {knownRecipes.has(line.catalogId)&&
+                          <Link className="pos-inline-recipe" target="_blank" rel="noopener noreferrer"
+                            href={"/recipes/"+encodeURIComponent(line.catalogId)+
+                              (line.expectedConsumption?.serviceMode==="TAKEAWAY"?"?servicio=llevar":"")}>
+                            Ver receta ↗
+                          </Link>}
                       </div>
                     </div>
                   ))}
@@ -264,6 +282,7 @@ export default async function PosOrdersPage({
 
                 {(order.mode==="LIVE"||order.mode==="SHADOW")&&
                   <KitchenPrintButton
+                    orderId={order.id}
                     slip={{
                       folio:order.folio,
                       ...kitchenOrderIdentity({ticketLabel:order.tableLabel,customerName:order.customerName,folio:order.folio}),

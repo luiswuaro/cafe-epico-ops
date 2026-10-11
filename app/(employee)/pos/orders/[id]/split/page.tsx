@@ -7,7 +7,7 @@ import { getCashState } from "@/src/application/pos/cash";
 import { getPosCustomers } from "@/src/application/pos/customers";
 import { getOrderSplitState } from "@/src/application/pos/splits";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
-import { assertEmployeePermission,employeeHasPermission } from "@/src/infrastructure/auth/permissions";
+import { assertEmployeePermission } from "@/src/infrastructure/auth/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -34,7 +34,7 @@ export default async function SplitOrderPage({
     employee.homeStoreId,
   );
 
-  const [state, cash, customers, canOverrideStock] = await Promise.all([
+  const [state, cash, customers] = await Promise.all([
     getOrderSplitState(
       employee.organizationId,
       employee.homeStoreId,
@@ -42,7 +42,6 @@ export default async function SplitOrderPage({
     ),
     getCashState(employee.organizationId, employee.homeStoreId),
     getPosCustomers(employee.organizationId),
-    employeeHasPermission(employee.id,"inventory.adjust",employee.homeStoreId),
   ]);
 
   if (!state) throw new Error("Orden no encontrada");
@@ -153,11 +152,7 @@ export default async function SplitOrderPage({
                         </option>)}
                       </select>
                     </label>
-                    {canOverrideStock&&<label>
-                      <input type="checkbox" name="allowStockShortage"/>
-                      {" "}Autorizar diferencia de inventario (sólo propietario)
-                      <small className="muted">Si el producto ya se entregó, registra consumo negativo auditado y realiza conteo físico.</small>
-                    </label>}
+
                   </>}
                   <button type="submit">
                     Cobrar {money.format(Number(split.total))}

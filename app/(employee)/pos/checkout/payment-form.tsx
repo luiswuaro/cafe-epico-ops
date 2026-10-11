@@ -8,14 +8,13 @@ type Method="CASH"|"CARD"|"TRANSFER";
 const money=new Intl.NumberFormat("es-MX",{style:"currency",currency:"MXN"});
 
 export function CheckoutPaymentForm({
-  orderId,total,cashOpen,canOverrideStock,partialPaid,customers,initialCustomerId,
+  orderId,total,cashOpen,partialPaid,customers,initialCustomerId,
 }:{
-  orderId:string;total:number;cashOpen:boolean;canOverrideStock:boolean;
+  orderId:string;total:number;cashOpen:boolean;
   partialPaid:boolean;customers:CheckoutCustomer[];initialCustomerId:string|null;
 }){
   const [method,setMethod]=useState<Method>(cashOpen?"CASH":"CARD");
   const [tendered,setTendered]=useState(total.toFixed(2));
-  const [allowShortage,setAllowShortage]=useState(false);
   const [customerId,setCustomerId]=useState(initialCustomerId??"");
   const [createdCustomer,setCreatedCustomer]=useState<CheckoutCustomer|null>(null);
   const [redeemPoints,setRedeemPoints]=useState("0");
@@ -62,13 +61,6 @@ export function CheckoutPaymentForm({
         </>:<p className="muted">{remaining>0
           ?"Antes de registrar el pago, confirma el cobro en la terminal o banco. OPS no realiza cargos externos."
           :"El servidor verificará el saldo de puntos antes de registrar la venta."}</p>}
-        {canOverrideStock&&<label className="stack">
-          <span><input name="allowStockShortage" type="checkbox" checked={allowShortage}
-            onChange={e=>setAllowShortage(e.target.checked)}/>
-            {" "}Autorizar venta de producto físicamente entregado aunque exista faltante teórico
-          </span>
-          <small className="muted">Solo propietario. Se registrará auditoría y requerirá conteo.</small>
-        </label>}
         <button type="submit" className="pos-pay-button"
           disabled={invalidCanje||(remaining>0&&method==="CASH"&&(!tendered.trim()||change<0))}>
           {remaining===0?"Confirmar canje · "+points.toFixed(2)+" pts":
