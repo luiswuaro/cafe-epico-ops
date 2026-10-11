@@ -11,7 +11,7 @@ try{
   target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS,
  }}).outputText;
  fs.writeFileSync(path.join(temp,"bag.cjs"),compiled);
- const {calculatePaperBagPlan,incrementalPaperBags}=createRequire(path.join(temp,"test.cjs"))("./bag.cjs");
+ const {calculatePaperBagPlan,incrementalPaperBags,isPaperBagInventoryItem}=createRequire(path.join(temp,"test.cjs"))("./bag.cjs");
  const hojaldra=(n,mode="TAKEAWAY")=>({name:"HOJALDRA",category:"ALIMENTOS",serviceMode:mode,quantity:n});
  const croissant=(n)=>({name:"CROISSANT JAMÓN CON QUESO",category:"ALIMENTOS",serviceMode:"TAKEAWAY",quantity:n});
  for(const [n,bags] of [[0,0],[1,1],[2,1],[3,1],[4,2],[5,2],[6,2],[7,3]]){
@@ -23,7 +23,15 @@ try{
  assert.equal(incrementalPaperBags([hojaldra(2)],[hojaldra(1)]),0);
  assert.equal(incrementalPaperBags([hojaldra(3)],[hojaldra(2)]),1);
  assert.equal(incrementalPaperBags([],[croissant(3)]),3);
+ for(const name of ["BOLSA PAPEL","BOLSA DE PAPEL","Bolsa de papel","bolsa papel"]){
+  assert.equal(isPaperBagInventoryItem({name,unit:"pz",trackingType:"QUANTITY"}),true);
+ }
+ for(const name of ["BOLSA ALIMENTOS QA","MANGA DE PAPEL","BOLSA PLÁSTICO"]){
+  assert.equal(isPaperBagInventoryItem({name,unit:"pz",trackingType:"QUANTITY"}),false);
+ }
+ assert.equal(isPaperBagInventoryItem({name:"BOLSA PAPEL",unit:"g",trackingType:"QUANTITY"}),false);
+ assert.equal(isPaperBagInventoryItem({name:"BOLSA PAPEL",unit:"pz",trackingType:"COST_ONLY"}),false);
  const catalog=fs.readFileSync("app/(admin)/admin/pos/packaging/page.tsx","utf8");
- assert.ok(catalog.includes("BOLSA DE PAPEL"));
+ assert.ok(catalog.includes("BOLSA PAPEL"));
  console.log("OPS PACKAGING: 1-7 hojaldras, croissant, dine-in and split incremental PASS");
 }finally{fs.rmSync(temp,{recursive:true,force:true});}

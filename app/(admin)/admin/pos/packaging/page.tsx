@@ -3,7 +3,7 @@ import {and,eq} from "drizzle-orm";
 import {requirePermission} from "@/src/infrastructure/auth/permissions";
 import {getDb} from "@/src/infrastructure/db/client";
 import {inventoryItems} from "@/src/infrastructure/db/schema";
-import {calculatePaperBagPlan} from "@/src/domain/pos/paper-bag-packaging";
+import {isPaperBagInventoryItem} from "@/src/domain/pos/paper-bag-packaging";
 import {PackagingSimulator} from "./simulator";
 export const dynamic="force-dynamic";
 export default async function PackagingAdmin(){
@@ -12,8 +12,9 @@ export default async function PackagingAdmin(){
     unit:inventoryItems.canonicalUnit,tracking:inventoryItems.trackingType})
    .from(inventoryItems).where(and(eq(inventoryItems.organizationId,organizationId),
      eq(inventoryItems.isActive,true)));
- const matches=bags.filter(i=>i.name.normalize("NFD").replace(/[\u0300-\u036f]/g,"")
-   .toUpperCase().trim()==="BOLSA DE PAPEL"&&i.unit==="pz"&&i.tracking==="QUANTITY");
+ const matches=bags.filter(i=>isPaperBagInventoryItem({
+   name:i.name,unit:i.unit,trackingType:i.tracking,
+ }));
  const canDeduct=matches.length===1;
  return <main className="shell pos-shell">
    <header className="hero pos-hero"><div>
@@ -37,12 +38,12 @@ export default async function PackagingAdmin(){
     {canDeduct?<p className="status-ok">Insumo listo: {matches[0].name} · unidad pz.
      Se utilizará al liquidar los pedidos para llevar.</p>:
      <p className="status-warn" role="alert">No se encontró exactamente un insumo activo
-      «BOLSA DE PAPEL» en unidad pz y con control de cantidad.
+      «BOLSA PAPEL» en unidad pz y con control de cantidad.
       {matches.length>1?" Hay duplicados; corrige el catálogo.":""}
       Las bolsas requeridas quedarán señaladas en el registro de venta,
       pero el inventario no puede descontarlas hasta que exista esa ficha.</p>}
     <p>Desde <Link href="/inventory/ops">Inventario OPS</Link> crea
-     <strong> BOLSA DE PAPEL</strong> en <strong>pz</strong>, con ubicación Barra
+     <strong> BOLSA PAPEL</strong> en <strong>pz</strong>, con ubicación Barra
      y registra el conteo físico. Nunca inventes una existencia inicial.</p>
    </section>
  </main>;

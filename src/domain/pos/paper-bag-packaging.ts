@@ -4,6 +4,16 @@
 export type PackagingLine={name:string;category:string;serviceMode:string;quantity:number};
 const norm=(text:string)=>text.normalize("NFD").replace(/[\u0300-\u036f]/g,"")
   .toUpperCase().replace(/\s+/g," ").trim();
+/** Accepts the inventory label used in Café Épico and the longer label,
+ * but not unrelated bags, ensuring there is exactly one match per organization.
+ */
+export function isPaperBagInventoryItem(item:{
+ name:string;unit:string;trackingType:string;
+}){
+ const label=norm(item.name);
+ return (label==="BOLSA PAPEL"||label==="BOLSA DE PAPEL")&&
+   item.unit==="pz"&&item.trackingType==="QUANTITY";
+}
 export function classifyPaperBagProduct(line:PackagingLine){
   if(line.serviceMode!=="TAKEAWAY"||norm(line.category)!=="ALIMENTOS")return null;
   const name=norm(line.name);

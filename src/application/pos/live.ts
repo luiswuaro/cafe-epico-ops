@@ -1,6 +1,6 @@
 import { and, eq, sql } from "drizzle-orm";
 import {assertNoPreviewMutation} from "@/src/shared/preview-guard";
-import {calculatePaperBagPlan,incrementalPaperBags,type PackagingLine} from "@/src/domain/pos/paper-bag-packaging";
+import {calculatePaperBagPlan,incrementalPaperBags,isPaperBagInventoryItem,type PackagingLine} from "@/src/domain/pos/paper-bag-packaging";
 import { getPosCatalog, type PosServiceMode } from "@/src/application/pos/catalog";
 import {priceExtras, readExtraSnapshots, type ExtraRequest} from "@/src/application/pos/extras";
 import {getPosExtraCatalog} from "@/src/application/pos/extra-catalog";
@@ -467,10 +467,7 @@ export async function checkoutLiveOrder(input:{
       :calculatePaperBagPlan(packagingNow).bags;
     let packagingWarning:string|null=null;
     if(paperBags>0){
-      const bagCandidates=nativeItems.filter(item=>
-        item.name.normalize("NFD").replace(/[\\u0300-\\u036f]/g,"")
-          .toUpperCase().trim()==="BOLSA DE PAPEL"&&
-        item.trackingType==="QUANTITY"&&item.unit==="pz");
+      const bagCandidates=nativeItems.filter(isPaperBagInventoryItem);
       const barLocations=locations.filter(loc=>loc.name.normalize("NFD")
         .replace(/[\\u0300-\\u036f]/g,"").toUpperCase().trim()==="BARRA");
       if(bagCandidates.length===1&&barLocations.length===1){
@@ -481,7 +478,7 @@ export async function checkoutLiveOrder(input:{
           existing.names.add("EMPAQUE DE ALIMENTOS");
         }else consume.set(key,{locationId:loc.id,itemId:bag.id,
           itemName:bag.name,amount:paperBags,unit:"pz",names:new Set(["EMPAQUE DE ALIMENTOS"])});
-      }else packagingWarning="Configura un único insumo activo BOLSA DE PAPEL (pz) en Barra. El empaque físico no se descontó.";
+      }else packagingWarning="Configura un único insumo activo BOLSA PAPEL (pz) en Barra. El empaque físico no se descontó.";
     }
 
     const byStock=new Map(stocks.map(stock=>[mapKey(stock.locationId,stock.inventoryItemId),stock]));
