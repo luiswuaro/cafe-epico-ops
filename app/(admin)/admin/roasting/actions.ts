@@ -576,13 +576,30 @@ export async function recordRoastBatch(formData: FormData) {
       if (
         settings?.defaultStoreId &&
         settings.defaultLocationId &&
-        !lot.hibeanBeanCloudId &&
         lot.greenInventoryItemId &&
         lot.roastedInventoryItemId
       ) {
+        // La entrada tostada pertenece a la ubicación del insumo OPS que
+        // descuenta el POS (usualmente Barra); el café verde sale del almacén.
+        const roastedBalances = await tx
+          .select({ locationId: inventoryBalances.locationId })
+          .from(inventoryBalances)
+          .where(and(
+            eq(inventoryBalances.organizationId, organizationId),
+            eq(inventoryBalances.storeId, settings.defaultStoreId),
+            eq(inventoryBalances.inventoryItemId, lot.roastedInventoryItemId),
+          ))
+          .limit(2);
+        if (roastedBalances.length > 1) {
+          throw new Error("El insumo tostado tiene varias ubicaciones; configura una ubicación única.");
+        }
+        const roastedLocationId =
+          roastedBalances[0]?.locationId ?? settings.defaultLocationId;
+
         const movementRows = [
           {
             inventoryItemId: lot.greenInventoryItemId,
+            locationId: settings.defaultLocationId,
             movementType: "PRODUCTION_CONSUMPTION" as const,
             quantityDelta: -greenWeightG,
             suffix: "GREEN",
@@ -591,6 +608,7 @@ export async function recordRoastBatch(formData: FormData) {
           },
           {
             inventoryItemId: lot.roastedInventoryItemId,
+            locationId: roastedLocationId,
             movementType: "PRODUCTION_OUTPUT" as const,
             quantityDelta: roastedWeightG,
             suffix: "ROASTED",
@@ -603,7 +621,7 @@ export async function recordRoastBatch(formData: FormData) {
           await tx.insert(inventoryMovements).values({
             organizationId,
             storeId: settings.defaultStoreId,
-            locationId: settings.defaultLocationId,
+            locationId: movement.locationId,
             inventoryItemId: movement.inventoryItemId,
             movementType: movement.movementType,
             quantityDelta: String(movement.quantityDelta),
@@ -621,7 +639,7 @@ export async function recordRoastBatch(formData: FormData) {
             .values({
               organizationId,
               storeId: settings.defaultStoreId,
-              locationId: settings.defaultLocationId,
+              locationId: movement.locationId,
               inventoryItemId: movement.inventoryItemId,
               theoreticalQuantity: String(movement.quantityDelta),
             })
