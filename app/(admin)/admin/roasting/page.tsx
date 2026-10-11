@@ -4,6 +4,7 @@ import { RoastingSessionPlanner } from "./session-planner";
 
 import {
   assignRoastBatchToBar,
+  postMissingRoastedOutputs,
   recordRoastBatch,
   recordRoastSensory,
   saveCoffeeLot,
@@ -74,6 +75,23 @@ export default async function RoastingPage({
         )
         .slice(0, 5)
     : [];
+  const yesterday = new Intl.DateTimeFormat("sv-SE", {
+    timeZone: "America/Mexico_City",
+    year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(new Date(Date.now() - 86_400_000));
+  const dayParam = typeof params.backfillDay === "string" ? params.backfillDay : "";
+  const backfillDay = /^\d{4}-\d{2}-\d{2}$/.test(dayParam) ? dayParam : yesterday;
+  const pendingRoastedOutputs = data.batches.filter(
+    (batch) =>
+      batch.roastedAt.toLocaleDateString("sv-SE", {
+        timeZone: "America/Mexico_City",
+      }) === backfillDay &&
+      Boolean(batch.lot?.roastedInventoryItemId) &&
+      !batch.roastedOutputPosted,
+  );
+  const pendingRoastedG = pendingRoastedOutputs.reduce(
+    (total, batch) => total + Number(batch.roastedWeightG), 0,
+  );
 
   return (
     <main className="shell">
@@ -148,6 +166,46 @@ export default async function RoastingPage({
           </div>
           <p>{data.summary.activeLots} lotes activos</p>
         </article>
+      </section>
+
+      <section className="card stack" style={{ marginTop: "1rem" }}>
+        <h2>Regularizar café tostado en inventario OPS</h2>
+        <p className="muted">
+          Los batches importados de HiBean que sólo descontaron café verde pueden
+          tener pendiente su entrada de café tostado. El movimiento se registrará
+          como PRODUCCIÓN (+) en el insumo OPS vinculado al lote, dentro de su
+          ubicación operativa (por ejemplo, Barra), con referencia única al batch.
+        </p>
+        <form method="get" action="/admin/roasting" className="stack">
+          <label>
+            Fecha del tueste
+            <input type="date" name="backfillDay" defaultValue={backfillDay} required />
+          </label>
+          <button type="submit">Consultar batches pendientes</button>
+        </form>
+        <p>
+          <strong>{pendingRoastedOutputs.length}</strong> batches pendientes
+          detectados en el historial reciente ·{" "}
+          <strong>{number.format(pendingRoastedG)} g</strong> de café tostado.
+        </p>
+        {pendingRoastedOutputs.length > 0 &&
+          process.env.VERCEL_ENV !== "preview" && (
+          <form action={postMissingRoastedOutputs} className="stack">
+            <input type="hidden" name="roastedDay" value={backfillDay} />
+            <label>
+              <input type="checkbox" name="confirmed" value="yes" required />{" "}
+              Confirmo que estas entradas no fueron cargadas manualmente a
+              «Inventario OPS». Si hubo alguna entrada manual, primero debo
+              reconciliarla para no duplicar existencias.
+            </label>
+            <button type="submit">
+              Registrar producción faltante de {number.format(pendingRoastedG)} g
+            </button>
+          </form>
+        )}
+        {process.env.VERCEL_ENV === "preview" && (
+          <p className="muted">El preview es de lectura: sólo producción puede registrar existencias.</p>
+        )}
       </section>
 
       <section className="card" style={{ marginTop: "1rem" }}>
@@ -1255,8 +1313,11 @@ export default async function RoastingPage({
               {selectedBatch.profileCheckCount} variables dentro de
               tolerancia. Inventario{" "}
               {selectedBatch.inventoryPosted
-                ? "contabilizado"
-                : "no contabilizado automáticamente"}.
+                ? "con algún movimiento registrado"
+                : "sin movimientos automáticos"}.
+              Café tostado: {selectedBatch.roastedOutputPosted
+                ? "entrada de producción contabilizada"
+                : "entrada de producción pendiente"}.
             </p>
 
             {selectedBatch.diagnostics.peakRor != null && (
