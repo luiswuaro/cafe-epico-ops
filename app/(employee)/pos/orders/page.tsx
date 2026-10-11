@@ -139,7 +139,7 @@ export default async function PosOrdersPage({
           <Link href="/pos/performance" className="button">
             Tiempos y eficiencia
           </Link>
-          <Link href="/pos/reabasto" className="button">
+          <Link href="/pos/reabasto" className="button" target="_blank" rel="noopener noreferrer">
             Reabasto rápido
           </Link>
         </div>
