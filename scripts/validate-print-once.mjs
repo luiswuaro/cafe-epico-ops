@@ -1,0 +1,18 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+const kitchenManual=fs.readFileSync("app/(employee)/pos/orders/kitchen-print-button.tsx","utf8");
+const kitchenAuto=fs.readFileSync("app/(employee)/pos/orders/auto-kitchen-print.tsx","utf8");
+const receiptManual=fs.readFileSync("app/(employee)/pos/receipt/[id]/direct-print-button.tsx","utf8");
+const receiptPage=fs.readFileSync("app/(employee)/pos/receipt/[id]/page.tsx","utf8");
+const hubApi=fs.readFileSync("app/(employee)/pos/printer/hub-actions.ts","utf8");
+assert.ok(kitchenManual.includes("await claimPrintStationJob(jobKey,stationId)"));
+assert.ok(kitchenManual.includes('if(!claimed)'));
+assert.ok(kitchenManual.includes("await recordAuthorizedPrintReprint(jobKey)"));
+assert.ok(kitchenAuto.includes("await claimPrintStationJob(jobKey,stationId)"));
+assert.ok(kitchenAuto.includes("if(!hasBridge)return"));
+assert.ok(receiptManual.includes("await claimPrintStationJob(printJobKey,stationId)"));
+assert.ok(receiptManual.includes("await recordAuthorizedPrintReprint(printJobKey)"));
+assert.ok(receiptPage.includes('?"RECEIPT:"+order.order.id+(split?":"+split.id:""):undefined'));
+assert.ok(hubApi.includes("POS_PRINT_MANUAL_REPRINT_REQUESTED"));
+assert.ok(hubApi.includes("if(events.some(e=>e.action===\"POS_PRINT_HUB_CLAIMED\"))return false"));
+console.log("Impresión unificada: manual/automático estación comparten claim; copia extra explícita PASS");
