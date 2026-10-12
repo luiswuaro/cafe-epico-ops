@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import {printWithPaperCutGap} from "@/src/application/pos/print-paper-gap";
 import {claimPrintStationJob,finishPrintStationJob,recordAuthorizedPrintReprint} from "../../printer/hub-actions";
 
 const STORAGE_KEY = "cafe-epico-printer-bridge-v1";

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import {printWithPaperCutGap} from "@/src/application/pos/print-paper-gap";
 import { KitchenSlip, kitchenCategoryLabel, kitchenRounds, selectedKitchenSlip } from "@/src/application/pos/kitchen-slip";
 
 const TICKET_PRINTER_KEY="cafe-epico-printer-bridge-v1";
