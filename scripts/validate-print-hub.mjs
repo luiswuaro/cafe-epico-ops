@@ -21,3 +21,4 @@ assert.ok(client.includes("acknowledgeKitchenPrint"));
 assert.ok(print.includes("export async function printReceiptWithBridge"));
 assert.ok(kitchen.includes("cafe-epico-print-hub-pc-v1"));
 console.log("Print Hub: worker station, locks, no backfill and no double local firing PASS");
+

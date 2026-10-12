@@ -92,6 +92,7 @@ export default async function PosOrdersPage({
         (line.expectedConsumption?.roundId||"INITIAL")===autoRoundId
       )&&<AutoKitchenPrint
         orderId={autoOrder.id}
+        isLive={autoOrder.mode==="LIVE"}
         event="saved"
         eventId={autoOrder.id+":"+autoRoundId}
         roundId={autoRoundId}
@@ -290,6 +291,7 @@ export default async function PosOrdersPage({
                 {(order.mode==="LIVE"||order.mode==="SHADOW")&&
                   <KitchenPrintButton
                     orderId={order.id}
+                    isLive={order.mode==="LIVE"}
                     slip={{
                       folio:order.folio,
                       ...kitchenOrderIdentity({ticketLabel:order.tableLabel,customerName:order.customerName,folio:order.folio}),

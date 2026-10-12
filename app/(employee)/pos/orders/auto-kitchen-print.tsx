@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { printKitchenSlip } from "./kitchen-print-button";
 import {acknowledgeKitchenPrint} from "./print-timing-actions";
+import {claimPrintStationJob,finishPrintStationJob} from "../printer/hub-actions";
 import { type KitchenSlip } from "@/src/application/pos/kitchen-slip";
 import {autoKitchenModes,type KitchenAutoEvent} from "@/src/domain/pos/kitchen-auto-policy";
 import {
@@ -14,7 +15,7 @@ import {
 export type AutoKitchenEvent = KitchenAutoEvent;
 
 export function AutoKitchenPrint({
-  slip,event,eventId,roundId,orderId,
+  slip,event,eventId,roundId,orderId,isLive=false,
 }:{
   slip:KitchenSlip;
   event:AutoKitchenEvent;
@@ -23,6 +24,7 @@ export function AutoKitchenPrint({
   eventId:string;
   roundId?:string;
   orderId?:string;
+  isLive?:boolean;
 }){
   const handled=useRef<string|null>(null);
   const [message,setMessage]=useState<string|null>(null);
@@ -43,6 +45,10 @@ export function AutoKitchenPrint({
     // DIRECTO: imprimir la orden nueva después de confirmar cobro.
     // PAGO POSTERIOR de una comanda guardada: no reimprimirla jamás.
     const selectedModes=autoKitchenModes(event,autoDineIn,autoTakeaway);
+    // Celulares no tienen el puente local de Windows; se imprime desde la PC.
+    const hasBridge=Boolean(window.localStorage.getItem("cafe-epico-printer-bridge-v1")||
+      window.localStorage.getItem("cafe-epico-kitchen-printer-bridge-v1"));
+    if(!hasBridge)return;
     if(!selectedModes.length)return;
     const eligible=slip.lines.some(line=>
       selectedModes.some(mode=>line.serviceMode===mode)&&
@@ -58,29 +64,48 @@ export function AutoKitchenPrint({
     window.localStorage.setItem(attempt,new Date().toISOString());
 
     let active=true;
-    void printKitchenSlip(slip,event==="saved"?"latest":"all",serviceFilter,roundId)
-      .then(async printer=>{
+    void (async()=>{
+      const selectedRound=roundId??slip.lines.at(-1)?.roundId??"INITIAL";
+      const jobKey=isLive&&orderId?"KITCHEN:"+orderId+":"+selectedRound:null;
+      let stationId:string|null=null;
+      try{
+        if(jobKey){
+          stationId=crypto.randomUUID();
+          const claimed=await claimPrintStationJob(jobKey,stationId);
+          if(!claimed){
+            if(active)setMessage("La estación central ya está procesando o procesó esta comanda.");
+            return;
+          }
+        }
+        const printer=await printKitchenSlip(
+          slip,event==="saved"?"latest":"all",serviceFilter,roundId);
+        if(stationId&&jobKey)await finishPrintStationJob(jobKey,stationId,"DONE",printer);
         let logged=true;
         if(orderId){
-          try{await acknowledgeKitchenPrint({orderId,roundId:roundId??"INITIAL",printer});}
-          catch{logged=false;}
+          try{await acknowledgeKitchenPrint({orderId,roundId:selectedRound,printer})}
+          catch{logged=false}
         }
         if(active){
           setError(!logged);
           setMessage(logged?"Comanda enviada automáticamente a "+printer:
-            "Comanda enviada a "+printer+", pero no se pudo registrar el acuse horario.");
+            "Comanda enviada a "+printer+", sin métrica de impresión.");
         }
-      })
-      .catch(cause=>{
+      }catch(cause){
+        if(stationId&&jobKey){
+          try{await finishPrintStationJob(jobKey,stationId,"FAILED",
+            cause instanceof Error?cause.message:"Puente no disponible")}
+          catch{/* Nunca reintentar automáticamente cuando falta ACK */}
+        }
         if(active){
           setError(true);
-          setMessage("La operación se registró, pero no se confirmó la impresión automática: "+
+          setMessage("No se confirmó la impresión: "+
             (cause instanceof Error?cause.message:"sin conexión")+
-            ". Usa «Imprimir comanda» para reintentar manualmente.");
+            ". Comprueba si ya salió papel antes de reimprimir.");
         }
-      });
+      }
+    })();
     return ()=>{active=false;};
-  },[event,eventId,orderId,roundId,slip]);
+  },[event,eventId,orderId,roundId,slip,isLive]);
 
   return message?<div role={error?"alert":"status"}
     className={"card no-print "+(error?"status-warn":"status-ok")}

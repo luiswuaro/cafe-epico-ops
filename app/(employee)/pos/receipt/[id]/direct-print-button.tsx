@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import {claimPrintStationJob,finishPrintStationJob,recordAuthorizedPrintReprint} from "../../printer/hub-actions";
 
 const STORAGE_KEY = "cafe-epico-printer-bridge-v1";
 const PAPER_WIDTH = 384;
@@ -554,75 +555,68 @@ export function DirectPrintTicketButton({
   ticket,
   template,
   label,
+  printJobKey,
 }: {
   ticket: DirectReceiptPayload;
   template: DirectReceiptTemplate;
   label?: string;
+  printJobKey?: string;
 }) {
   const router = useRouter();
   const [state, setState] = useState<"idle" | "printing" | "ok" | "error">(
     "idle",
   );
+  const [showReprint,setShowReprint]=useState(false);
+  const [message,setMessage]=useState("");
 
-  async function printDirect() {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      router.push("/pos/printer");
-      return;
-    }
-
-    try {
-      const config = JSON.parse(raw) as { url: string; token: string };
-      setState("printing");
-
-      const raster = await buildRasterTicket(ticket, template);
-
-      const response = await fetch(
-        config.url.replace(/\/$/, "") + "/print",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Cafe-Epico-Token": config.token,
-          },
-          body: JSON.stringify({
-            raster,
-            feed: template.feedLines,
-            cut: template.autoCut,
-          }),
-        },
-      );
-
-      const result = (await response.json()) as {
-        ok?: boolean;
-        error?: string;
-      };
-
-      if (!response.ok || !result.ok) {
-        throw new Error(result.error || "No se pudo imprimir");
+  async function printDirect(forceReprint=false) {
+    if(state==="printing")return;
+    const raw=window.localStorage.getItem(STORAGE_KEY);
+    if(!raw){router.push("/pos/printer");return}
+    let stationId:string|null=null;
+    setState("printing");setMessage("");
+    try{
+      if(printJobKey){
+        if(forceReprint){
+          if(!window.confirm("El ticket pudo haberse impreso automáticamente. ¿Enviar otra copia?")){
+            setState("idle");return;
+          }
+          await recordAuthorizedPrintReprint(printJobKey);
+        }else{
+          stationId=crypto.randomUUID();
+          const claimed=await claimPrintStationJob(printJobKey,stationId);
+          if(!claimed){
+            setState("idle");setShowReprint(true);
+            setMessage("El ticket ya fue asignado o impreso por la estación central. No salió otra copia. Revisa el papel antes de reimprimir.");
+            return;
+          }
+        }
       }
-
-      setState("ok");
-      window.setTimeout(() => setState("idle"), 1800);
-    } catch {
-      setState("error");
+      const printer=await printReceiptWithBridge(ticket,template);
+      if(stationId&&printJobKey)
+        await finishPrintStationJob(printJobKey,stationId,"DONE",printer);
+      setState("ok");setMessage("Enviado a "+printer+(forceReprint?" · copia adicional":""));
+    }catch(error){
+      if(stationId&&printJobKey){
+        try{await finishPrintStationJob(printJobKey,stationId,"FAILED",
+          error instanceof Error?error.message:"Error del puente")}
+        catch{/* impresión incierta: no repetir automáticamente */}
+      }
+      setShowReprint(true);setState("error");
+      setMessage((error instanceof Error?error.message:"No se pudo imprimir")+
+        ". Verifica papel y conexión antes de solicitar otra copia.");
     }
   }
 
-  return (
-    <button
-      type="button"
-      className="button no-print"
-      onClick={printDirect}
-      disabled={state === "printing"}
-    >
-      {state === "printing"
-        ? "Renderizando e imprimiendo…"
-        : state === "ok"
-          ? "Impreso ✓"
-          : state === "error"
-            ? "Error · configurar"
-            : label ?? "Imprimir directo ESC/POS"}
+  return <div className="no-print" style={{display:"flex",flexWrap:"wrap",gap:8,alignItems:"center"}}>
+    <button type="button" className="button" onClick={()=>void printDirect()}
+      disabled={state==="printing"}>
+      {state==="printing"?"Enviando…":state==="ok"?"Ticket enviado ✓":label??"Imprimir ticket"}
     </button>
-  );
+    {showReprint&&printJobKey&&<button type="button" className="button"
+      disabled={state==="printing"} onClick={()=>void printDirect(true)}>
+      Reimprimir copia (confirmación)
+    </button>}
+    {message&&<small role="status">{message}</small>}
+  </div>;
 }

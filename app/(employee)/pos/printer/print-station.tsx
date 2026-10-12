@@ -31,8 +31,9 @@ export function PrintStation({template,preview,hiddenMode=false}:{
     setStatus("Configura primero la impresora de tickets y verifica el puente local.");
     return;
   }
-  const keep=state?.since && Date.now()-new Date(state.since).getTime()<72*3600000
-    ?state.since:new Date().toISOString();
+  // Una reactivación voluntaria no reimprime una cola vieja. El refresh
+  // normal conserva el cursor persistido mientras siga activa.
+  const keep=new Date().toISOString();
   const id=state?.stationId||crypto.randomUUID();
   update({enabled:true,since:keep,stationId:id});
   setStatus("Estación activa. Escuchando comandas y tickets de todos los dispositivos.");

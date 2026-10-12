@@ -55,7 +55,10 @@ export default async function KitchenSlipPage({params,searchParams}:{
   return <main className="receipt-shell">
     <div className="receipt-toolbar no-print">
       <Link href="/pos/orders" className="button">Volver a comandas</Link>
-      <PrintTicketButton/>
+      <details className="receipt-browser-fallback">
+        <summary>Impresión de respaldo por navegador (copia adicional)</summary>
+        <PrintTicketButton/>
+      </details>
     </div>
     <section className="card no-print" style={{marginBottom:12}}>
       <h2>Comanda de preparación</h2>
@@ -63,7 +66,7 @@ export default async function KitchenSlipPage({params,searchParams}:{
       {state.order.mode==="SHADOW"&&<p className="status-warn">
         IMPRESIÓN DE PRUEBA: esta comanda es espejo; sólo se envía papel a la impresora local.
       </p>}
-      <KitchenPrintButton slip={slip}
+      <KitchenPrintButton slip={slip} orderId={id} isLive={state.order.mode==="LIVE"}
         viewUrl={"/pos/orders/"+id+"/kitchen?round="+(selection==="latest"?"all":"latest")}/>
       <div className="pos-context-links" style={{marginTop:12}}>
         <Link className="button" href={"/pos/orders/"+id+"/kitchen"}>Última ronda</Link>
