@@ -16,3 +16,9 @@ assert.ok(receiptPage.includes('?"RECEIPT:"+order.order.id+(split?":"+split.id:"
 assert.ok(hubApi.includes("POS_PRINT_MANUAL_REPRINT_REQUESTED"));
 assert.ok(hubApi.includes("if(events.some(e=>e.action===\"POS_PRINT_HUB_CLAIMED\"))return false"));
 console.log("Impresión unificada: manual/automático estación comparten claim; copia extra explícita PASS");
+
+const posPage=fs.readFileSync("app/(employee)/pos/page.tsx","utf8");
+const printIndicator=fs.readFileSync("components/print-job-indicator.tsx","utf8");
+assert.ok(posPage.includes('kind="comanda"'));
+assert.ok(printIndicator.includes("getPrintStationJobStatus(jobKey)"));
+assert.ok(printIndicator.includes("No pulses imprimir otra vez"));

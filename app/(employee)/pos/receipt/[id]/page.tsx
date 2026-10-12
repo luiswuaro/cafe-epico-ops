@@ -7,6 +7,7 @@ import { and, eq } from "drizzle-orm";
 import { DirectPrintTicketButton } from "./direct-print-button";
 import { PrintTicketButton } from "./print-button";
 import { AutoKitchenPrint } from "../../orders/auto-kitchen-print";
+import {PrintJobIndicator} from "@/components/print-job-indicator";
 import { kitchenOrderIdentity } from "@/src/application/pos/kitchen-slip";
 import {extraLabels,preparationNote} from "@/src/application/pos/extras";
 import { getPosPrintSettings } from "@/src/application/pos/print-settings";
@@ -247,6 +248,8 @@ export default async function ReceiptPage({
 
   return (
     <main className="receipt-shell">
+      {order.order.mode==="LIVE"&&order.order.status==="PAID"&&
+        <PrintJobIndicator kind="ticket" jobKey={"RECEIPT:"+order.order.id+(split?":"+split.id:"")}/>}
       {query.autoKitchen==="paid-direct"&&
         (order.order.mode==="LIVE"||order.order.mode==="SHADOW")&&
         order.order.status!=="CANCELLED"&&

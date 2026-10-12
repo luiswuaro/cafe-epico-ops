@@ -7,6 +7,7 @@ import {extraLabels,preparationNote} from "@/src/application/pos/extras";
 import {getPosExtraCatalog} from "@/src/application/pos/extra-catalog";
 import { PosClient } from "./pos-client";
 import { AutoKitchenPrint } from "./orders/auto-kitchen-print";
+import {PrintJobIndicator} from "@/components/print-job-indicator";
 import { kitchenOrderIdentity } from "@/src/application/pos/kitchen-slip";
 import { getShadowOrderMirror } from "@/src/application/pos/mirror";
 import { getPosCatalog } from "@/src/application/pos/catalog";
@@ -92,6 +93,9 @@ export default async function PosPage({
 
   return (
     <main className="shell pos-shell">
+      {params.autoKitchen==="saved"&&selectedTicket&&typeof params.savedRound==="string"&&
+        <PrintJobIndicator kind="comanda"
+          jobKey={"KITCHEN:"+selectedTicket.id+":"+params.savedRound}/>}
       {params.autoKitchen==="saved"&&selectedTicket&&
        typeof params.savedRound==="string"&&
        selectedTicket.lines.some(line=>line.expectedConsumption?.roundId===params.savedRound)&&
