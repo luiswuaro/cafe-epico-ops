@@ -1,6 +1,6 @@
 "use server";
 
-import {randomBytes,randomInt,scryptSync} from "node:crypto";
+import {randomBytes,randomInt,randomUUID,scryptSync} from "node:crypto";
 import {cookies} from "next/headers";
 import {redirect} from "next/navigation";
 import {and,eq,gte,inArray,sql} from "drizzle-orm";
@@ -31,7 +31,7 @@ export async function createOwnerHistoryCode(
   organizationId:employee.organizationId,storeId:employee.homeStoreId,
   actorUserId:user.id,actorEmployeeId:employee.id,
   action:"POS_HISTORY_CODE_CREATED",entityType:"pos_history_code",
-  entityId:crypto.randomUUID(),
+  entityId:randomUUID(),
   afterData:{salt,digest,expiresAt:expiresAt.toISOString(),useLimit:1,
     purpose:"POS_TICKETS_AND_CASH_HISTORY"},
  });
@@ -51,10 +51,7 @@ export async function unlockPosHistory(form:FormData){
  const db=getDb(),storeId=employee.homeStoreId;
  const now=Date.now();
  const recent=new Date(now-15*60_000);
- let status:"ok"|"bad"|"rate"="bad";
- let grantCookie="";
- let grantExpires:Date|undefined;
- await db.transaction(async tx=>{
+ const outcome=await db.transaction(async tx=>{
   await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${employee.organizationId+":"+storeId+":pos_history"}))`);
   const recentAttempts=await tx.select({id:auditEvents.id}).from(auditEvents).where(and(
    eq(auditEvents.organizationId,employee.organizationId),
@@ -63,7 +60,7 @@ export async function unlockPosHistory(form:FormData){
    eq(auditEvents.action,"POS_HISTORY_CODE_REJECTED"),
    gte(auditEvents.createdAt,recent),
   )).limit(6);
-  if(recentAttempts.length>=5){status="rate";return;}
+  if(recentAttempts.length>=5)return {status:"rate" as const};
   const codes=await tx.select({
     id:auditEvents.id,entityId:auditEvents.entityId,afterData:auditEvents.afterData,
   }).from(auditEvents).where(and(
@@ -95,10 +92,10 @@ export async function unlockPosHistory(form:FormData){
     entityType:"pos_history_attempt",entityId:employee.id,
     afterData:{destination,reason:"INVALID_OR_EXPIRED"},
    });
-   return;
+   return {status:"bad" as const};
   }
   const token=randomBytes(32).toString("base64url");
-  grantExpires=new Date(now+HISTORY_GRANT_MINUTES*60_000);
+  const grantExpires=new Date(now+HISTORY_GRANT_MINUTES*60_000);
   const [grant]=await tx.insert(auditEvents).values({
    organizationId:employee.organizationId,storeId,
    actorUserId:user.id,actorEmployeeId:employee.id,
@@ -113,14 +110,13 @@ export async function unlockPosHistory(form:FormData){
    entityType:"pos_history_code",entityId:valid.entityId,
    afterData:{grantId:grant.id,destination},
   });
-  grantCookie=grant.id+"."+token;
-  status="ok";
+  return {status:"ok" as const,cookie:grant.id+"."+token,expires:grantExpires};
  });
- if(status!=="ok"||!grantExpires)
-   redirect(destination+"?lockError="+(status==="rate"?"rate":"invalid"));
- (await cookies()).set(HISTORY_COOKIE,grantCookie,{
+ if(outcome.status!=="ok")
+   redirect(destination+"?lockError="+(outcome.status==="rate"?"rate":"invalid"));
+ (await cookies()).set(HISTORY_COOKIE,outcome.cookie,{
    httpOnly:true,secure:process.env.NODE_ENV==="production",sameSite:"lax",
-   path:"/pos",expires:grantExpires,
+   path:"/pos",expires:outcome.expires,
  });
  redirect(destination);
 }
