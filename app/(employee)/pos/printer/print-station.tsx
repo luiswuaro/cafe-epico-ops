@@ -1,5 +1,6 @@
 "use client";
 import {useEffect,useRef,useState} from "react";
+import {DEFAULT_PAPER_CUT_GAP_SECONDS,PAPER_CUT_GAP_OPTIONS,getPaperCutGapSeconds,setPaperCutGapSeconds} from "@/src/application/pos/print-paper-gap";
 import {PAPER_CUT_GAP_STORAGE,DEFAULT_PAPER_CUT_GAP_SECONDS,PAPER_CUT_GAP_OPTIONS,getPaperCutGapSeconds,setPaperCutGapSeconds} from "@/src/application/pos/print-paper-gap";
 import {getPrintStationJobs,claimPrintStationJob,finishPrintStationJob,
 } from "./hub-actions";
@@ -16,11 +17,13 @@ export function PrintStation({template,preview,hiddenMode=false}:{
  const [status,setStatus]=useState("Activa esta PC para recibir impresión de los celulares.");
  const [processed,setProcessed]=useState<string[]>([]);
  const [pending,setPending]=useState(0);
+ const [cutGap,setCutGap]=useState(DEFAULT_PAPER_CUT_GAP_SECONDS);
  const working=useRef(false);
  useEffect(()=>{
   try{const raw=window.localStorage.getItem(STORAGE);if(raw)
    window.requestAnimationFrame(()=>setState(JSON.parse(raw) as HubState))}
   catch{/* Ignorar configuración antigua */}
+  window.requestAnimationFrame(()=>setCutGap(getPaperCutGapSeconds()));
  },[]);
  const update=(next:HubState)=>{
   window.localStorage.setItem(STORAGE,JSON.stringify(next));setState(next);
@@ -60,12 +63,16 @@ export function PrintStation({template,preview,hiddenMode=false}:{
         try{
           let printer="POS";
           if(job.kind==="KITCHEN"&&job.slip){
-            printer=await printKitchenSlip(job.slip,"all");
+            printer=await printKitchenSlip(job.slip,"all",undefined,undefined,(seconds)=>{
+              if(alive)setStatus("Corta el papel anterior · próxima comanda en "+seconds+" s");
+            });
             try{await acknowledgeKitchenPrint({
               orderId:job.orderId,roundId:job.roundId??"INITIAL",printer});
             }catch{/* Aceptada por puente; registramos el job como impreso */}
           }else if(job.ticket){
-            printer=await printReceiptWithBridge(job.ticket,template);
+            printer=await printReceiptWithBridge(job.ticket,template,(seconds)=>{
+              if(alive)setStatus("Corta la comanda · siguiente ticket en "+seconds+" s");
+            });
           }else throw new Error("Trabajo de impresión incompleto");
           await finishPrintStationJob(job.key,state.stationId,"DONE",printer);
           if(alive){
@@ -98,6 +105,21 @@ export function PrintStation({template,preview,hiddenMode=false}:{
    <p>Esta computadora recibe las comandas y los tickets enviados desde celular o PC.
     Puedes regresar al POS, tueste o finanzas: la estación funciona en segundo plano
     mientras OPS permanezca abierto en este equipo.</p>
+   <div className="pos-print-cut-settings">
+    <label htmlFor="pos-print-cut-gap"><strong>Corte de papel entre impresiones</strong></label>
+    <select id="pos-print-cut-gap" value={cutGap}
+      onChange={event=>{
+       const seconds=Number(event.target.value);
+       setPaperCutGapSeconds(seconds);setCutGap(seconds);
+      }}>
+      {PAPER_CUT_GAP_OPTIONS.map(seconds=><option key={seconds} value={seconds}>
+        {seconds===0?"Sin espera · impresora con cortador":seconds+" segundos para cortar"}
+      </option>)}
+    </select>
+    <small className="muted">En la POS-58 sin guillotina recomendamos 12 segundos.
+     La separación se aplica al trabajo automático y manual sin duplicar papel.
+    </small>
+   </div>
    <div className="pos-result-actions">
     <button type="button" onClick={start} disabled={enabled||preview}>
      Activar estación de caja</button>

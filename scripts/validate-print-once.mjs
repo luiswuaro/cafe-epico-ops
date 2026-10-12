@@ -24,7 +24,7 @@ assert.ok(printIndicator.includes("getPrintStationJobStatus(jobKey)"));
 assert.ok(printIndicator.includes("No pulses imprimir otra vez"));
 
 const gap=fs.readFileSync("src/application/pos/print-paper-gap.ts","utf8");
-assert.ok(gap.includes("navigator.locks.request(PAPER_LOCK"),"La cola comparte bloqueo entre pestañas PC");
+assert.ok(gap.includes("navigator.locks.request(PAPER_LOCK+"),"La cola comparte bloqueo entre pestañas PC");
 assert.ok(gap.includes("localStorage.setItem(LAST_PRINT_STORAGE"),"Persistir última salida por puente");
 assert.ok(gap.includes("DEFAULT_PAPER_CUT_GAP_SECONDS=12"));
 assert.ok(kitchenManual.includes("printWithPaperCutGap("));

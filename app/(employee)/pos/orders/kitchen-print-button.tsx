@@ -182,6 +182,7 @@ export async function printKitchenSlip(
   selection:"latest"|"all"="latest",
   serviceFilter?:"DINE_IN"|"TAKEAWAY"|"BOTH",
   roundId?:string,
+  onWaiting?:(seconds:number)=>void,
 ):Promise<string>{
   const separate=window.localStorage.getItem(ROUTE_KEY)==="separate";
   const config=readConfig(separate?KITCHEN_PRINTER_KEY:TICKET_PRINTER_KEY);
@@ -206,14 +207,16 @@ export async function printKitchenSlip(
     throw new Error("Actualiza el puente de impresión a la versión 1.3.0 antes de imprimir comandas. Evitamos enviar bytes gráficos que la impresora podría imprimir como símbolos.");
   }
   const raster=await buildKitchenRaster(slip,selection,serviceFilter,roundId);
-  const response=await fetch(config.url.replace(/\/$/,"")+"/print",{
-    method:"POST",
-    headers:{"Content-Type":"application/json","X-Cafe-Epico-Token":config.token},
-    body:JSON.stringify({raster,feed:2,cut:false}),
-  });
-  const result=await response.json() as {ok?:boolean;error?:string;printer?:string};
-  if(!response.ok||!result.ok)throw new Error(result.error||"La impresora no respondió");
-  return result.printer||"impresora";
+  return printWithPaperCutGap(async()=>{
+    const response=await fetch(config.url.replace(/\/$/,"")+"/print",{
+      method:"POST",
+      headers:{"Content-Type":"application/json","X-Cafe-Epico-Token":config.token},
+      body:JSON.stringify({raster,feed:2,cut:false}),
+    });
+    const result=await response.json() as {ok?:boolean;error?:string;printer?:string};
+    if(!response.ok||!result.ok)throw new Error(result.error||"La impresora no respondió");
+    return result.printer||"impresora";
+  },onWaiting,config.url);
 }
 
 import {acknowledgeKitchenPrint} from "./print-timing-actions";

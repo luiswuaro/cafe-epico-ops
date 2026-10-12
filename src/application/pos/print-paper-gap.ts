@@ -28,9 +28,9 @@ export function setPaperCutGapSeconds(seconds:number){
  window.localStorage.setItem(PAPER_CUT_GAP_STORAGE,String(seconds));
 }
 
-function lastPrintAt():number{
+function lastPrintAt(deviceKey:string):number{
  try{
-  const value=Number(window.localStorage.getItem(LAST_PRINT_STORAGE));
+  const value=Number(window.localStorage.getItem(LAST_PRINT_STORAGE+":"+deviceKey));
   return Number.isFinite(value)&&value>0?value:0;
  }catch{return 0}
 }
@@ -44,22 +44,24 @@ let localTail:Promise<void>=Promise.resolve();
  * Sólo se envía el siguiente documento cuando acaba el tiempo para cortar.
  */
 export async function printWithPaperCutGap<T>(
- send:()=>Promise<T>,onWaiting?:(seconds:number)=>void,
+ send:()=>Promise<T>,onWaiting?:(seconds:number)=>void,printerUrl="http://127.0.0.1:9137",
 ):Promise<T>{
+ const url=new URL(printerUrl);
+ const deviceKey=(url.hostname==="localhost"?"127.0.0.1":url.hostname)+":"+url.port;
  const operation=async()=>{
   const gapMs=getPaperCutGapSeconds()*1000;
-  const remaining=Math.max(0,lastPrintAt()+gapMs-Date.now());
+  const remaining=Math.max(0,lastPrintAt(deviceKey)+gapMs-Date.now());
   if(remaining>0){
    onWaiting?.(Math.ceil(remaining/1000));
    await wait(remaining);
   }
   const result=await send();
-  try{window.localStorage.setItem(LAST_PRINT_STORAGE,String(Date.now()))}
+  try{window.localStorage.setItem(LAST_PRINT_STORAGE+":"+deviceKey,String(Date.now()))}
   catch{/* Si no existe almacenamiento, los Web Locks aún serializan esta operación */}
   return result;
  };
  if(typeof navigator!=="undefined"&&navigator.locks){
-  return navigator.locks.request(PAPER_LOCK,{mode:"exclusive"},operation);
+  return navigator.locks.request(PAPER_LOCK+":"+deviceKey,{mode:"exclusive"},operation);
  }
  const scheduled=localTail.then(operation,operation);
  localTail=scheduled.then(()=>{},()=>{});
