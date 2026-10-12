@@ -11,8 +11,6 @@ export default async function SalesReportPage({searchParams}:{
 }){
  const params=await searchParams;
  const {organizationId}=await requirePermission("admin.access");
- const invalid=typeof params.from==="string"&&typeof params.to==="string"
-   ?null:null;
  let range:ReturnType<typeof parseSalesRange>,badRange=false;
  try{range=parseSalesRange(params.from,params.to);}
  catch{range=parseSalesRange(undefined,undefined);badRange=true;}
