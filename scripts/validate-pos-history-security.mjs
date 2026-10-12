@@ -19,8 +19,8 @@ assert.ok(tickets.indexOf("await hasPosHistoryAccess(employee)")<tickets.indexOf
  "La autorización debe ocurrir ANTES de leer el historial de tickets");
 assert.ok(cash.indexOf("await hasPosHistoryAccess(employee)")<cash.indexOf("const sessions ="),
  "La autorización debe ocurrir ANTES de consultar las cajas");
-assert.ok(receipt.includes('order.order.status==="PAID"||order.order.status==="CANCELLED"'));
-assert.ok(receipt.includes("historicalTimestamp"));
+assert.ok(receipt.includes("isHistoricalReceipt("));
+assert.ok(tokens.includes("isHistoricalReceipt("));
 assert.ok(cashCurrent.includes("state.lastClosed && canSeeHistory"));
 assert.ok(owner.includes('requirePermission("admin.access")'));
 assert.ok(tokens.includes('employeeHasPermission(employee.id,"admin.access"'));
