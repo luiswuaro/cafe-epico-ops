@@ -79,8 +79,14 @@ export default async function SalesReportPage({searchParams}:{
       <div className="stack">{data.missingCosts.map(p=>
        <div className="task" key={p.reason}><span>{p.reason}</span>
         <strong>{p.usages} uso(s)</strong></div>)}</div>}
-     <p className="muted">El hielo propio se registra como costo sin existencias: requiere
-       medir agua, energía, desgaste y merma por kg. Los importes sin precio no se consideran cero.</p>
+     <p className="muted"><strong>Hielo Hisense (estimación nominal):</strong> 300 W,
+       18 kg/24 h, agua a $26/19 L y electricidad a $3/kWh. Costo calculado
+       $2.5684/kg ($0.002568/g), sin inventariar existencias de hielo.
+       No incluye mantenimiento, desgaste, filtración ni merma. El rendimiento
+       eléctrico real debe medirse para confirmar el costo.</p>
+     <p className="muted"><strong>Jarabe ICEE:</strong> precio informado $100/L.
+       OPS maneja el insumo en gramos; la equivalencia provisional de 1.00 g/ml
+       asigna $0.10/g hasta medir la densidad. Su contribución se identifica como estimada.</p>
    </section>
    <section className="card stack" style={{marginTop:"1rem"}}>
     <h2>¿Cuánto quedó de utilidad?</h2>
