@@ -1,3 +1,5 @@
+import {hasPosHistoryAccess} from "@/src/application/pos/history-access";
+import {HistoryLock} from "../history-lock";
 import Link from "next/link";
 import { getTicketHistory, type TicketSource } from "@/src/application/pos/ticket-history";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
@@ -37,6 +39,9 @@ export default async function TicketHistoryPage({
   const {employee} = await getCurrentEmployee();
   if (!employee.homeStoreId) throw new Error("Sin sucursal asignada");
   await assertEmployeePermission(employee.id, "pos.sell", employee.homeStoreId);
+  if(!(await hasPosHistoryAccess(employee)))
+    return <HistoryLock destination="/pos/tickets"
+      error={typeof input.lockError==="string"?input.lockError:null}/>;
   const data = await getTicketHistory({
     organizationId:employee.organizationId,
     storeId:employee.homeStoreId,source,q,day,page,
