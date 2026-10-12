@@ -202,6 +202,38 @@ export async function finishPrintStationJob(jobKey:string,stationId:string,
  });
 }
 
+/** Una impresión manual sólo reenvía papel por decisión explícita del operador. */
+export async function recordAuthorizedPrintReprint(jobKey:string){
+ assertNoPreviewMutation();
+ const {employee,storeId,user}=await principal();
+ const db=getDb();
+ await db.transaction(async tx=>{
+  await verifyJob(jobKey,employee.organizationId,storeId,tx);
+  await tx.insert(auditEvents).values({
+   organizationId:employee.organizationId,storeId,
+   actorUserId:user.id,actorEmployeeId:employee.id,
+   action:"POS_PRINT_MANUAL_REPRINT_REQUESTED",
+   entityType:"pos_print_job",entityId:jobKey,
+   afterData:{reason:"OPERATOR_CONFIRMED_EXTRA_COPY"},
+  });
+ });
+}
+/** Estado común para UI de reimpresión y puente automático. */
+export async function getPrintStationJobStatus(jobKey:string):
+ Promise<"UNCLAIMED"|"CLAIMED"|"DONE"|"FAILED">{
+ const {employee,storeId}=await principal();
+ const db=getDb();
+ await verifyJob(jobKey,employee.organizationId,storeId,db);
+ const events=await db.select({action:auditEvents.action}).from(auditEvents)
+  .where(and(eq(auditEvents.organizationId,employee.organizationId),
+    eq(auditEvents.entityType,"pos_print_job"),eq(auditEvents.entityId,jobKey)))
+  .orderBy(desc(auditEvents.createdAt)).limit(15);
+ if(events.some(row=>row.action==="POS_PRINT_HUB_DONE"))return "DONE";
+ if(events.some(row=>row.action==="POS_PRINT_HUB_FAILED"))return "FAILED";
+ if(events.some(row=>row.action==="POS_PRINT_HUB_CLAIMED"))return "CLAIMED";
+ return "UNCLAIMED";
+}
+
 /** Consultar configuración solo tras activar esta PC. */
 export async function getPrintStationTemplate(){
  const {employee}=await principal();
