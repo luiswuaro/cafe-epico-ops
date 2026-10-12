@@ -9,6 +9,8 @@ import {extraLabels,preparationNote} from "@/src/application/pos/extras";
 import {getPosExtraCatalog} from "@/src/application/pos/extra-catalog";
 import { AddLiveProducts } from "./add-live-products";
 import { createLiveCommandCustomer, setLiveCommandCustomer } from "./live-actions";
+import {moveLiveTable,removeLiveOrderUnits} from "./manage-actions";
+import {DINE_IN_TICKET_PRESETS} from "@/src/application/pos/ticket-names";
 import { getPosCatalog } from "@/src/application/pos/catalog";
 import { getPosCustomers } from "@/src/application/pos/customers";
 import {
@@ -221,6 +223,30 @@ export default async function PosOrdersPage({
                   ))}
                 </div>
 
+                {order.mode==="LIVE" && !partiallyPaid && canCancel && (
+                  <details className="pos-cancel-panel">
+                    <summary>Corregir productos del ticket · administrador</summary>
+                    <p className="muted">Antes de cobrar: quita sólo las unidades cargadas por error. Si ya salió la comanda de barra, avisa al barista de la anulación.</p>
+                    {order.lines.map(line=>(
+                      <form key={line.id} action={removeLiveOrderUnits} className="stack"
+                        style={{borderTop:"1px solid var(--border, #8885)",padding:"12px 0"}}>
+                        <strong>{line.name} · {Number(line.quantity)} pz · {money.format(Number(line.lineTotal))}</strong>
+                        <input type="hidden" name="orderId" value={order.id}/>
+                        <input type="hidden" name="lineId" value={line.id}/>
+                        <label>Unidades que quieres quitar
+                          <input type="number" name="units" min={1} max={Number(line.quantity)}
+                            defaultValue={1} step={1} required/>
+                        </label>
+                        <label>Motivo de la corrección
+                          <input name="reason" required minLength={3} maxLength={200}
+                            placeholder="Producto agregado por error"/>
+                        </label>
+                        <button type="submit" className="button">Quitar unidades del pedido</button>
+                      </form>
+                    ))}
+                  </details>
+                )}
+
                 {order.note && (
                   <div className="handoff-note-preview">
                     <strong>Nota:</strong> {order.note}
@@ -331,6 +357,20 @@ export default async function PosOrdersPage({
 
                 {order.mode==="LIVE" && !partiallyPaid && (
                   <>
+                    {order.serviceMode==="DINE_IN"&&<details className="pos-cancel-panel">
+                      <summary>Cambiar de mesa · {order.tableLabel}</summary>
+                      <form action={moveLiveTable} className="stack">
+                        <input type="hidden" name="orderId" value={order.id}/>
+                        <label>Mover cuenta completa a
+                          <select name="tableLabel" required defaultValue={order.tableLabel??""}>
+                            {DINE_IN_TICKET_PRESETS.map(table=>
+                              <option key={table} value={table}>{table}</option>)}
+                          </select>
+                        </label>
+                        <p className="muted">Conserva folio, productos, rondas y puntos. Si la mesa destino está ocupada, el traslado se rechaza.</p>
+                        <button type="submit">Confirmar cambio de mesa</button>
+                      </form>
+                    </details>}
                     <AddLiveProducts orderId={order.id} extrasOptions={extrasOptions}
                       products={catalog.filter(item=>item.active).map(item=>({
                         id:item.id,name:item.name,category:item.category,price:item.price
