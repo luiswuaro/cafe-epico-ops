@@ -97,6 +97,7 @@ export default async function PosPage({
        selectedTicket.lines.some(line=>line.expectedConsumption?.roundId===params.savedRound)&&
        <AutoKitchenPrint
          orderId={selectedTicket.id}
+         isLive={selectedTicket.mode==="LIVE"}
          event="saved"
          eventId={selectedTicket.id+":"+params.savedRound}
          roundId={params.savedRound}

@@ -92,6 +92,7 @@ export default async function PosOrdersPage({
         (line.expectedConsumption?.roundId||"INITIAL")===autoRoundId
       )&&<AutoKitchenPrint
         orderId={autoOrder.id}
+        isLive={autoOrder.mode==="LIVE"}
         event="saved"
         eventId={autoOrder.id+":"+autoRoundId}
         roundId={autoRoundId}
