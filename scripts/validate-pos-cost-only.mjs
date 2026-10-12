@@ -13,7 +13,8 @@ try{
   }}).outputText;
   const target=path.join(base,"policy.cjs");
   fs.writeFileSync(target,compiled);
-  const {isCostOnlyComponent,costOnlyComponentName,costOnlyRecipeMeasure}=createRequire(import.meta.url)(target);
+  const {isCostOnlyComponent,costOnlyComponentName,costOnlyRecipeMeasure,
+    ICE_COST_PER_G_MXN,ICE_WATER_COST_PER_KG_MXN,ICE_ELECTRICITY_COST_PER_KG_MXN}=createRequire(import.meta.url)(target);
   const legacyWater={name:"AGUA",unitLabel:"peso/volumen",quantity:0.08,
     variantExternalId:"976e2d13-eefa-4a36-b1f5-b29f9ddb2bb0",
     itemExternalId:"eab0af54-b569-4b87-bb65-e12b84bc7797"};
@@ -40,7 +41,13 @@ try{
   assert.equal(costOnlyRecipeMeasure(nativeWater,80).quantity,80);
   assert.equal(costOnlyRecipeMeasure(noIdIce,0.15).quantity,150);
   assert.equal(costOnlyRecipeMeasure(nativeIce,150).quantity,150);
-  assert.equal(costOnlyRecipeMeasure(nativeIce,150).estimatedCostMxn,null);
+  const approx=(a,b)=>assert.ok(Math.abs(a-b)<0.00001,`Esperado ${b}, recibido ${a}`);
+  approx(ICE_WATER_COST_PER_KG_MXN,26/19);
+  approx(ICE_ELECTRICITY_COST_PER_KG_MXN,0.3*24*3/18);
+  approx(ICE_COST_PER_G_MXN,(26/19+1.2)/1000);
+  assert.equal(costOnlyRecipeMeasure(nativeIce,150).estimatedCostMxn,0.3853);
+  assert.equal(costOnlyRecipeMeasure(noIdIce,0.4).estimatedCostMxn,1.0274);
+  assert.equal(costOnlyRecipeMeasure(nativeIce,150).pricingStatus,"ESTIMATED_WATER_ELECTRICITY_ONLY");
   assert.equal(isCostOnlyComponent({...nativeWater,inventoryItemId:"item"}),false);
   assert.equal(isCostOnlyComponent({...mineral,costOnlyCode:"WATER"}),false);
   assert.equal(isCostOnlyComponent({name:"AGUA MINERAL",variantExternalId:null,itemExternalId:null}),false);
