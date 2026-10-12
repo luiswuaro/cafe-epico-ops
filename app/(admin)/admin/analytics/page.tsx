@@ -49,6 +49,7 @@ export default async function AnalyticsPage({
       <section className="hero">
         <p className="eyebrow">ADMIN · DASHBOARD GERENCIAL</p>
         <h1>Ventas, margen y operación</h1>
+        <Link className="button" href="/admin/reports/sales">Reporte por fechas · ventas, productos y tendencias →</Link>
         <p className="muted">
           Fuente única: ventas pagadas y vigentes de OPS LIVE.
           Las pruebas ESPEJO, cancelaciones y comandas sin pagar quedan fuera.
