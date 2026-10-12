@@ -14,6 +14,15 @@ assert.ok(hub.includes('events.some(e=>e.action==="POS_PRINT_HUB_CLAIMED")'),
 assert.ok(hub.includes("allowedSince(since)"));
 assert.ok(client.includes("window.setInterval(()=>void tick(),4000)"));
 assert.ok(client.includes("hiddenMode"));
+assert.ok(hub.includes('eq(posLoyaltyEntries.entryType,"EARN")'));
+assert.ok(hub.includes("receiptLoyaltyView("));
+assert.ok(hub.includes("loyaltyFor(split.label)"));
+assert.ok(hub.includes("loyaltyFor(null)"));
+assert.ok(hub.includes("extraLabels(line.expectedConsumption"));
+assert.ok(print.includes('drawPair(context, "Saldo puntos"'));
+assert.ok(print.includes('"Puntos ganados"'));
+assert.ok(print.includes('"Puntos canjeados"'));
+assert.ok(!hub.includes("pointsEarned:null,pointsBalance:null"),"El ticket de servidor no puede omitir los puntos del cliente");
 assert.ok(client.includes("ops-print-hub-config-changed"));
 assert.ok(client.includes("claimPrintStationJob(job.key,state.stationId)"));
 assert.ok(client.includes("finishPrintStationJob(job.key,state.stationId"));
