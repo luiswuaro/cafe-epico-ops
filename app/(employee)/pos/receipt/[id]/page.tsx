@@ -117,6 +117,12 @@ export default async function ReceiptPage({
   if (requestedSplitId && !split) {
     throw new Error("Cuenta dividida no encontrada");
   }
+  // En una mesa parcialmente cobrada, cada división pagada también es
+  // historial: su fecha individual importa aunque el pedido siga abierto.
+  if(split?.status==="PAID"&&split.paidAt&&
+     isHistoricalReceipt("PAID",split.paidAt,order.order.createdAt)&&
+     !(await hasPosHistoryAccess(employee)))
+    return <HistoryLock destination="/pos/tickets"/>;
   // La precuenta y el comprobante final no pueden confundirse: una
   // comanda abierta o un split pendiente jamás imprimen un recibo pagado.
   if (order.order.status!=="CANCELLED" &&
