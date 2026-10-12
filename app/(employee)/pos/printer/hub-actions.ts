@@ -12,7 +12,7 @@ import type {KitchenSlip} from "@/src/application/pos/kitchen-slip";
 import type {DirectReceiptPayload} from "../receipt/[id]/direct-print-button";
 
 export type HubJob={
- key:string;orderId:string;roundId?:string;kind:"KITCHEN"|"RECEIPT"|"PREBILL";
+ key:string;orderId:string;roundId?:string;kind:"KITCHEN"|"RECEIPT"|"PREBILL"|"VOID";
  createdAt:string;title:string;slip?:KitchenSlip;ticket?:DirectReceiptPayload;
 };
 type FeedInput={since:string};
@@ -137,6 +137,19 @@ export async function getPrintStationJobs({since}:FeedInput):Promise<HubJob[]>{
   }
  }
  for(const event of audits){
+  if(event.action==="POS_KITCHEN_VOID_PRINT_REQUESTED"&&!stopped.has(event.entityId)){
+    const match=/^VOID:([0-9a-f-]{36}):([0-9a-f-]{36})$/i.exec(event.entityId);
+    if(match){
+      const current=orders.find(x=>x.order.id===match[1])?.order;
+      const slip=event.afterData?.slip as Record<string,unknown>|undefined;
+      if(current&&slip&&Array.isArray(slip.lines)&&typeof slip.folio==="string"&&
+         typeof slip.table==="string"){
+        jobs.push({key:event.entityId,orderId:match[1],kind:"VOID",
+          createdAt:event.createdAt.toISOString(),title:"ANULACIÓN "+current.folio,
+          slip:slip as unknown as KitchenSlip});
+      }
+    }
+  }
   if(event.action!=="POS_PREBILL_PRINT_REQUESTED"||stopped.has(event.entityId))continue;
   const match=/^PREBILL:([0-9a-f-]{36}):([0-9a-f-]{36})$/i.exec(event.entityId);
   if(!match)continue;
@@ -155,7 +168,7 @@ export async function getPrintStationJobs({since}:FeedInput):Promise<HubJob[]>{
  return jobs.slice(0,30);
 }
 async function verifyJob(jobKey:string,org:string,store:string,tx:Pick<ReturnType<typeof getDb>,"select">){
- const match=/^(KITCHEN|RECEIPT|PREBILL):([0-9a-f-]{36})(?::([A-Za-z0-9_-]{1,120}))?$/i.exec(jobKey);
+ const match=/^(KITCHEN|RECEIPT|PREBILL|VOID):([0-9a-f-]{36})(?::([A-Za-z0-9_-]{1,120}))?$/i.exec(jobKey);
  if(!match)throw new Error("Trabajo de impresión inválido.");
  const [order]=await tx.select({id:posOrders.id}).from(posOrders).where(and(
   eq(posOrders.id,match[2]),eq(posOrders.organizationId,org),
