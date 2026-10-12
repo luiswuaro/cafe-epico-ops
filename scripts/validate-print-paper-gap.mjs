@@ -11,7 +11,7 @@ const store=new Map();
 let clock=100000;
 const waits=[];
 const printed=[];
-const module={exports:{}};
+const compiledModule={exports:{}};
 const window={
  localStorage:{
   getItem:key=>store.has(key)?store.get(key):null,
@@ -20,9 +20,9 @@ const window={
  setTimeout:(fn,ms)=>{waits.push(ms);clock+=ms;fn();return 1},
 };
 const navigator={locks:{request:async(_name,_options,fn)=>fn()}};
-vm.runInNewContext(javascript,{module,exports:module.exports,window,navigator,
+vm.runInNewContext(javascript,{module:compiledModule,exports:compiledModule.exports,window,navigator,
  URL,Date:{now:()=>clock},Promise,Number,Math,Error});
-const {printWithPaperCutGap,getPaperCutGapSeconds,setPaperCutGapSeconds}=module.exports;
+const {printWithPaperCutGap,getPaperCutGapSeconds,setPaperCutGapSeconds}=compiledModule.exports;
 assert.equal(getPaperCutGapSeconds(),12);
 await printWithPaperCutGap(async()=>{printed.push(["COMANDA",clock]);return true},undefined,"http://localhost:9137");
 await printWithPaperCutGap(async()=>{printed.push(["TICKET",clock]);return true},undefined,"http://127.0.0.1:9137");
