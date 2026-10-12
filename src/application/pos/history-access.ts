@@ -51,3 +51,11 @@ export async function hasPosHistoryAccess(employee:Employee):Promise<boolean>{
    constantHexMatch(data.digest,grantDigest(match[2])) &&
    typeof data.expiresAt==="string"&&Date.parse(data.expiresAt)>Date.now();
 }
+
+/** Receipt printing is operational for the first 15 minutes after payment.
+ * Beyond that it is an audit/history read requiring an owner grant.
+ */
+export function isHistoricalReceipt(status:string,paidAt:Date|null,createdAt:Date):boolean{
+ if(status!=="PAID"&&status!=="CANCELLED")return false;
+ return Date.now()-(paidAt??createdAt).getTime()>15*60_000;
+}
