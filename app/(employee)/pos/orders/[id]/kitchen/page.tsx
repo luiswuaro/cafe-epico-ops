@@ -63,7 +63,7 @@ export default async function KitchenSlipPage({params,searchParams}:{
       {state.order.mode==="SHADOW"&&<p className="status-warn">
         IMPRESIÓN DE PRUEBA: esta comanda es espejo; sólo se envía papel a la impresora local.
       </p>}
-      <KitchenPrintButton slip={slip}
+      <KitchenPrintButton slip={slip} orderId={id} isLive={state.order.mode==="LIVE"}
         viewUrl={"/pos/orders/"+id+"/kitchen?round="+(selection==="latest"?"all":"latest")}/>
       <div className="pos-context-links" style={{marginTop:12}}>
         <Link className="button" href={"/pos/orders/"+id+"/kitchen"}>Última ronda</Link>

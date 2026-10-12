@@ -216,42 +216,78 @@ export async function printKitchenSlip(
 }
 
 import {acknowledgeKitchenPrint} from "./print-timing-actions";
+import {claimPrintStationJob,finishPrintStationJob,recordAuthorizedPrintReprint} from "../printer/hub-actions";
 
 export function KitchenPrintButton({
-  slip,viewUrl,compact=false,orderId,
+  slip,viewUrl,compact=false,orderId,isLive=false,
 }:{
-  slip:KitchenSlip;viewUrl:string;compact?:boolean;orderId?:string;
+  slip:KitchenSlip;viewUrl:string;compact?:boolean;orderId?:string;isLive?:boolean;
 }){
   const [selection,setSelection]=useState<"latest"|"all">("latest");
   const [status,setStatus]=useState<"idle"|"printing"|"ok"|"error">("idle");
   const [message,setMessage]=useState("");
+  const [reprintAvailable,setReprintAvailable]=useState(false);
   const rounds=selectedKitchenSlip(slip,"all").roundsCount;
 
-  async function print(){
+  async function print(forceReprint=false){
     if(status==="printing")return;
     setStatus("printing");setMessage("");
+    const roundId=slip.lines.at(-1)?.roundId||"INITIAL";
+    const jobKey=orderId?"KITCHEN:"+orderId+":"+roundId:null;
+    let stationId:string|null=null;
     try{
-      const printer=await printKitchenSlip(slip,selection);
-      // Tiempo de salida sólo cuando el puente ESC/POS respondió OK.
-      if(orderId){
-        const roundId=slip.lines.at(-1)?.roundId||"INITIAL";
-        try{await acknowledgeKitchenPrint({orderId,roundId,printer});}
-        catch{setStatus("ok");setMessage("Enviada a "+printer+"; sin registro de hora.");return;}
+      if(isLive&&jobKey){
+        if(forceReprint){
+          if(!window.confirm("Este pedido pudo haberse impreso. ¿Enviar otra copia de papel?")){
+            setStatus("idle");return;
+          }
+          await recordAuthorizedPrintReprint(jobKey);
+        }else if(selection==="all"&&rounds>1){
+          setReprintAvailable(true);
+          setStatus("idle");
+          setMessage("Imprimir todas las rondas generaría copias adicionales. Pulsa «Reimprimir copia» para confirmar.");
+          return;
+        }else{
+          stationId=crypto.randomUUID();
+          const claimed=await claimPrintStationJob(jobKey,stationId);
+          if(!claimed){
+            setReprintAvailable(true);setStatus("idle");
+            setMessage("Esta comanda ya fue recibida o asignada a la estación central. No se envió otra copia. Comprueba el papel antes de reimprimir.");
+            return;
+          }
+        }
       }
-      setStatus("ok");setMessage("Enviada a "+printer);
+      const printer=await printKitchenSlip(slip,selection);
+      if(stationId&&jobKey)await finishPrintStationJob(jobKey,stationId,"DONE",printer);
+      // Acuse físico del puente; la ausencia del ACK de tiempos no provoca reenvío.
+      if(orderId){
+        try{await acknowledgeKitchenPrint({orderId,roundId,printer})}
+        catch{setStatus("ok");setMessage("Enviada a "+printer+"; sin métrica de impresión.");return}
+      }
+      setStatus("ok");setMessage("Enviada a "+printer+(forceReprint?" (copia adicional)":""));
     }catch(e){
-      setStatus("error");
-      setMessage(e instanceof Error?e.message:"No se pudo imprimir");
+      if(stationId&&jobKey){
+        try{await finishPrintStationJob(jobKey,stationId,"FAILED",
+          e instanceof Error?e.message:"Puente no disponible")}
+        catch{/* No repetir un trabajo de impresión incierto */}
+      }
+      setReprintAvailable(true);setStatus("error");
+      setMessage((e instanceof Error?e.message:"No se pudo imprimir")+
+        ". Revisa el papel antes de solicitar otra copia.");
     }
   }
 
   return <div className={"kitchen-print-actions"+(compact?" kitchen-print-compact":"")}>
     <div className="kitchen-print-controls">
-      <button type="button" onClick={print} disabled={status==="printing"}>
+      <button type="button" onClick={()=>void print()} disabled={status==="printing"}>
         {status==="printing"?"Enviando…":status==="ok"?"Comanda enviada ✓":"Imprimir comanda"}
       </button>
+      {isLive&&reprintAvailable&&<button type="button" className="button"
+        disabled={status==="printing"} onClick={()=>void print(true)}>
+        Reimprimir copia (confirmación)
+      </button>}
       {rounds>1&&<select aria-label="Qué ronda imprimir" value={selection}
-        onChange={event=>{setSelection(event.target.value as "latest"|"all");setStatus("idle");}}>
+        onChange={event=>{setSelection(event.target.value as "latest"|"all");setStatus("idle");setReprintAvailable(false);}}>
         <option value="latest">Última ronda</option>
         <option value="all">Toda la comanda</option>
       </select>}
