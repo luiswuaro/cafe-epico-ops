@@ -281,6 +281,8 @@ export default async function ReceiptPage({
         </Link>
 
         <DirectPrintTicketButton
+          printJobKey={order.order.mode==="LIVE"&&order.order.status==="PAID"
+            ?"RECEIPT:"+order.order.id+(split?":"+split.id:""):undefined}
           ticket={{
             folio: order.order.folio,
             kind: "RECEIPT",
@@ -337,7 +339,10 @@ export default async function ReceiptPage({
           }}
         />
 
-        <PrintTicketButton />
+        <details className="receipt-browser-fallback">
+          <summary>Impresión por navegador · respaldo (puede generar una copia adicional)</summary>
+          <PrintTicketButton/>
+        </details>
         {!split&&order.order.mode==="LIVE"&&order.order.status==="PAID"&&
           lines.some(line=>line.expectedConsumption?.serviceMode==="DINE_IN")&&
           <a className="button receipt-extra-shortcut" href="#empaque-para-llevar">

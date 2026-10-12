@@ -55,7 +55,10 @@ export default async function KitchenSlipPage({params,searchParams}:{
   return <main className="receipt-shell">
     <div className="receipt-toolbar no-print">
       <Link href="/pos/orders" className="button">Volver a comandas</Link>
-      <PrintTicketButton/>
+      <details className="receipt-browser-fallback">
+        <summary>Impresión de respaldo por navegador (copia adicional)</summary>
+        <PrintTicketButton/>
+      </details>
     </div>
     <section className="card no-print" style={{marginBottom:12}}>
       <h2>Comanda de preparación</h2>
