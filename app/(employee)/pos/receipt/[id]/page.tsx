@@ -1,3 +1,5 @@
+import {hasPosHistoryAccess} from "@/src/application/pos/history-access";
+import {HistoryLock} from "../../history-lock";
 import {receiptLoyaltyView} from "@/src/domain/pos/receipt-loyalty";
 import {randomUUID} from "node:crypto";
 import {deliverExtraPackaging} from "./packaging-action";
@@ -87,6 +89,13 @@ export default async function ReceiptPage({
   ]);
 
   if (!order) throw new Error("Ticket no encontrado");
+  // Un recibo recién cobrado puede imprimirse durante 15 minutos.
+  // Después es historial, incluso accediendo al ID directo.
+  const historicalTimestamp=order.order.paidAt??order.order.createdAt;
+  if((order.order.status==="PAID"||order.order.status==="CANCELLED")&&
+      Date.now()-historicalTimestamp.getTime()>15*60_000&&
+      !(await hasPosHistoryAccess(employee)))
+    return <HistoryLock destination="/pos/tickets"/>;
 
   const split = requestedSplitId
     ? (
