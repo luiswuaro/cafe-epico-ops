@@ -84,7 +84,7 @@ export async function getPosCostResolver(organizationId:string){
  function rate(item:Item,paidAt:Date){
   const at=paidAt.getTime();
   const prior=item.prices.filter(p=>p.effectiveAt<=at).at(-1);
-  if(prior)return {...prior,reconstructed:false};
+  if(prior)return {...prior,reconstructed:prior.source.includes("_EST_")};
   const first=item.prices[0];
   if(first&&(first.source.startsWith("LOYVERSE_INITIAL_")||
      first.source.startsWith("OWNER_ICEE_INITIAL_EST_")))
