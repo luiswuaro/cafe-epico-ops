@@ -1,3 +1,4 @@
+import {hasPosHistoryAccess} from "@/src/application/pos/history-access";
 import Link from "next/link";
 import { getCashState } from "@/src/application/pos/cash";
 import { isPosLiveEnabled } from "@/src/application/pos/live";
@@ -42,6 +43,7 @@ export default async function PosCashPage() {
     employee.homeStoreId,
   );
 
+  const canSeeHistory=await hasPosHistoryAccess(employee);
   const state = await getCashState(
     employee.organizationId,
     employee.homeStoreId,
@@ -92,7 +94,7 @@ export default async function PosCashPage() {
             <button type="submit">Abrir caja</button>
           </form>
 
-          {state.lastClosed && (
+          {state.lastClosed && canSeeHistory && (
             <p className="muted">
               Último cierre: esperado{" "}
               {money.format(Number(state.lastClosed.expectedCashSnapshot ?? 0))}

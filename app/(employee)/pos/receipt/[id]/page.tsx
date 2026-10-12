@@ -1,3 +1,5 @@
+import {hasPosHistoryAccess,isHistoricalReceipt} from "@/src/application/pos/history-access";
+import {HistoryLock} from "../../history-lock";
 import {receiptLoyaltyView} from "@/src/domain/pos/receipt-loyalty";
 import {randomUUID} from "node:crypto";
 import {deliverExtraPackaging} from "./packaging-action";
@@ -87,6 +89,11 @@ export default async function ReceiptPage({
   ]);
 
   if (!order) throw new Error("Ticket no encontrado");
+  // Un recibo recién cobrado puede imprimirse durante 15 minutos.
+  // Después es historial, incluso accediendo al ID directo.
+  if(isHistoricalReceipt(order.order.status,order.order.paidAt,order.order.createdAt)&&
+      !(await hasPosHistoryAccess(employee)))
+    return <HistoryLock destination="/pos/tickets"/>;
 
   const split = requestedSplitId
     ? (
@@ -110,6 +117,12 @@ export default async function ReceiptPage({
   if (requestedSplitId && !split) {
     throw new Error("Cuenta dividida no encontrada");
   }
+  // En una mesa parcialmente cobrada, cada división pagada también es
+  // historial: su fecha individual importa aunque el pedido siga abierto.
+  if(split?.status==="PAID"&&split.paidAt&&
+     isHistoricalReceipt("PAID",split.paidAt,order.order.createdAt)&&
+     !(await hasPosHistoryAccess(employee)))
+    return <HistoryLock destination="/pos/tickets"/>;
   // La precuenta y el comprobante final no pueden confundirse: una
   // comanda abierta o un split pendiente jamás imprimen un recibo pagado.
   if (order.order.status!=="CANCELLED" &&

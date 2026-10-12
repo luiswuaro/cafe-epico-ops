@@ -2,6 +2,7 @@ import { requirePermission } from "@/src/infrastructure/auth/permissions";
 import {OpsWorkspaceNav} from "@/components/ops-workspace-nav";
 import Link from "next/link";
 const modules = [
+  ["Autorización de historiales", "Generar clave temporal para consulta de cajas y tickets por trabajadores", "/admin/history-access"],
   ["Centro de decisiones", "Prioridades de ventas, inventario, compras, tueste y personal", "/admin/decision-center"],
   ["Checklist", "Plantillas, tareas, frecuencias, roles y SOPs", "/admin/checklists"],
   ["Catálogo y recetas OPS", "Editar bebidas, insumos físicos y empaques por tipo de servicio", "/admin/pos/catalog"],
