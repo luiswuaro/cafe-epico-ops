@@ -142,13 +142,13 @@ export async function getPrintStationJobs({since}:FeedInput):Promise<HubJob[]>{
   if(!match)continue;
   const current=orders.find(x=>x.order.id===match[1])?.order;
   if(!current||!["SENT","PREPARING","READY","PARTIALLY_PAID"].includes(current.status))continue;
-  const payload=event.afterData?.ticket;
+  const payload=event.afterData?.ticket as Record<string,unknown>|undefined;
   if(!payload||typeof payload!=="object"||Array.isArray(payload)||
      payload.kind!=="PREBILL"||!Array.isArray(payload.items))continue;
   jobs.push({key:event.entityId,orderId:match[1],kind:"PREBILL",
     createdAt:event.createdAt.toISOString(),
     title:"Precuenta "+(current.tableLabel??current.folio),
-    ticket:payload as DirectReceiptPayload});
+    ticket:payload as unknown as DirectReceiptPayload});
  }
  jobs.sort((a,b)=>a.createdAt.localeCompare(b.createdAt)||
    (a.kind==="KITCHEN"?-1:1));
