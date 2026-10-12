@@ -1,5 +1,6 @@
 import {and,eq,gte,inArray,lte} from "drizzle-orm";
 import {getDb} from "@/src/infrastructure/db/client";
+import {getPosCostResolver} from "@/src/application/analytics/pos-cost-resolver";
 import {posOrders,posOrderLines,posPayments} from "@/src/infrastructure/db/schema";
 
 const ZONE="America/Mexico_City";
@@ -24,18 +25,6 @@ export function parseSalesRange(from:unknown,to:unknown){
 }
 type Line=typeof posOrderLines.$inferSelect;
 type ItemRow={name:string;units:number;gross:number;net:number;discount:number;cogs:number;complete:boolean;lines:number;costed:number};
-function costSnapshot(line:Line){
- const c=shape(line.expectedConsumption);
- const parts=Array.isArray(c.components)?c.components:[];
- let known=0,costed=0;
- for(const p of parts){
-  const data=shape(shape(p).costOnlyMeasure),value=data.estimatedCostMxn;
-  if(value!==null&&value!==undefined&&value!==""&&Number.isFinite(Number(value))&&Number(value)>=0){
-   known+=Number(value);costed++;
-  }
- }
- return {cogs:mx(known),complete:parts.length>0&&costed===parts.length};
-}
 function addRow(map:Map<string,ItemRow>,name:string,value:Omit<ItemRow,"name"|"lines"|"costed">){
  const row=map.get(name)??{name,units:0,gross:0,net:0,discount:0,cogs:0,complete:true,lines:0,costed:0};
  row.units+=value.units;row.gross+=value.gross;row.net+=value.net;row.discount+=value.discount;
@@ -74,6 +63,20 @@ export async function getSalesPeriodReport(orgId:string,range:ReturnType<typeof 
  for(const line of lines){
    const arr=mapped.get(line.orderId)??[];arr.push(line);mapped.set(line.orderId,arr);
  }
+ const resolveCost=await getPosCostResolver(orgId);
+ const paidByOrder=new Map(filtered.map(o=>[o.id,o.paidAt!]));
+ const costByLine=new Map<string,ReturnType<typeof resolveCost>>();
+ const missingCostSummary=new Map<string,number>();
+ for(const line of lines){
+   const result=resolveCost(line.expectedConsumption,paidByOrder.get(line.orderId)??new Date());
+   costByLine.set(line.id,result);
+   for(const reason of result.missing)missingCostSummary.set(reason,(missingCostSummary.get(reason)??0)+1);
+ }
+ const costSnapshot=(line:Line)=>{
+   const result=costByLine.get(line.id);
+   return {cogs:result?.known??0,complete:result?.complete??false,
+     reconstructed:result?.reconstructed??false};
+ };
  const saleRows=filtered.map(order=>{
   const l=mapped.get(order.id)??[];
   const gross=l.reduce((sum,line)=>{
@@ -143,5 +146,8 @@ export async function getSalesPeriodReport(orgId:string,range:ReturnType<typeof 
    units:current.reduce((s,x)=>s+x.units,0),days,products,categories,trends,
    methods:[...methods].map(([name,value])=>({name,value:mx(value)})),
    availableFrom:filtered.reduce<string|null>((p,o)=>!p||dayKey(o.paidAt!)<p?dayKey(o.paidAt!):p,null),
+   missingCosts:[...missingCostSummary].sort((a,b)=>b[1]-a[1])
+     .map(([reason,usages])=>({reason,usages})).slice(0,25),
+   reconstructedLines:[...costByLine.values()].filter(x=>x.reconstructed).length,
    source:"OPS_LIVE" as const};
 }
