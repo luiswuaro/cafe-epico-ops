@@ -61,11 +61,11 @@ export function PrintStation({template,preview,hiddenMode=false}:{
         if(!claimed)continue;
         try{
           let printer="POS";
-          if(job.kind==="KITCHEN"&&job.slip){
+          if((job.kind==="KITCHEN"||job.kind==="VOID")&&job.slip){
             printer=await printKitchenSlip(job.slip,"all",undefined,undefined,(seconds)=>{
               if(alive)setStatus("Corta el papel anterior · próxima comanda en "+seconds+" s");
             });
-            try{await acknowledgeKitchenPrint({
+            try{if(job.kind==="KITCHEN")await acknowledgeKitchenPrint({
               orderId:job.orderId,roundId:job.roundId??"INITIAL",printer});
             }catch{/* Aceptada por puente; registramos el job como impreso */}
           }else if(job.ticket){

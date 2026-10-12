@@ -1,4 +1,6 @@
 import Image from "next/image";
+import {randomUUID} from "node:crypto";
+import {queuePrebillPrint} from "./actions";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { and, eq } from "drizzle-orm";
@@ -108,12 +110,21 @@ export default async function PrebillPage({params,searchParams}:{
   return <main className="receipt-shell">
     <div className="receipt-toolbar no-print">
       <Link href={back} className="button">Volver a {split?"cuentas":"comandas"}</Link>
-      <DirectPrintTicketButton ticket={ticket} template={template} label="Imprimir precuenta ESC/POS"/>
+      <form action={queuePrebillPrint}>
+         <input type="hidden" name="orderId" value={id}/>
+         <input type="hidden" name="splitId" value={split?.id??""}/>
+         <input type="hidden" name="requestId" value={randomUUID()}/>
+         <button type="submit" disabled={process.env.VERCEL_ENV==="preview"}>
+           Enviar precuenta a impresora de caja
+         </button>
+       </form>
+       <DirectPrintTicketButton ticket={ticket} template={template} label="Imprimir aquí (PC)"/>
       <PrintTicketButton/>
     </div>
-    <section className="card no-print" role="status" style={{marginBottom:12}}>
+    {query.queued==="1"&&<p className="card status-ok no-print" role="status">Precuenta en cola de impresión de caja. No vuelvas a enviarla hasta comprobar el papel.</p>}
+     <section className="card no-print" role="status" style={{marginBottom:12}}>
       <strong>Precuenta {split?"individual":"de mesa"} · sin registrar pago</strong>
-      <p className="muted">Puedes entregarla al cliente antes de cobrar. Imprimir no cambia caja, inventario, puntos ni estado de la comanda.</p>
+      <p className="muted">Puedes entregarla al cliente antes de cobrar. Desde el celular usa «Enviar precuenta a impresora de caja»; la PC con estación activa imprimirá el documento una vez. Imprimir no cambia caja, inventario ni puntos.</p>
     </section>
     <article className="receipt-paper">
       <header>

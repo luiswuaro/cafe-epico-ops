@@ -12,7 +12,7 @@ import type {KitchenSlip} from "@/src/application/pos/kitchen-slip";
 import type {DirectReceiptPayload} from "../receipt/[id]/direct-print-button";
 
 export type HubJob={
- key:string;orderId:string;roundId?:string;kind:"KITCHEN"|"RECEIPT";
+ key:string;orderId:string;roundId?:string;kind:"KITCHEN"|"RECEIPT"|"PREBILL"|"VOID";
  createdAt:string;title:string;slip?:KitchenSlip;ticket?:DirectReceiptPayload;
 };
 type FeedInput={since:string};
@@ -54,7 +54,7 @@ export async function getPrintStationJobs({since}:FeedInput):Promise<HubJob[]>{
       (await db.select({id:posOrderSplits.id}).from(posOrderSplits)
         .where(inArray(posOrderSplits.orderId,ids))).map(x=>x.id).concat(["00000000-0000-4000-8000-000000000000"]))),
   db.select().from(posPayments).where(inArray(posPayments.orderId,ids)),
-  db.select({entityId:auditEvents.entityId,action:auditEvents.action,createdAt:auditEvents.createdAt})
+  db.select({entityId:auditEvents.entityId,action:auditEvents.action,createdAt:auditEvents.createdAt,afterData:auditEvents.afterData})
     .from(auditEvents).where(and(eq(auditEvents.organizationId,employee.organizationId),
       eq(auditEvents.entityType,"pos_print_job"),
       gte(auditEvents.createdAt,start))),
@@ -136,12 +136,39 @@ export async function getPrintStationJobs({since}:FeedInput):Promise<HubJob[]>{
         cashChange:methods.find(p=>p.method==="CASH")?.changeAmount??null}});
   }
  }
+ for(const event of audits){
+  if(event.action==="POS_KITCHEN_VOID_PRINT_REQUESTED"&&!stopped.has(event.entityId)){
+    const match=/^VOID:([0-9a-f-]{36}):([0-9a-f-]{36})$/i.exec(event.entityId);
+    if(match){
+      const current=orders.find(x=>x.order.id===match[1])?.order;
+      const slip=event.afterData?.slip as Record<string,unknown>|undefined;
+      if(current&&slip&&Array.isArray(slip.lines)&&typeof slip.folio==="string"&&
+         typeof slip.table==="string"){
+        jobs.push({key:event.entityId,orderId:match[1],kind:"VOID",
+          createdAt:event.createdAt.toISOString(),title:"ANULACIÓN "+current.folio,
+          slip:slip as unknown as KitchenSlip});
+      }
+    }
+  }
+  if(event.action!=="POS_PREBILL_PRINT_REQUESTED"||stopped.has(event.entityId))continue;
+  const match=/^PREBILL:([0-9a-f-]{36}):([0-9a-f-]{36})$/i.exec(event.entityId);
+  if(!match)continue;
+  const current=orders.find(x=>x.order.id===match[1])?.order;
+  if(!current||!["SENT","PREPARING","READY","PARTIALLY_PAID"].includes(current.status))continue;
+  const payload=event.afterData?.ticket as Record<string,unknown>|undefined;
+  if(!payload||typeof payload!=="object"||Array.isArray(payload)||
+     payload.kind!=="PREBILL"||!Array.isArray(payload.items))continue;
+  jobs.push({key:event.entityId,orderId:match[1],kind:"PREBILL",
+    createdAt:event.createdAt.toISOString(),
+    title:"Precuenta "+(current.tableLabel??current.folio),
+    ticket:payload as unknown as DirectReceiptPayload});
+ }
  jobs.sort((a,b)=>a.createdAt.localeCompare(b.createdAt)||
    (a.kind==="KITCHEN"?-1:1));
  return jobs.slice(0,30);
 }
 async function verifyJob(jobKey:string,org:string,store:string,tx:Pick<ReturnType<typeof getDb>,"select">){
- const match=/^(KITCHEN|RECEIPT):([0-9a-f-]{36})(?::([A-Za-z0-9_-]{1,120}))?$/i.exec(jobKey);
+ const match=/^(KITCHEN|RECEIPT|PREBILL|VOID):([0-9a-f-]{36})(?::([A-Za-z0-9_-]{1,120}))?$/i.exec(jobKey);
  if(!match)throw new Error("Trabajo de impresión inválido.");
  const [order]=await tx.select({id:posOrders.id}).from(posOrders).where(and(
   eq(posOrders.id,match[2]),eq(posOrders.organizationId,org),

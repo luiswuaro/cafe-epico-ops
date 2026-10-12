@@ -1,5 +1,6 @@
 import {and,eq,gte,inArray} from "drizzle-orm";
 import {getDb} from "@/src/infrastructure/db/client";
+import {getPosCostResolver} from "@/src/application/analytics/pos-cost-resolver";
 import {posOrders,posOrderLines,posPayments,posCustomers} from "@/src/infrastructure/db/schema";
 
 /** Fuente exclusiva: órdenes OPS LIVE pagadas y vigentes. Nunca se mezclan
@@ -30,18 +31,6 @@ type Sale={
  customerId:string|null;service:string;
 };
 type Row={qty:number;sales:number;cogs:number;complete:boolean;discounts:number;knownLines:number;totalLines:number};
-function lineCost(line:SaleLine){
- const receipt=obj(line.expectedConsumption);
- const components=Array.isArray(receipt.components)?receipt.components:[];
- let known=0,priced=0;
- for(const raw of components){
-   const c=obj(raw),m=obj(c.costOnlyMeasure);
-   const cost=COSTABLE(m.estimatedCostMxn);
-   if(cost!==null){known+=cost;priced++;}
- }
- return {known:money(known),complete:components.length>0&&priced===components.length,
-   priced,total:components.length};
-}
 function isFood(category:string){return category.toUpperCase()==="ALIMENTOS";}
 function emptyRow():Row{return {qty:0,sales:0,cogs:0,complete:true,discounts:0,knownLines:0,totalLines:0};}
 export async function getBusinessAnalytics(organizationId:string){
@@ -67,6 +56,14 @@ export async function getBusinessAnalytics(organizationId:string){
      eq(posPayments.organizationId,organizationId),inArray(posPayments.orderId,ids),
    )),
  ]):[[],[]];
+ const costResolver=await getPosCostResolver(organizationId);
+ const paidByOrder=new Map(validOrders.map(order=>[order.id,order.paidAt!]));
+ const lineCost=(line:SaleLine)=>{
+   const result=costResolver(line.expectedConsumption,paidByOrder.get(line.orderId)??now);
+   return {known:result.known,complete:result.complete,
+     priced:result.priced,total:result.total,reconstructed:result.reconstructed};
+ };
+ const reconstructedLines=lines.filter(line=>lineCost(line).reconstructed).length;
  const byOrder=new Map<string,SaleLine[]>();
  for(const line of lines)byOrder.set(line.orderId,[...(byOrder.get(line.orderId)??[]),line]);
  const all:Sale[]=validOrders.map(order=>{
@@ -232,7 +229,7 @@ export async function getBusinessAnalytics(organizationId:string){
  }
  return {
    source:"OPS_LIVE" as const,asOf:now.toISOString(),today,
-   periods,daily,hourly,
+   periods,daily,hourly,reconstructedLines,
    payments:[...paymentTotals].map(([name,sales])=>({name,sales:money(sales)}))
      .sort((a,b)=>b.sales-a.sales),
    dining:[...services].map(([name,v])=>({name,...v,sales:money(v.sales)}))
