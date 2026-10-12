@@ -69,6 +69,20 @@ export default async function SalesReportPage({searchParams}:{
         {data.metrics.cogsComplete?" Costo total disponible.":" Margen pendiente hasta completar recetas."}</p></article>
    </section>
    <section className="card stack" style={{marginTop:"1rem"}}>
+     <h2>Auditoría de costos · inventario OPS</h2>
+     <p className="muted">Los insumos se valoran según su unidad canónica (g, ml o pieza).
+       Si el costo inicial fue importado después de una venta anterior, el
+       importe se reconstruye con ese precio y <strong>no equivale a costo histórico confirmado</strong>.
+       {data.reconstructedLines>0?" Líneas con valoración reconstruida: "+data.reconstructedLines+".":""}
+     </p>
+     {data.missingCosts.length===0?<p>Sin componentes pendientes de costo en el periodo.</p>:
+      <div className="stack">{data.missingCosts.map(p=>
+       <div className="task" key={p.reason}><span>{p.reason}</span>
+        <strong>{p.usages} uso(s)</strong></div>)}</div>}
+     <p className="muted">El hielo propio se registra como costo sin existencias: requiere
+       medir agua, energía, desgaste y merma por kg. Los importes sin precio no se consideran cero.</p>
+   </section>
+   <section className="card stack" style={{marginTop:"1rem"}}>
     <h2>¿Cuánto quedó de utilidad?</h2>
     <p>Beneficio bruto = venta neta − costo directo de insumos y empaques (COGS).
       La <strong>utilidad neta contable no puede calcularse todavía</strong> sin gastos efectivamente devengados,
