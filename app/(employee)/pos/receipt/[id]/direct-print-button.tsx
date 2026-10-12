@@ -36,6 +36,8 @@ export type DirectReceiptPayload = {
   customer?: string | null;
   pointsEarned?: string | null;
   pointsBalance?: string | null;
+  pointsRedeemed?: string | null;
+  monetaryPaid?: string | null;
 };
 
 export type DirectReceiptTemplate = {
@@ -452,6 +454,11 @@ async function buildRasterTicket(
     }
   }
 
+  if (template.showPoints && ticket.status !== "CANCELLED" && ticket.pointsRedeemed) {
+    y = drawPair(context, "Puntos canjeados", "−" + ticket.pointsRedeemed, y);
+    if(ticket.monetaryPaid)
+      y = drawPair(context, "Pagado con dinero real", ticket.monetaryPaid, y);
+  }
   if (template.showCustomer && ticket.customer) {
     y = drawWrappedLeft(
       context,

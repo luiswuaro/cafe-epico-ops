@@ -69,14 +69,28 @@ const waterGramsPerContainer = WATER_COST_BASIS.packageLiters * 1000 *
 export const WATER_COST_PER_G_MXN =
   WATER_COST_BASIS.packagePriceMxn / waterGramsPerContainer;
 
-/**
- * El hielo se fabrica en Café Épico. No usar precio del agua como si fuera
- * costo completo: faltan kWh/kg real, rendimiento, mantenimiento y merma.
+/** [Estimación de ingeniería]
+ * Hisense: potencia nominal 300 W y capacidad declarada 18 kg/24 h.
+ * Modelo teórico: 24 horas a 300 W para producir 18 kg. No es medición real.
+ * Se excluyen mantenimiento, filtración, purgas y pérdidas de hielo.
  */
 export const ICE_COST_BASIS = {
-  source: "ICE_MACHINE_OWN_PRODUCTION",
-  requires: ["agua", "energia_kwh_por_kg", "mantenimiento", "merma"] as const,
+  source:"HISENSE_NOMINAL_MODEL_2026-10",
+  powerW:300,
+  nominalProductionKgPerDay:18,
+  assumedRunHoursPerDay:24,
+  electricityPriceMxnPerKwh:3,
+  waterPriceMxnPerLiter:WATER_COST_BASIS.packagePriceMxn/WATER_COST_BASIS.packageLiters,
+  omitted:["mantenimiento","desgaste","filtración","merma","variación de rendimiento"] as const,
+  pricingStatus:"ESTIMATED_WATER_ELECTRICITY_ONLY" as const,
 } as const;
+export const ICE_WATER_COST_PER_KG_MXN=
+  ICE_COST_BASIS.waterPriceMxnPerLiter;
+export const ICE_ELECTRICITY_COST_PER_KG_MXN=
+  (ICE_COST_BASIS.powerW/1000*ICE_COST_BASIS.assumedRunHoursPerDay*
+  ICE_COST_BASIS.electricityPriceMxnPerKwh)/ICE_COST_BASIS.nominalProductionKgPerDay;
+export const ICE_COST_PER_G_MXN=
+  (ICE_WATER_COST_PER_KG_MXN+ICE_ELECTRICITY_COST_PER_KG_MXN)/1000;
 
 /**
  * Loyverse captura agua e hielo por kg. OPS conserva el peso de receta en g
@@ -104,9 +118,9 @@ export function costOnlyRecipeMeasure(component:PosRecipeComponent, quantity:num
     ingredient:name,
     quantity:grams,
     unit:"g" as const,
-    estimatedUnitCostMxn:null,
-    estimatedCostMxn:null,
+    estimatedUnitCostMxn:ICE_COST_PER_G_MXN,
+    estimatedCostMxn:Math.round(grams*ICE_COST_PER_G_MXN*10_000)/10_000,
     costBasis:ICE_COST_BASIS,
-    pricingStatus:"PENDING_UNIT_COST" as const,
+    pricingStatus:"ESTIMATED_WATER_ELECTRICITY_ONLY" as const,
   };
 }

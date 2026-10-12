@@ -6,7 +6,9 @@ import {getCurrentEmployee} from "@/src/infrastructure/auth/current-employee";
 import {assertEmployeePermission} from "@/src/infrastructure/auth/permissions";
 import {assertNoPreviewMutation} from "@/src/shared/preview-guard";
 import {auditEvents,employees,posOrderLines,posOrderSplits,posOrderSplitLines,
-  posOrders,posPayments,posCustomers} from "@/src/infrastructure/db/schema";
+  posOrders,posPayments,posCustomers,posLoyaltyEntries} from "@/src/infrastructure/db/schema";
+import {extraLabels} from "@/src/application/pos/extras";
+import {receiptLoyaltyView} from "@/src/domain/pos/receipt-loyalty";
 import {kitchenOrderIdentity} from "@/src/application/pos/kitchen-slip";
 import type {KitchenSlip} from "@/src/application/pos/kitchen-slip";
 import type {DirectReceiptPayload} from "../receipt/[id]/direct-print-button";
@@ -35,7 +37,7 @@ function allowedSince(value:string){
 export async function getPrintStationJobs({since}:FeedInput):Promise<HubJob[]>{
  if(process.env.VERCEL_ENV==="preview")return [];
  const {employee,storeId}=await principal(),start=allowedSince(since),db=getDb();
- const orders=await db.select({order:posOrders,employeeName:employees.name,customerName:posCustomers.name})
+ const orders=await db.select({order:posOrders,employeeName:employees.name,customerName:posCustomers.name,customerBalance:posCustomers.pointsBalance})
    .from(posOrders).leftJoin(employees,eq(employees.id,posOrders.employeeId))
    .leftJoin(posCustomers,eq(posCustomers.id,posOrders.customerId))
    .where(and(eq(posOrders.organizationId,employee.organizationId),
@@ -44,7 +46,7 @@ export async function getPrintStationJobs({since}:FeedInput):Promise<HubJob[]>{
    .orderBy(desc(posOrders.updatedAt)).limit(150);
  if(!orders.length)return [];
  const ids=orders.map(r=>r.order.id);
- const [lines,splits,splitLines,payments,audits]=await Promise.all([
+ const [lines,splits,splitLines,payments,audits,earnRows]=await Promise.all([
   db.select().from(posOrderLines).where(inArray(posOrderLines.orderId,ids)),
   db.select().from(posOrderSplits).where(inArray(posOrderSplits.orderId,ids)),
   db.select({splitId:posOrderSplitLines.splitId,orderLineId:posOrderSplitLines.orderLineId,
@@ -58,6 +60,13 @@ export async function getPrintStationJobs({since}:FeedInput):Promise<HubJob[]>{
     .from(auditEvents).where(and(eq(auditEvents.organizationId,employee.organizationId),
       eq(auditEvents.entityType,"pos_print_job"),
       gte(auditEvents.createdAt,start))),
+  db.select({orderId:posLoyaltyEntries.orderId,customerId:posLoyaltyEntries.customerId,
+    name:posCustomers.name,balance:posCustomers.pointsBalance,
+    points:posLoyaltyEntries.points,note:posLoyaltyEntries.note})
+    .from(posLoyaltyEntries)
+    .innerJoin(posCustomers,eq(posCustomers.id,posLoyaltyEntries.customerId))
+    .where(and(eq(posLoyaltyEntries.organizationId,employee.organizationId),
+      eq(posLoyaltyEntries.entryType,"EARN"),inArray(posLoyaltyEntries.orderId,ids))),
  ]);
  const stopped=new Set(audits.filter(e=>
    e.action==="POS_PRINT_HUB_DONE"||e.action==="POS_PRINT_HUB_FAILED")
@@ -97,12 +106,34 @@ export async function getPrintStationJobs({since}:FeedInput):Promise<HubJob[]>{
   }
   const receiptLines=(selected:typeof lines)=>
     selected.map(line=>({quantity:Number(line.quantity),name:line.nameSnapshot,
-      note:line.note,total:money(Number(line.lineTotal))}));
+      extra:extraLabels(line.expectedConsumption,{showPrices:true}).join(" · ")||null,
+      note:(line.expectedConsumption?.serviceMode==="TAKEAWAY"?"Para llevar":"Aquí")+
+        (line.note?" · "+line.note:""),
+      total:money(Number(line.lineTotal))}));
+  const earned=earnRows.filter(row=>row.orderId===order.id);
+  const loyaltyFor=(splitLabel:string|null)=>receiptLoyaltyView({
+    entries:earned,splitLabel,fallbackCustomer:entry.customerName,
+    fallbackBalance:entry.customerBalance,cancelled:order.status==="CANCELLED",
+  });
+  const paymentExtras=(methods:typeof payments)=>{
+    const redeemed=methods.filter(p=>p.method==="POINTS").reduce((n,p)=>n+Number(p.amount),0);
+    const cash=methods.filter(p=>p.method==="CASH");
+    const completeCash=cash.length>0&&cash.every(p=>p.tenderedAmount!==null&&p.changeAmount!==null);
+    return {
+      payment:methods.map(p=>(p.method==="CASH"?"Efectivo":
+        p.method==="CARD"?"Tarjeta":p.method==="TRANSFER"?"Transferencia":
+        p.method==="POINTS"?"Puntos":p.method)+" "+money(Number(p.amount))).join(" + "),
+      cashTendered:completeCash?money(cash.reduce((n,p)=>n+Number(p.tenderedAmount),0)):null,
+      cashChange:completeCash?money(cash.reduce((n,p)=>n+Number(p.changeAmount),0)):null,
+      pointsRedeemed:redeemed>0?redeemed.toFixed(2):null,
+      monetaryPaid:redeemed>0?money(methods.filter(p=>p.method!=="POINTS")
+        .reduce((n,p)=>n+Number(p.amount),0)):null,
+    };
+  };
   const base={folio:order.folio,kind:"RECEIPT" as const,
     status:order.status,date:(order.paidAt??order.createdAt)
       .toLocaleString("es-MX",{timeZone:"America/Mexico_City"}),
-    employee:entry.employeeName??"Equipo",service:order.serviceMode==="TAKEAWAY"?"Para llevar":"Aquí",
-    customer:entry.customerName??null,pointsEarned:null,pointsBalance:null};
+    employee:entry.employeeName??"Equipo",service:order.serviceMode==="TAKEAWAY"?"Para llevar":"Aquí"};
   const orderSplits=splits.filter(x=>x.orderId===order.id);
   if(orderSplits.length){
     for(const split of orderSplits){
@@ -117,11 +148,11 @@ export async function getPrintStationJobs({since}:FeedInput):Promise<HubJob[]>{
       const methods=payments.filter(p=>p.splitId===split.id);
       jobs.push({key,orderId:order.id,kind:"RECEIPT",createdAt:split.paidAt.toISOString(),
         title:"Ticket "+split.label+" · "+order.folio,ticket:{
-          ...base,splitLabel:split.label,items:receiptLines(parts),
+          ...base,status:"PAID",date:split.paidAt.toLocaleString("es-MX",{
+            timeZone:"America/Mexico_City",dateStyle:"short",timeStyle:"short"}),
+          ...loyaltyFor(split.label),...paymentExtras(methods),
+          splitLabel:split.label,items:receiptLines(parts),
           total:money(Number(split.total)),
-          payment:methods.map(p=>p.method).join(" + ")||"PAGADO",
-          cashTendered:methods.find(p=>p.method==="CASH")?.tenderedAmount??null,
-          cashChange:methods.find(p=>p.method==="CASH")?.changeAmount??null,
         }});
     }
   }else if(order.status==="PAID"&&order.paidAt&&order.paidAt>=start){
@@ -130,10 +161,10 @@ export async function getPrintStationJobs({since}:FeedInput):Promise<HubJob[]>{
     const methods=payments.filter(p=>p.orderId===order.id);
     jobs.push({key,orderId:order.id,kind:"RECEIPT",
       createdAt:order.paidAt.toISOString(),title:"Ticket "+order.folio,
-      ticket:{...base,items:receiptLines(linesFor),total:money(Number(order.total)),
-        payment:methods.map(p=>p.method).join(" + ")||"Sin cobro · consumo interno",
-        cashTendered:methods.find(p=>p.method==="CASH")?.tenderedAmount??null,
-        cashChange:methods.find(p=>p.method==="CASH")?.changeAmount??null}});
+      ticket:{...base,...loyaltyFor(null),...paymentExtras(methods),
+        items:receiptLines(linesFor),total:money(Number(order.total)),
+        payment:paymentExtras(methods).payment||"Sin cobro · consumo interno"}});
+
   }
  }
  for(const event of audits){

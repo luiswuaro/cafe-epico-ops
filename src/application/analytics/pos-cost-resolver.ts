@@ -1,7 +1,7 @@
 import {eq} from "drizzle-orm";
 import {getDb} from "@/src/infrastructure/db/client";
 import {inventoryItems,itemCostHistory,loyverseInventoryMappings} from "@/src/infrastructure/db/schema";
-import {costOnlyComponentCode,WATER_COST_PER_G_MXN} from "@/src/application/pos/component-policy";
+import {costOnlyComponentCode,WATER_COST_PER_G_MXN,ICE_COST_PER_G_MXN} from "@/src/application/pos/component-policy";
 
 type Component=Record<string,unknown>;
 type Price={value:number;effectiveAt:number;source:string};
@@ -84,9 +84,10 @@ export async function getPosCostResolver(organizationId:string){
  function rate(item:Item,paidAt:Date){
   const at=paidAt.getTime();
   const prior=item.prices.filter(p=>p.effectiveAt<=at).at(-1);
-  if(prior)return {...prior,reconstructed:false};
+  if(prior)return {...prior,reconstructed:prior.source.includes("_EST_")};
   const first=item.prices[0];
-  if(first&&first.source.startsWith("LOYVERSE_INITIAL_"))
+  if(first&&(first.source.startsWith("LOYVERSE_INITIAL_")||
+     first.source.startsWith("OWNER_ICEE_INITIAL_EST_")))
     return {...first,reconstructed:true};
   return null;
  }
@@ -103,7 +104,13 @@ export async function getPosCostResolver(organizationId:string){
     costOnlyCode:comp.costOnlyCode==="WATER"?"WATER":comp.costOnlyCode==="ICE"?"ICE":null,
     unitLabel:String(comp.unitLabel??""),
   });
-  if(special==="ICE")return {cost:null,reason:"HIELO · costo de fabricación por kg pendiente",reconstructed:false};
+  if(special==="ICE"){
+    const unit=units(comp.unitLabel);
+    const grams=unit==="kg"||unit==="peso/volumen"?quantity*1000:unit==="g"?quantity:null;
+    return grams===null?
+      {cost:null,reason:"HIELO · unidad no compatible",reconstructed:false}:
+      {cost:grams*ICE_COST_PER_G_MXN,reason:null,reconstructed:true};
+  }
   if(special==="WATER"){
    const measure=comp.costOnlyMeasure as Record<string,unknown>|undefined;
    const stored=numeric(measure?.estimatedCostMxn);
