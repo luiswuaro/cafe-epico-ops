@@ -1,3 +1,4 @@
+import {receiptLoyaltyView} from "@/src/domain/pos/receipt-loyalty";
 import {randomUUID} from "node:crypto";
 import {deliverExtraPackaging} from "./packaging-action";
 import Image from "next/image";
@@ -219,19 +220,12 @@ export default async function ReceiptPage({
       eq(posLoyaltyEntries.orderId,id),
       eq(posLoyaltyEntries.entryType,"EARN"),
     ));
-  const applicable=split
-    ? loyalty.filter(row=>row.note?.startsWith(split.label+" · "))
-    : loyalty;
-  const recipients=new Set(applicable.map(row=>row.customerId));
-  const receiptCustomer=recipients.size===1
-    ? applicable[0].name
-    : recipients.size>1?"Varios clientes":split?null:order.customerName;
-  const pointsEarned=order.order.status!=="CANCELLED"&&applicable.length
-    ? applicable.reduce((sum,row)=>sum+Number(row.points),0).toFixed(2):null;
-  const pointsBalance=order.order.status!=="CANCELLED"
-    ?(recipients.size===1?Number(applicable[0].balance).toFixed(2):
-       order.customerPoints!=null?Number(order.customerPoints).toFixed(2):null)
-    :null;
+  const loyaltyView=receiptLoyaltyView({
+    entries:loyalty,splitLabel:split?.label??null,
+    fallbackCustomer:order.customerName,fallbackBalance:order.customerPoints,
+    cancelled:order.order.status==="CANCELLED",
+  });
+  const {customer:receiptCustomer,pointsEarned,pointsBalance}=loyaltyView;
 
   const extraEvents=order.order.mode==="LIVE"&&order.order.status==="PAID"&&!split
     ?await db.select({data:auditEvents.afterData}).from(auditEvents).where(and(
@@ -311,6 +305,8 @@ export default async function ReceiptPage({
             customer: receiptCustomer,
             pointsEarned,
             pointsBalance,
+            pointsRedeemed:pointPayment>0?pointPayment.toFixed(2):null,
+            monetaryPaid:pointPayment>0?money.format(moneyPayment):null,
           }}
           template={{
             businessName: printSettings.businessName,
