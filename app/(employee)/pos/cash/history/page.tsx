@@ -1,3 +1,5 @@
+import {hasPosHistoryAccess} from "@/src/application/pos/history-access";
+import {HistoryLock} from "../../history-lock";
 import Link from "next/link";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { getDb } from "@/src/infrastructure/db/client";
@@ -21,10 +23,18 @@ function auditData(value: Record<string, unknown> | null) {
   return value ?? {};
 }
 
-export default async function CashHistoryPage() {
+export default async function CashHistoryPage({
+ searchParams,
+}:{
+ searchParams:Promise<{lockError?:string}>;
+}) {
+ const input=await searchParams;
   const { employee } = await getCurrentEmployee();
   if (!employee.homeStoreId) throw new Error("Sin sucursal asignada");
   await assertEmployeePermission(employee.id, "pos.cash.manage", employee.homeStoreId);
+  if(!(await hasPosHistoryAccess(employee)))
+    return <HistoryLock destination="/pos/cash/history"
+      error={typeof input.lockError==="string"?input.lockError:null}/>;
   const db = getDb();
   const sessions = await db.select().from(posCashSessions).where(and(
     eq(posCashSessions.organizationId, employee.organizationId),
