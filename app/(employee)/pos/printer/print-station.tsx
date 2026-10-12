@@ -1,6 +1,5 @@
 "use client";
 import {useEffect,useRef,useState} from "react";
-import {DEFAULT_PAPER_CUT_GAP_SECONDS,PAPER_CUT_GAP_OPTIONS,getPaperCutGapSeconds,setPaperCutGapSeconds} from "@/src/application/pos/print-paper-gap";
 import {PAPER_CUT_GAP_STORAGE,DEFAULT_PAPER_CUT_GAP_SECONDS,PAPER_CUT_GAP_OPTIONS,getPaperCutGapSeconds,setPaperCutGapSeconds} from "@/src/application/pos/print-paper-gap";
 import {getPrintStationJobs,claimPrintStationJob,finishPrintStationJob,
 } from "./hub-actions";
