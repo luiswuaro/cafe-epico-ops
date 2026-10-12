@@ -1,5 +1,6 @@
 "use server";
 
+import {randomUUID} from "node:crypto";
 import {and,eq,ne,sql} from "drizzle-orm";
 import {redirect} from "next/navigation";
 import {z} from "zod";
@@ -142,6 +143,29 @@ export async function removeLiveOrderUnits(form:FormData){
         afterData:{lineId,name:line.nameSnapshot,removed:removeUnits,remaining,
           amount:subtracted,total,reason,roundId:line.expectedConsumption?.roundId??"INITIAL"},
       });
+      // Si barra confirmó la impresión de esa ronda, genera UNA anulación
+      // física para que el barista no prepare productos retirados del ticket.
+      const roundId=typeof line.expectedConsumption?.roundId==="string"
+        ?line.expectedConsumption.roundId:"INITIAL";
+      const [printed]=await tx.select({id:auditEvents.id}).from(auditEvents).where(and(
+        eq(auditEvents.organizationId,employee.organizationId),
+        eq(auditEvents.entityType,"pos_order"),eq(auditEvents.entityId,orderId),
+        eq(auditEvents.action,"POS_COMMAND_PRINT_ACKNOWLEDGED"),
+        sql`${auditEvents.afterData}->>'roundId' = ${roundId}`)).limit(1);
+      if(printed){
+        const jobKey="VOID:"+orderId+":"+randomUUID();
+        await tx.insert(auditEvents).values({
+          organizationId:employee.organizationId,storeId,actorUserId:user.id,
+          actorEmployeeId:employee.id,action:"POS_KITCHEN_VOID_PRINT_REQUESTED",
+          entityType:"pos_print_job",entityId:jobKey,
+          afterData:{slip:{folio:order.folio,table:"ANULACIÓN · "+(order.tableLabel??order.folio),
+            customerName:null,orderNote:"NO PREPARAR · "+reason,
+            lines:[{id:line.id,name:"ANULAR "+line.nameSnapshot,
+              category:line.categorySnapshot,quantity:removeUnits,note:reason,
+              serviceMode:line.expectedConsumption?.serviceMode==="TAKEAWAY"?"TAKEAWAY":"DINE_IN",
+              roundId:"VOID"}]},orderId},
+        });
+      }
     });
   }catch(error){failure(error);}
   redirect("/pos/orders?edited="+orderId);
