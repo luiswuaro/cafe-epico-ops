@@ -1,5 +1,6 @@
 import {and,eq,sql} from "drizzle-orm";
 import {getPosCatalog} from "./catalog";
+import {takeawayPackagingErrors} from "@/src/domain/pos/takeaway-packaging";
 import {getDb} from "@/src/infrastructure/db/client";
 import {auditEvents,inventoryBalances,inventoryItems,inventoryLocations,inventoryMovements,loyverseInventoryMappings,posOrders,posOrderLines} from "@/src/infrastructure/db/schema";
 
@@ -67,8 +68,9 @@ export async function recordExtraPackaging(input:ExtraPackInput){
     const extras=item.serviceRecipes.TAKEAWAY.components.filter(c=>isPack(c.name))
       .map(c=>({...c,quantity:Math.max(0,c.quantity-(here.get(componentId(c))??0))*input.quantity}))
       .filter(c=>c.quantity>0);
-    if(!extras.some(c=>/VASO/i.test(c.name))||!extras.some(c=>/TAPA/i.test(c.name)))
-      throw new Error("Falta vaso o tapa en la receta para llevar.");
+    const packagingErrors=takeawayPackagingErrors(item,extras);
+    if(packagingErrors.length)
+      throw new Error(packagingErrors.join(" "));
     const mappings=await tx.select({
       ext:loyverseInventoryMappings.loyverseVariantExternalId,
       location:loyverseInventoryMappings.locationId,
