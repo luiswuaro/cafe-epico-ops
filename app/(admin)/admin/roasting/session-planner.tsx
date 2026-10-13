@@ -138,7 +138,6 @@ export function RoastingSessionPlanner({
     // Confirmed batches can have a different charge (e.g. the last
     // 200 g or a test batch). Plan the remainder from actual consumption,
     // not the assumption that every confirmed batch weighed "charge" grams.
-    const postedGreen=confirmed.reduce((sum,b)=>sum+b.greenWeightG,0);
     const remainingCharges=plannedRoastCharges(target,charge,confirmed.map(b=>b.greenWeightG));
     const total=confirmed.length+remainingCharges.length;
     return Array.from({length:total},(_,index)=>{
