@@ -1,0 +1,18 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+const installer=fs.readFileSync("tools/print-bridge/Instalar-EstacionOPS.ps1","utf8");
+const worker=fs.readFileSync("app/(employee)/pos/printer/print-station.tsx","utf8");
+assert.match(installer,/New-ScheduledTaskTrigger -AtLogOn/);
+assert.match(installer,/Get-Process -Name chrome,brave,msedge/);
+assert.match(installer,/Start-Process -FilePath \$browser\.Exe/);
+assert.match(installer,/Start-Sleep -Seconds 20/);
+assert.match(installer,/powercfg\.exe \/change standby-timeout-ac 0/);
+assert.match(installer,/CafeEpicoOps-PrintBridge/);
+assert.match(installer,/\$env:LOCALAPPDATA/);
+assert.match(installer,/\[switch\]\$Uninstall/);
+assert.doesNotMatch(installer,/--user-data-dir/);
+assert.doesNotMatch(installer,/-ResetToken/);
+assert.match(worker,/Date\.now\(\)-24\*60\*60\*1000/);
+assert.match(worker,/getPrintStationJobs\(\{since:pollSince\}\)/);
+assert.match(worker,/since:pollSince/);
+console.log("Estación Windows: PASS (autoarranque, restauración de ventana, puente intacto, ventana de 24h)");
