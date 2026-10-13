@@ -13,6 +13,15 @@ $startup=Join-Path ([Environment]::GetFolderPath('Startup')) 'CafeEpicoOps-Stati
 $url='https://cafe-epico-ops.vercel.app/pos'
 function Log([string]$msg){try{Add-Content $log ((Get-Date -Format s)+' '+$msg) -Encoding UTF8}catch{}}
 function ResolveBrowser([string]$name) {
+ if($name -eq 'Auto'){
+  # Reutilizar el navegador donde OPS ya tiene la sesión y el puente configurados.
+  $running=Get-Process -Name chrome,brave,msedge -ErrorAction SilentlyContinue |
+   Where-Object {$_.MainWindowTitle -match 'Caf[eé]\s*[eé]pico\s*Ops'} |
+   Select-Object -First 1
+  if($running){
+   $name=switch($running.ProcessName){'brave'{'Brave'}'msedge'{'Edge'}default{'Chrome'}}
+  }
+ }
  $x86=[Environment]::GetEnvironmentVariable('ProgramFiles(x86)')
  $suffix=@{Chrome='Google\Chrome\Application\chrome.exe';Brave='BraveSoftware\Brave-Browser\Application\brave.exe';Edge='Microsoft\Edge\Application\msedge.exe'}
  $choices=if($name -eq 'Auto'){@('Chrome','Brave','Edge')}else{@($name)}
