@@ -14,6 +14,7 @@ import {calculateStaffTicket,calculateMixedTicketSettlement,type StaffBenefitKin
 import type {ExtraOption} from "@/src/application/pos/extra-catalog";
 import {OWN_CONTAINER_DISCOUNT_MXN,canUseOwnContainer,ownContainerUnitPrice} from "@/src/domain/pos/own-container";
 import {isEspressoTakeawayWithoutLid} from "@/src/domain/pos/takeaway-packaging";
+import {comparePosVisualProducts,POS_VISUAL_CATEGORIES,POS_VISUAL_FAMILIES,POS_VISUAL_FAMILY_ORDER,posVisualFamily,type VisualFamily} from "@/src/domain/pos/catalog-visuals";
 import {
   DINE_IN_TICKET_PRESETS,TAKEAWAY_TICKET_PRESETS,
   effectiveOrderServiceMode,
@@ -82,6 +83,7 @@ export function PosClient({
     "CALIENTES",
   );
   const [query, setQuery] = useState("");
+  const [visualFamily,setVisualFamily]=useState<VisualFamily|null>(null);
   const [cart, setCart] = useState<CartLine[]>([]);
   const [serviceMode, setServiceMode] =
     useState<ServiceMode>(savedTicket?.serviceMode??"DINE_IN");
@@ -134,14 +136,25 @@ export function PosClient({
     [catalog],
   );
 
+  // Orden constante y etiquetas derivadas: ventas, caja, IDs y recetas no cambian.
+  const visualCatalog=useMemo(()=>[...catalog].sort(comparePosVisualProducts),[catalog]);
+  const visualFamilies=useMemo(()=>{
+    if(category==="TODAS")return [] as VisualFamily[];
+    const offered=new Set(
+      catalog.filter(item=>item.category===category).map(posVisualFamily)
+    );
+    return POS_VISUAL_FAMILY_ORDER[category].filter(family=>offered.has(family));
+  },[catalog,category]);
+
   const visible = useMemo(() => {
     const q = normalizeSearch(query);
-    return catalog.filter((item) => {
+    return visualCatalog.filter((item) => {
       const categoryOk = category === "TODAS" || item.category === category;
+      const familyOk=!visualFamily || (category!=="TODAS" && posVisualFamily(item)===visualFamily);
       const queryOk = !q || normalizeSearch(item.name).includes(q);
-      return categoryOk && queryOk;
+      return categoryOk && familyOk && queryOk;
     });
-  }, [catalog, category, query]);
+  }, [visualCatalog, category, visualFamily, query]);
 
   const cartLines = cart.flatMap((line) => {
     const item = catalogById.get(line.externalId);
@@ -591,7 +604,7 @@ export function PosClient({
             value={query}
             onChange={(event) => {
               setQuery(event.target.value);
-              if(event.target.value.trim()) setCategory("TODAS");
+              if(event.target.value.trim()){setCategory("TODAS");setVisualFamily(null);}
             }}
             placeholder="Buscar bebida o alimento... · F2 o Ctrl+K"
             aria-label="Buscar producto"
@@ -603,45 +616,57 @@ export function PosClient({
           <p className="muted" aria-live="polite" style={{margin:0}}>
             {visible.length} de {catalog.length} productos
           </p>
-          <div className="pos-category-tabs">
-            {(["TODAS", "CALIENTES", "FRÍAS", "ALIMENTOS"] as const).map(
-              (value) => (
-                <button
-                  key={value}
-                  type="button"
-                  className={category === value ? "active" : ""}
-                  onClick={() => setCategory(value)}
-                >
-                  {value === "FRÍAS"
-                    ? "Frías"
-                    : value === "CALIENTES"
-                      ? "Calientes"
-                      : value === "ALIMENTOS"
-                        ? "Alimentos"
-                        : "Todas"}
-                </button>
-              ),
-            )}
+          <div className="pos-category-tabs" aria-label="Filtrar por categoría">
+            <button type="button" className={category==="TODAS"?"active":""}
+              aria-pressed={category==="TODAS"}
+              onClick={()=>{setCategory("TODAS");setVisualFamily(null);}}>Todas</button>
+            {POS_VISUAL_CATEGORIES.map(option=>(
+              <button key={option.key} type="button" data-category={option.key}
+                className={category===option.key?"active":""}
+                aria-pressed={category===option.key}
+                onClick={()=>{setCategory(option.key);setVisualFamily(null);}}>
+                <span aria-hidden="true">{option.symbol}</span> {option.label}
+              </button>
+            ))}
           </div>
+          {category!=="TODAS"&&visualFamilies.length>0&&
+            <div className="pos-family-filters" aria-label="Filtrar por familia de producto">
+              <span className="pos-family-filter-title">Tipo:</span>
+              <button type="button" className={!visualFamily?"active":""}
+                aria-pressed={!visualFamily} onClick={()=>setVisualFamily(null)}>Todos</button>
+              {visualFamilies.map(family=>(
+                <button type="button" key={family} data-family={family}
+                  className={visualFamily===family?"active":""}
+                  aria-pressed={visualFamily===family}
+                  onClick={()=>setVisualFamily(current=>current===family?null:family)}>
+                  {POS_VISUAL_FAMILIES[family].label}
+                </button>
+              ))}
+            </div>}
         </div>
 
         {visible.length===0 && <p className="card muted" role="status">
-          No encontramos productos con esa búsqueda. Cambia el término o selecciona «Todas».
+          No hay productos para este filtro. Cambia de familia, borra la búsqueda o selecciona «Todas».
         </p>}
         <div className="pos-product-grid">
           {visible.map((item) => {
             const count = productCount(item.id);
+            const family=posVisualFamily(item);
+            const visual=POS_VISUAL_FAMILIES[family];
             return (
-              <button
-                type="button"
-                className="pos-product-card"
-                key={item.id}
-                onClick={() => add(item.id)}
-              >
-                <span className="eyebrow">{item.category}</span>
-                <strong>{item.name}</strong>
-                <span>{money.format(item.price)}</span>
-                {count > 0 && <span className="pos-product-qty">{count}</span>}
+              <button type="button" className="pos-product-card"
+                data-category={item.category} data-family={family}
+                key={item.id} onClick={() => add(item.id)}>
+                <span className="pos-product-head">
+                  <span className="pos-product-category">{item.category}</span>
+                  <span className="pos-product-family">{visual.label}</span>
+                </span>
+                <strong className="pos-product-name">{item.name}</strong>
+                <span className="pos-product-footer">
+                  <span className="pos-product-price">{money.format(item.price)}</span>
+                  {count===0&&<span className="pos-product-symbol" aria-hidden="true">{visual.symbol}</span>}
+                </span>
+                {count>0&&<span className="pos-product-qty" aria-label={count+" agregados"}>{count}</span>}
               </button>
             );
           })}

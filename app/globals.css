@@ -3061,3 +3061,127 @@ main.pos-shell button.pos-quick-reabasto-trigger:is(:hover,:focus-visible){
   color:var(--epic-fg);
   border-color:var(--epic-accent);
 }
+
+/* POS · identificación visual por categoría y familia, sin imágenes ni dependencias.
+   Los colores identifican; texto e iconos permanecen para accesibilidad. */
+main.pos-shell{
+  --pos-price:#26543c;
+  --pos-hot:#c96a2b;--pos-cold:#3f87b5;--pos-food:#7a8f3a;
+}
+main.pos-shell .pos-category-tabs{flex-wrap:wrap;overflow-x:visible;row-gap:.42rem}
+main.pos-shell .pos-category-tabs button{
+  display:inline-flex;align-items:center;justify-content:center;gap:.35rem;
+  min-height:39px;padding:.47rem .77rem;border:1px solid var(--epic-border);
+  background:var(--epic-card);color:var(--epic-fg);border-radius:999px;
+  font-size:.85rem;font-weight:800;white-space:nowrap;
+}
+main.pos-shell .pos-category-tabs button.active:not([data-category]){
+  background:var(--epic-fg);color:var(--epic-card);
+  border-color:var(--epic-fg);
+}
+main.pos-shell .pos-category-tabs button[data-category="CALIENTES"]{--pos-tab:var(--pos-hot);--pos-tab-active:#a84f19}
+main.pos-shell .pos-category-tabs button[data-category="FRÍAS"]{--pos-tab:var(--pos-cold);--pos-tab-active:#28658b}
+main.pos-shell .pos-category-tabs button[data-category="ALIMENTOS"]{--pos-tab:var(--pos-food);--pos-tab-active:#556629}
+main.pos-shell .pos-category-tabs button[data-category]:not(.active){
+  border-color:color-mix(in srgb,var(--pos-tab) 55%,var(--epic-border));
+  box-shadow:inset 3px 0 var(--pos-tab);
+}
+main.pos-shell .pos-category-tabs button.active[data-category]{
+  background:var(--pos-tab-active);border-color:var(--pos-tab-active);color:#fff;
+}
+main.pos-shell .pos-family-filters{
+  display:flex;align-items:center;gap:.36rem;
+  overflow-x:auto;scrollbar-width:thin;overscroll-behavior-x:contain;
+  padding:.55rem 0 .12rem;max-width:100%;
+}
+main.pos-shell .pos-family-filter-title{
+  flex:none;font-size:.76rem;color:var(--epic-secondary);font-weight:750;
+}
+main.pos-shell .pos-family-filters button{
+  flex:none;min-height:33px;padding:.34rem .57rem;
+  border:1px solid var(--epic-border);border-radius:9px;
+  font-size:.71rem;letter-spacing:.015em;font-weight:850;
+  color:var(--epic-fg);background:var(--epic-card);white-space:nowrap;
+}
+main.pos-shell .pos-family-filters button.active{
+  background:color-mix(in srgb,var(--pos-family,var(--epic-accent)) 28%,var(--epic-card));
+  border-color:var(--pos-family,var(--epic-accent));
+  box-shadow:inset 0 -2px var(--pos-family,var(--epic-accent));
+}
+main.pos-shell .pos-product-grid .pos-product-card{
+  --pos-category:var(--pos-hot);--pos-family:#5a3b2e;
+  min-height:132px;padding:.55rem .62rem .58rem;gap:.34rem;
+  border:1px solid var(--epic-border);border-top:3px solid var(--pos-category);
+  border-radius:11px;color:var(--epic-fg);background:var(--epic-card);
+  text-align:left;overflow:hidden;
+}
+main.pos-shell .pos-product-card[data-category="FRÍAS"]{--pos-category:var(--pos-cold)}
+main.pos-shell .pos-product-card[data-category="ALIMENTOS"]{--pos-category:var(--pos-food)}
+main.pos-shell :is(.pos-product-card,.pos-family-filters button)[data-family="espresso"]{--pos-family:#5a3b2e}
+main.pos-shell :is(.pos-product-card,.pos-family-filters button)[data-family="milk"]{--pos-family:#c9a46a}
+main.pos-shell :is(.pos-product-card,.pos-family-filters button)[data-family="chocolate"]{--pos-family:#7a4a32}
+main.pos-shell :is(.pos-product-card,.pos-family-filters button)[data-family="tea"]{--pos-family:#b38a2f}
+main.pos-shell :is(.pos-product-card,.pos-family-filters button)[data-family="botanical"]{--pos-family:#6d8b55}
+main.pos-shell :is(.pos-product-card,.pos-family-filters button)[data-family="signature"]{--pos-family:#9c5a3c}
+main.pos-shell :is(.pos-product-card,.pos-family-filters button)[data-family="coffee"]{--pos-family:#356a8a}
+main.pos-shell :is(.pos-product-card,.pos-family-filters button)[data-family="tonic"]{--pos-family:#5a8f9c}
+main.pos-shell :is(.pos-product-card,.pos-family-filters button)[data-family="frappe"]{--pos-family:#6c7fb8}
+main.pos-shell :is(.pos-product-card,.pos-family-filters button)[data-family="refresh"]{--pos-family:#4c9a91}
+main.pos-shell :is(.pos-product-card,.pos-family-filters button)[data-family="bread"]{--pos-family:#8a944e}
+main.pos-shell :is(.pos-product-card,.pos-family-filters button)[data-family="dessert"]{--pos-family:#a07c52}
+main.pos-shell :is(.pos-product-card,.pos-family-filters button)[data-family="savory"]{--pos-family:#7b8b46}
+main.pos-shell :is(.pos-product-card,.pos-family-filters button)[data-family="combo"]{--pos-family:#6f7a3c}
+main.pos-shell .pos-product-card:hover{
+  border-color:var(--pos-family);border-top-color:var(--pos-category);
+  box-shadow:0 5px 13px rgba(34,25,15,.10);
+}
+main.pos-shell .pos-product-card:focus-visible{outline-offset:2px}
+main.pos-shell .pos-product-head{
+  display:flex;flex-wrap:wrap;align-items:flex-start;gap:.22rem;
+  max-width:100%;line-height:1;
+}
+main.pos-shell .pos-product-category,main.pos-shell .pos-product-family{
+  display:inline-flex;align-items:center;max-width:100%;
+  padding:.22rem .31rem;min-height:19px;border-radius:5px;
+  font-size:.59rem;line-height:1.13;letter-spacing:.015em;
+  font-weight:850;text-transform:uppercase;
+  color:var(--epic-fg);overflow-wrap:anywhere;
+}
+main.pos-shell .pos-product-category{
+  background:color-mix(in srgb,var(--pos-category) 23%,var(--epic-card));
+  border-left:2px solid var(--pos-category);
+}
+main.pos-shell .pos-product-family{
+  background:color-mix(in srgb,var(--pos-family) 23%,var(--epic-card));
+  border-left:2px solid var(--pos-family);
+}
+main.pos-shell .pos-product-card .pos-product-name{
+  font-size:clamp(.77rem,.83vw,.97rem);line-height:1.17;
+  font-weight:850;letter-spacing:-.012em;overflow-wrap:anywhere;
+  margin:.13rem 0 auto;
+}
+main.pos-shell .pos-product-footer{
+  display:flex;width:100%;align-items:center;justify-content:space-between;
+  gap:.25rem;margin-top:.15rem;
+}
+main.pos-shell .pos-product-price{
+  font-size:.91rem;font-weight:850;font-variant-numeric:tabular-nums;
+  color:var(--pos-price);
+}
+main.pos-shell .pos-product-symbol{
+  font-size:1.05rem;line-height:1;opacity:.83;
+}
+main.pos-shell .pos-product-card .pos-product-qty{
+  top:auto;bottom:.47rem;right:.5rem;
+  min-width:1.48rem;height:1.48rem;font-size:.79rem;
+  background:var(--pos-category);color:#fff;
+}
+:root[data-theme="dark"] main.pos-shell{--pos-price:#b6e4c5}
+@media(prefers-color-scheme:dark){
+  :root:not([data-theme="light"]):not([data-theme="dark"]) main.pos-shell{--pos-price:#b6e4c5}
+}
+@media(max-width:760px){
+  main.pos-shell .pos-category-tabs{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:thin}
+  main.pos-shell .pos-product-grid .pos-product-card{min-height:133px;padding:.52rem}
+  main.pos-shell .pos-product-card .pos-product-name{font-size:.82rem}
+}
