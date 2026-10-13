@@ -99,8 +99,8 @@ export function AbastoWorkbench({seeds,suppliers,observedDays}:Props){
            boxPrice:typeof previous.boxPrice==="string"?previous.boxPrice:"",
            shelfDays:typeof previous.shelfDays==="string"?previous.shelfDays:"",
            inTransit:typeof previous.inTransit==="string"?previous.inTransit:"",
-           buyMode:previous.buyMode==="SUELTO"||previous.buyMode==="CAJA"?""
-             +previous.buyMode as BuyMode:"AUTO"};
+           buyMode:previous.buyMode==="SUELTO"||previous.buyMode==="CAJA"
+             ?previous.buyMode:"AUTO"};
        }));
      }
      const read=(key:string,setter:(value:string)=>void)=>{
@@ -146,6 +146,8 @@ export function AbastoWorkbench({seeds,suppliers,observedDays}:Props){
  const decisions=useMemo(()=>calculateSupplyPlan(
    rows.map(normalizeLine),cash,reserve,travel.cashCost,untilTrip,weekDays
  ),[rows,cash,reserve,travel.cashCost,untilTrip,weekDays]);
+ const essentialUnpriced=decisions.decisions.some(d=>d.urgency<=2&&
+   (d.status==="NO_DATOS"||d.status==="NO_PRECIO"));
  const chosen=rows.filter(x=>x.chosen).length;
  const funded=decisions.decisions.filter(d=>d.status==="CON_PRESUPUESTO"||d.status==="PARCIAL");
  const plannedMoney=decisions.decisions.reduce((sum,d)=>sum+(
@@ -239,6 +241,7 @@ export function AbastoWorkbench({seeds,suppliers,observedDays}:Props){
         {" "}· efectivo libre restante: {moneyOrUnknown(decisions.remainingCash)}.</span>
       {travel.cashCost===null&&<strong>Falta capturar kilómetros o un traslado verificable en «Ruta y costos» para simular financiamiento.</strong>}
       {cash.trim()===""&&<strong>Falta definir presupuesto; no se asignarán compras sin conocer el efectivo disponible.</strong>}
+      {essentialUnpriced&&<strong>Hay necesidades esenciales sin costo o consumo verificable; compras no urgentes y cajas adicionales quedan pospuestas.</strong>}
     </div>
     <div className="abp-actions">
       <button type="button" className="abp-button primary" onClick={()=>setTab("RUTA")}>
@@ -252,7 +255,9 @@ export function AbastoWorkbench({seeds,suppliers,observedDays}:Props){
       <div><h2>Insumos y precios de compra</h2>
        <p className="abp-lead">{seeds.length} insumos reales OPS · {chosen} seleccionados.
        {observedDays>=3?" Consumo observado en "+observedDays+" días con ventas LIVE.":
-       " Historial insuficiente para extrapolar demanda. Configura cantidades manuales."}</p></div>
+       " Historial insuficiente para extrapolar demanda. Configura cantidades manuales."}</p>
+       <p className="abp-lead">La clasificación inicial de perecederos se sugiere por nombre;
+        confirma tipo, caducidad, tamaño de caja y proveedor antes de confiar en el plan.</p></div>
       <div className="abp-actions"><button type="button" className="abp-button"
         onClick={()=>setRows(all=>all.map(x=>({...x,chosen:true})))}>
         Seleccionar todos</button>
