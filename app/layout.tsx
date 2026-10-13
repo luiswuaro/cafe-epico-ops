@@ -4,6 +4,7 @@ import "./globals.css";
 import { ServiceWorkerRegister } from "@/components/service-worker-register";
 import { AppNav } from "@/components/app-nav";
 import {PrintStationBackground} from "@/components/print-station-background";
+import {PrintStationHealthBanner} from "@/components/print-station-health-banner";
 
 export const metadata: Metadata = {
   title: { default: "Café Épico Ops", template: "%s · Café Épico Ops" },
@@ -35,6 +36,7 @@ export default function RootLayout({
           <Link className="brand" href="/today">Café Épico Ops</Link>
           <AppNav />
         </header>
+        {process.env.VERCEL_ENV!=="preview"&&<PrintStationHealthBanner/>}
         {children}
       </body>
     </html>
