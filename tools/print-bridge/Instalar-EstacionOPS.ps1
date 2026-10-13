@@ -53,7 +53,7 @@ if($Uninstall){
  exit
 }
 if($Watch){
- $browser=ResolveBrowser $Browser
+ $selectedBrowser=ResolveBrowser $Browser
  $last=[datetime]::MinValue
  Log 'Inicia supervisor'
  while($true){
@@ -62,7 +62,7 @@ if($Watch){
    $open=@(Get-Process -Name chrome,brave,msedge -ErrorAction SilentlyContinue |
     Where-Object {$_.MainWindowTitle -match 'Caf.\s*.pico\s*Ops'})
    if($open.Count -eq 0 -and ((Get-Date)-$last).TotalSeconds -ge 60){
-    Start-Process -FilePath $browser.Exe -ArgumentList @(
+    Start-Process -FilePath $selectedBrowser.Exe -ArgumentList @(
       ('--app='+$url),
       '--disable-background-timer-throttling',
       '--disable-renderer-backgrounding',
@@ -75,7 +75,7 @@ if($Watch){
   Start-Sleep -Seconds 20
  }
 }
-$browser=ResolveBrowser $Browser
+$selectedBrowser=ResolveBrowser $Browser
 New-Item -ItemType Directory -Path $folder -Force | Out-Null
 if($PSCommandPath -ne $installed){Copy-Item -LiteralPath $PSCommandPath -Destination $installed -Force}
 try {
@@ -83,7 +83,7 @@ try {
  if($LASTEXITCODE -ne 0){throw 'No se pudo cambiar powercfg'}
  Write-Host 'OK: suspensión deshabilitada en corriente alterna.' -ForegroundColor Green
 }catch{Write-Warning 'Configura manualmente suspensión: Windows > Sistema > Energía.'}
-$argsForWorker='-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "'+$installed+'" -Watch -Browser '+$browser.Name
+$argsForWorker='-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "'+$installed+'" -Watch -Browser '+$selectedBrowser.Name
 $taskCreated=$false
 try{
  $user=[Security.Principal.WindowsIdentity]::GetCurrent().Name
@@ -103,7 +103,7 @@ try{
 }
 Write-Host ''
 Write-Host 'CAFE EPICO OPS: ESTACION CONFIGURADA' -ForegroundColor Cyan
-Write-Host ('Navegador: '+$browser.Name)
+Write-Host ('Navegador: '+$selectedBrowser.Name)
 Write-Host ('Inicio: '+$(if($taskCreated){'Tarea de Windows'}else{'Carpeta Inicio'}))
 Write-Host 'Supervisión de ventana: cada 20 segundos.'
 Write-Host ('Registro: '+$log)

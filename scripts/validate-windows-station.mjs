@@ -3,8 +3,13 @@ import fs from "node:fs";
 const installer=fs.readFileSync("tools/print-bridge/Instalar-EstacionOPS.ps1","utf8");
 const worker=fs.readFileSync("app/(employee)/pos/printer/print-station.tsx","utf8");
 assert.match(installer,/New-ScheduledTaskTrigger -AtLogOn/);
+assert.match(installer,/\$selectedBrowser=ResolveBrowser \$Browser/);
+// PowerShell variable names are case-insensitive: $Browser and $browser are the SAME variable.
+// Assigning the returned hashtable to it causes ValidateSetFailure at installation.
+assert.doesNotMatch(installer,/^\s*\$browser\s*=/im,
+  "No sobrescribir el parámetro [ValidateSet] Browser con un objeto");
 assert.match(installer,/Get-Process -Name chrome,brave,msedge/);
-assert.match(installer,/Start-Process -FilePath \$browser\.Exe/);
+assert.match(installer,/Start-Process -FilePath \$selectedBrowser\.Exe/);
 assert.match(installer,/Start-Sleep -Seconds 20/);
 assert.match(installer,/powercfg\.exe \/change standby-timeout-ac 0/);
 assert.match(installer,/CafeEpicoOps-PrintBridge/);
