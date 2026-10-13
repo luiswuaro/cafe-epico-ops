@@ -71,12 +71,15 @@ export function PrintStation({template,preview,hiddenMode=false}:{
     if(!alive||working.current)return;
     working.current=true;
     try{
-      const jobs=await getPrintStationJobs({since:state.since});
+      // Mantener una ventana móvil de 24 h: el alta puede durar meses sin superar el límite del servidor.
+      // El servidor conserva su bloqueo de comandas >5 min y su deduplicación por trabajo.
+      const pollSince=new Date(Math.max(new Date(state.since).getTime(),Date.now()-24*60*60*1000)).toISOString();
+      const jobs=await getPrintStationJobs({since:pollSince});
       // No reclamar la cola cuando la impresora no responde: queda pendiente.
       // Así una reconexión dentro del plazo puede imprimirla sin duplicarla.
       const healthy=await printerBridgeReady();
       if(Date.now()-lastHeartbeat.current>=12000){
-        await heartbeatPrintStation({stationId:state.stationId,since:state.since,
+        await heartbeatPrintStation({stationId:state.stationId,since:pollSince,
           bridgeReady:healthy});
         lastHeartbeat.current=Date.now();
       }
