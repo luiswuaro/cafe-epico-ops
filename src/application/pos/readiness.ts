@@ -1,6 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { getPosCatalog, type PosServiceMode } from "@/src/application/pos/catalog";
 import { isCostOnlyComponent } from "@/src/application/pos/component-policy";
+import { takeawayPackagingErrors } from "@/src/domain/pos/takeaway-packaging";
 import {resolveUnlinkedOpsIngredient} from "@/src/domain/pos/resolve-unlinked-ops-ingredient";
 import { getDb } from "@/src/infrastructure/db/client";
 import { inventoryBalances, inventoryItems, inventoryLocations, loyverseInventoryMappings, posCashSessions } from "@/src/infrastructure/db/schema";
@@ -68,10 +69,8 @@ export async function getPosReadiness(organizationId:string,storeId:string) {
       const components=product.serviceRecipes[mode].components;
       if(!components.length)errors.push("Falta configurar receta.");
       const names=components.map(x=>x.name.toUpperCase());
-      if((product.category==="CALIENTES"||product.category==="FRÍAS") && mode==="TAKEAWAY"){
-        if(!names.some(n=>/VASO/.test(n)))errors.push("Falta vaso para llevar.");
-        if(!names.some(n=>/TAPA/.test(n)))errors.push("Falta tapa para llevar.");
-      }
+      if(mode==="TAKEAWAY")
+        errors.push(...takeawayPackagingErrors(product,components));
       if((product.category==="CALIENTES"||product.category==="FRÍAS") && mode==="DINE_IN"){
         if(names.some(n=>/VASO|TAPA|MANGA|FAJILLA|SERVILLETA/.test(n)))errors.push("Receta aquí contiene empaque para llevar.");
         if(product.category==="FRÍAS"&&!names.some(n=>/POPOTE|PAJILLA/.test(n)))errors.push("Falta popote para consumo aquí.");
