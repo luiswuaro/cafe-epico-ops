@@ -31,3 +31,16 @@ assert.ok(print.includes("export async function printReceiptWithBridge"));
 assert.ok(kitchen.includes("cafe-epico-print-hub-pc-v1"));
 console.log("Print Hub: worker station, locks, no backfill and no double local firing PASS");
 
+
+assert.ok(hub.includes("POS_PRINT_HUB_EXPIRED"),"Las comandas antiguas requieren revisión manual");
+assert.ok(hub.includes("MAX_AUTO_PRINT_AGE_MS=5*60*1000"),"Límite de antigüedad de 5 minutos");
+assert.ok(hub.includes("initiatedAt")&&hub.includes("Date.now()-initiatedAt.getTime()"),
+  "La vigencia se revisa dentro de la transacción antes del claim");
+assert.ok(hub.includes("heartbeatPrintStation")&&hub.includes("getPrintStationHealth"),
+  "El estado de la estación debe estar disponible al POS");
+assert.ok(client.includes("printerBridgeReady()"),"Verificar impresora física");
+assert.ok(client.includes("heartbeatPrintStation("),"La estación emite heartbeat");
+assert.ok(client.includes("if(!healthy)"),"No reservar trabajo si el puente está desconectado");
+const banner=fs.readFileSync("components/print-station-health-banner.tsx","utf8");
+assert.ok(banner.includes("getPrintStationHealth"),"Alerta en dispositivos remotos");
+assert.ok(banner.includes('role="alert"'),"Alerta accesible");
