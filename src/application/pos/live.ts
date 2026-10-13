@@ -8,6 +8,7 @@ import {OWN_CONTAINER_DISCOUNT_MXN,canUseOwnContainer,isOwnContainerDisposable,
   isOwnContainerSnapshot,ownContainerUnitPrice,preparedOwnContainerComponents} from "@/src/domain/pos/own-container";
 import {dailyTakeawayTicketLabel,effectiveOrderServiceMode,validateTicketLabel} from "@/src/application/pos/ticket-names";
 import { isCostOnlyComponent, costOnlyRecipeMeasure } from "@/src/application/pos/component-policy";
+import { takeawayPackagingErrors } from "@/src/domain/pos/takeaway-packaging";
 import {resolveUnlinkedOpsIngredient} from "@/src/domain/pos/resolve-unlinked-ops-ingredient";
 import { getDb } from "@/src/infrastructure/db/client";
 import {calculateEarnedPointsFromRealMoney} from "@/src/domain/pos/benefits-preview";
@@ -144,14 +145,14 @@ export async function checkoutLiveOrder(input:{
     }
     if(item.category==="CALIENTES" || item.category==="FRÍAS"){
       const names=recipeComponents.map(c=>c.name.toLocaleUpperCase("es-MX"));
-      const hasCup=names.some(name=>/VASO/.test(name));
-      const hasLid=names.some(name=>/TAPA/.test(name));
       const hasStraw=names.some(name=>/POPOTE|PAJILLA/.test(name));
       if(customerContainer && recipeComponents.some(isOwnContainerDisposable)){
          throw new Error("Termo propio no debe descontar vasos, tapas ni desechables.");
        }
-       if(lineMode==="TAKEAWAY" && !customerContainer && (!hasCup || !hasLid)){
-        throw new Error("Receta de "+item.name+" para llevar incompleta: falta vaso o tapa.");
+       if(lineMode==="TAKEAWAY" && !customerContainer){
+        const packagingErrors=takeawayPackagingErrors(item,recipeComponents);
+        if(packagingErrors.length)
+          throw new Error("Receta de "+item.name+" para llevar incompleta: "+packagingErrors.join(" "));
       }
       if(lineMode==="DINE_IN" && names.some(name=>/VASO|TAPA|MANGA|FAJILLA|SERVILLETA/.test(name))){
         throw new Error("Receta de "+item.name+" para consumir aquí incluye desechables: revisa la receta.");
