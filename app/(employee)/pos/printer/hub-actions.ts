@@ -18,6 +18,8 @@ export type HubJob={
  createdAt:string;title:string;slip?:KitchenSlip;ticket?:DirectReceiptPayload;
 };
 type FeedInput={since:string};
+const MAX_AUTO_PRINT_AGE_MS=5*60*1000;
+const HEARTBEAT_TIMEOUT_MS=30*1000;
 
 async function principal(){
  const {user,employee}=await getCurrentEmployee();
@@ -69,7 +71,7 @@ export async function getPrintStationJobs({since}:FeedInput):Promise<HubJob[]>{
       eq(posLoyaltyEntries.entryType,"EARN"),inArray(posLoyaltyEntries.orderId,ids))),
  ]);
  const stopped=new Set(audits.filter(e=>
-   e.action==="POS_PRINT_HUB_DONE"||e.action==="POS_PRINT_HUB_FAILED")
+   e.action==="POS_PRINT_HUB_DONE"||e.action==="POS_PRINT_HUB_FAILED"||e.action==="POS_PRINT_HUB_EXPIRED")
     .map(e=>e.entityId));
  const jobs:HubJob[]=[];
  const money=(value:number)=>new Intl.NumberFormat("es-MX",{
@@ -221,11 +223,53 @@ export async function claimPrintStationJob(jobKey:string,stationId:string){
     eq(auditEvents.entityType,"pos_print_job"),eq(auditEvents.entityId,jobKey)))
     .orderBy(desc(auditEvents.createdAt)).limit(8);
   if(events.some(e=>e.action==="POS_PRINT_HUB_DONE"||
-      e.action==="POS_PRINT_HUB_FAILED"))return false;
+      e.action==="POS_PRINT_HUB_FAILED"||e.action==="POS_PRINT_HUB_EXPIRED"))return false;
   // Seguridad primero: si una estación reclamó un trabajo y se desconectó,
   // NO enviarlo otra vez automáticamente. Puede haber impreso papel antes de
   // perder el ACK. Exige conciliación y reimpresión manual supervisada.
   if(events.some(e=>e.action==="POS_PRINT_HUB_CLAIMED"))return false;
+  // Defensivo en servidor: un navegador suspendido no puede mandar papel atrasado.
+  // Se marca como vencida y solo el operador podrá solicitar una impresión manual.
+  let initiatedAt:Date|null=null;
+  if(jobKey.startsWith("KITCHEN:")){
+    const match=/^KITCHEN:([0-9a-f-]{36}):([A-Za-z0-9_-]{1,120})$/i.exec(jobKey);
+    if(match){
+      const rows=await tx.select({createdAt:posOrderLines.createdAt,
+        expectedConsumption:posOrderLines.expectedConsumption})
+        .from(posOrderLines).where(eq(posOrderLines.orderId,match[1]));
+      const roundRows=rows.filter(row=>
+        (typeof row.expectedConsumption?.roundId==="string"?
+          row.expectedConsumption.roundId:"INITIAL")===match[2]);
+      if(roundRows.length)initiatedAt=new Date(Math.min(...roundRows.map(row=>row.createdAt.getTime())));
+    }
+  }else if(jobKey.startsWith("RECEIPT:")){
+    const match=/^RECEIPT:([0-9a-f-]{36})(?::([0-9a-f-]{36}))?$/i.exec(jobKey);
+    if(match?.[2]){
+      const [split]=await tx.select({paidAt:posOrderSplits.paidAt}).from(posOrderSplits)
+        .where(and(eq(posOrderSplits.id,match[2]),eq(posOrderSplits.orderId,match[1]))).limit(1);
+      initiatedAt=split?.paidAt??null;
+    }else if(match){
+      const [order]=await tx.select({paidAt:posOrders.paidAt}).from(posOrders)
+        .where(eq(posOrders.id,match[1])).limit(1);
+      initiatedAt=order?.paidAt??null;
+    }
+  }else if(jobKey.startsWith("VOID:")||jobKey.startsWith("PREBILL:")){
+    const [requested]=await tx.select({createdAt:auditEvents.createdAt}).from(auditEvents)
+      .where(and(eq(auditEvents.entityType,"pos_print_job"),
+        eq(auditEvents.entityId,jobKey))).orderBy(auditEvents.createdAt).limit(1);
+    initiatedAt=requested?.createdAt??null;
+  }
+  if(!initiatedAt||Date.now()-initiatedAt.getTime()>MAX_AUTO_PRINT_AGE_MS||
+      initiatedAt.getTime()>Date.now()+60_000){
+    await tx.insert(auditEvents).values({
+      organizationId:employee.organizationId,storeId,
+      actorUserId:user.id,actorEmployeeId:employee.id,
+      action:"POS_PRINT_HUB_EXPIRED",entityType:"pos_print_job",entityId:jobKey,
+      afterData:{stationId,reason:"STALE_OR_INVALID_TIMESTAMP",
+        createdAt:initiatedAt?.toISOString()??null,requiresManualReview:true},
+    });
+    return false;
+  }
   await tx.insert(auditEvents).values({
     organizationId:employee.organizationId,storeId,
     actorUserId:user.id,actorEmployeeId:employee.id,
@@ -278,7 +322,7 @@ export async function recordAuthorizedPrintReprint(jobKey:string){
 }
 /** Estado común para UI de reimpresión y puente automático. */
 export async function getPrintStationJobStatus(jobKey:string):
- Promise<"UNCLAIMED"|"CLAIMED"|"DONE"|"FAILED">{
+ Promise<"UNCLAIMED"|"CLAIMED"|"DONE"|"FAILED"|"EXPIRED">{
  const {employee,storeId}=await principal();
  const db=getDb();
  await verifyJob(jobKey,employee.organizationId,storeId,db);
@@ -288,6 +332,7 @@ export async function getPrintStationJobStatus(jobKey:string):
   .orderBy(desc(auditEvents.createdAt)).limit(15);
  if(events.some(row=>row.action==="POS_PRINT_HUB_DONE"))return "DONE";
  if(events.some(row=>row.action==="POS_PRINT_HUB_FAILED"))return "FAILED";
+ if(events.some(row=>row.action==="POS_PRINT_HUB_EXPIRED"))return "EXPIRED";
  if(events.some(row=>row.action==="POS_PRINT_HUB_CLAIMED"))return "CLAIMED";
  return "UNCLAIMED";
 }
@@ -297,4 +342,38 @@ export async function getPrintStationTemplate(){
  const {employee}=await principal();
  const {getPosPrintSettings}=await import("@/src/application/pos/print-settings");
  return getPosPrintSettings(employee.organizationId);
+}
+
+/** Señal de vida compartida: no publica token, dirección IP ni datos bancarios. */
+export async function heartbeatPrintStation(input:{
+ stationId:string;since:string;bridgeReady:boolean;
+}){
+ assertNoPreviewMutation();
+ const {employee,user,storeId}=await principal();
+ if(!/^[0-9a-f-]{36}$/i.test(input.stationId))throw new Error("Estación inválida.");
+ allowedSince(input.since);
+ await getDb().insert(auditEvents).values({
+  organizationId:employee.organizationId,storeId,
+  actorUserId:user.id,actorEmployeeId:employee.id,
+  action:"POS_PRINT_STATION_HEARTBEAT",entityType:"pos_print_station",
+  entityId:storeId,
+  afterData:{stationId:input.stationId,since:input.since,
+   bridgeReady:input.bridgeReady},
+ });
+}
+
+/** El POS consulta esta señal aun cuando el navegador de caja se suspenda. */
+export async function getPrintStationHealth(){
+ const {employee,storeId}=await principal();
+ const [last]=await getDb().select({at:auditEvents.createdAt,
+   data:auditEvents.afterData}).from(auditEvents).where(and(
+   eq(auditEvents.organizationId,employee.organizationId),
+   eq(auditEvents.storeId,storeId),
+   eq(auditEvents.entityType,"pos_print_station"),
+   eq(auditEvents.entityId,storeId),
+   eq(auditEvents.action,"POS_PRINT_STATION_HEARTBEAT")))
+   .orderBy(desc(auditEvents.createdAt)).limit(1);
+ const bridgeReady=last?.data?.bridgeReady===true;
+ const online=Boolean(last&&Date.now()-last.at.getTime()<HEARTBEAT_TIMEOUT_MS);
+ return {online,bridgeReady,lastSeen:last?.at.toISOString()??null};
 }
