@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import {batchBelongsToRoastSession,plannedRoastCharges} from "@/src/domain/roasting/session-window";
 
 type Lot = {
   id:string;name:string;greenStockG:number|null;greenStockSource:string;
@@ -14,6 +15,12 @@ type ConfirmedBatch = {
 type PlanConfig = {
   lotId:string;target:string;charge:string;loss:string;
   destination:string;startDate:string;
+  sessionId?:string;sessionStartedAt?:string;
+};
+type ArchivedPlan={
+  id:string;archivedAt:string;lotName:string;config:PlanConfig;
+  confirmedBatches:number;confirmedGreenG:number;roastedG:number;
+  batchCodes:string[];draftWeights:Record<string,string>;
 };
 type PlannedBatch = {
   number:number;green:number;estimated:number;
@@ -22,6 +29,7 @@ type PlannedBatch = {
 };
 
 const PLAN_KEY="cafe-epico-roasting-session-planner-v2";
+const HISTORY_KEY="cafe-epico-roasting-session-history-v1";
 const fmt=(n:number,d=0)=>new Intl.NumberFormat("es-MX",{
   maximumFractionDigits:d,
 }).format(n);
@@ -43,6 +51,8 @@ export function RoastingSessionPlanner({
   const [hydrated,setHydrated]=useState(false);
   const [refreshing,setRefreshing]=useState(false);
   const [copied,setCopied]=useState(false);
+  const [history,setHistory]=useState<ArchivedPlan[]>([]);
+  const [notice,setNotice]=useState("");
 
   // The real batch ledger lives in OPS and is read on every server refresh.
   // Only hypothetical settings and unconfirmed weigh-ins stay in this browser.
@@ -50,6 +60,7 @@ export function RoastingSessionPlanner({
     const task=window.setTimeout(()=>{
       let saved:Partial<PlanConfig>={};
       let weights:Record<string,string>={};
+      let previousPlans:ArchivedPlan[]=[];
       try{
         const value=JSON.parse(window.localStorage.getItem(PLAN_KEY)??"null");
         if(value&&typeof value==="object"){
@@ -69,6 +80,11 @@ export function RoastingSessionPlanner({
             }
           }
         }
+        const archived=JSON.parse(window.localStorage.getItem(HISTORY_KEY)??"[]");
+        if(Array.isArray(archived))previousPlans=archived.filter(item=>
+          item&&typeof item.id==="string"&&item.config&&
+          typeof item.config.lotId==="string"&&typeof item.archivedAt==="string"
+        ).slice(0,30);
       }catch{/* Continue with defaults. */}
       const query=new URLSearchParams(window.location.search);
       const date=mxDate(new Date());
@@ -80,8 +96,11 @@ export function RoastingSessionPlanner({
         loss:query.get("sessionLoss")||saved.loss||previous.loss,
         destination:query.get("sessionDest")||saved.destination||previous.destination,
         startDate:query.get("sessionStart")||saved.startDate||date,
+        sessionId:query.get("sessionId")||saved.sessionId,
+        sessionStartedAt:query.get("sessionAfter")||saved.sessionStartedAt,
       }));
       setDraftWeights(weights);
+      setHistory(previousPlans);
       setHydrated(true);
     },0);
     return ()=>window.clearTimeout(task);
@@ -92,6 +111,11 @@ export function RoastingSessionPlanner({
       config,draftWeights,
     }));}catch{/* Offline storage is optional. */}
   },[config,draftWeights,hydrated]);
+  useEffect(()=>{
+    if(!hydrated)return;
+    try{window.localStorage.setItem(HISTORY_KEY,JSON.stringify(history));}
+    catch{/* Almacenamiento local opcional, nunca toca los batches OPS. */}
+  },[history,hydrated]);
 
   const selected=lots.find(l=>l.id===config.lotId);
   const target=Number(config.target);
@@ -102,10 +126,12 @@ export function RoastingSessionPlanner({
     Number.isFinite(lossPct)&&lossPct>=0&&lossPct<40;
 
   const confirmed=useMemo(()=>batches.filter(b=>
-    b.coffeeLotId===config.lotId&&
-    config.startDate!==""&&mxDate(new Date(b.roastedAt))>=config.startDate,
+    batchBelongsToRoastSession(b,{
+      lotId:config.lotId,startDate:config.startDate,
+      sessionStartedAt:config.sessionStartedAt,
+    }),
   ).sort((a,b)=>new Date(a.roastedAt).getTime()-new Date(b.roastedAt).getTime()),
-  [batches,config.lotId,config.startDate]);
+  [batches,config.lotId,config.startDate,config.sessionStartedAt]);
 
   const plan=useMemo<PlannedBatch[]>(()=>{
     if(!valid)return [];
@@ -114,15 +140,18 @@ export function RoastingSessionPlanner({
     // not the assumption that every confirmed batch weighed "charge" grams.
     const postedGreen=confirmed.reduce((sum,b)=>sum+b.greenWeightG,0);
     const remainingGreen=Math.max(0,target-postedGreen);
-    const total=confirmed.length+Math.ceil(remainingGreen/charge);
+    const remainingCharges=plannedRoastCharges(target,charge,confirmed.map(b=>b.greenWeightG));
+    const total=confirmed.length+remainingCharges.length;
     return Array.from({length:total},(_,index)=>{
       const recorded=confirmed[index]??null;
       const pendingIndex=index-confirmed.length;
-      const green=recorded?.greenWeightG??
-        Math.min(charge,remainingGreen-pendingIndex*charge);
+      const green=recorded?.greenWeightG??remainingCharges[pendingIndex];
       const expected=green*(1-lossPct/100);
-      const key=config.lotId+":"+config.startDate+":"+index;
-      const draftWeight=draftWeights[key]??draftWeights["legacy:"+index]??"";
+      const key=config.sessionId
+        ?config.sessionId+":"+index
+        :config.lotId+":"+config.startDate+":"+index;
+      const draftWeight=draftWeights[key]??
+        (config.sessionId? "":draftWeights["legacy:"+index]??"");
       const candidate=draftWeight.trim()?Number(draftWeight):null;
       const invalid=!recorded&&candidate!==null&&
         (!Number.isFinite(candidate)||candidate<=0||candidate>green);
@@ -134,7 +163,7 @@ export function RoastingSessionPlanner({
         confirmed:recorded,draftWeight,invalid,
       };
     });
-  },[target,charge,lossPct,valid,confirmed,config.lotId,config.startDate,draftWeights]);
+  },[target,charge,lossPct,valid,confirmed,config.lotId,config.startDate,config.sessionId,draftWeights]);
 
   const confirmedGreen=confirmed.reduce((n,b)=>n+b.greenWeightG,0);
   const confirmedRoasted=confirmed.reduce((n,b)=>n+b.roastedWeightG,0);
@@ -155,8 +184,35 @@ export function RoastingSessionPlanner({
 
   const update=(patch:Partial<PlanConfig>)=>setConfig(x=>({...x,...patch}));
   function setDraft(index:number,value:string){
-    const key=config.lotId+":"+config.startDate+":"+index;
+    const key=config.sessionId
+      ?config.sessionId+":"+index
+      :config.lotId+":"+config.startDate+":"+index;
     setDraftWeights(old=>({...old,[key]:value,["legacy:"+index]:""}));
+  }
+  function createNewSession(){
+    if(!hydrated)return;
+    const now=new Date();
+    // Guardar la configuración antigua y sus pesos locales, sin alterar registros OPS.
+    const previous:ArchivedPlan={
+      id:config.sessionId??crypto.randomUUID(),
+      archivedAt:now.toISOString(),lotName:selected?.name??"Lote anterior",
+      config:{...config},confirmedBatches:confirmed.length,
+      confirmedGreenG:confirmedGreen,roastedG:confirmedRoasted,
+      batchCodes:confirmed.map(batch=>batch.batchCode),
+      draftWeights:{...draftWeights},
+    };
+    if(config.startDate&&config.lotId){
+      setHistory(old=>[previous,...old.filter(row=>row.id!==previous.id)].slice(0,30));
+    }
+    const id=crypto.randomUUID();
+    setConfig({
+      lotId:config.lotId||lots[0]?.id||"",
+      target:"10000",charge:config.charge||"400",
+      loss:config.loss||"15",destination:config.destination||"OMNI",
+      startDate:mxDate(now),sessionId:id,sessionStartedAt:now.toISOString(),
+    });
+    setDraftWeights({});
+    setNotice("Nuevo plan de 10 kg creado. El anterior se guardó en este navegador; los batches de OPS siguen intactos.");
   }
   function copyPlan(){
     const text=[
@@ -183,6 +239,8 @@ export function RoastingSessionPlanner({
     query.set("sessionLoss",config.loss);
     query.set("sessionDest",config.destination);
     query.set("sessionStart",config.startDate);
+    if(config.sessionId)query.set("sessionId",config.sessionId);
+    if(config.sessionStartedAt)query.set("sessionAfter",config.sessionStartedAt);
     const url=window.location.origin+"/admin/roasting?"+query.toString()+"#plan-sesion";
     void navigator.clipboard?.writeText(url).then(()=>{
       setCopied(true);window.setTimeout(()=>setCopied(false),2400);
@@ -200,6 +258,10 @@ export function RoastingSessionPlanner({
         <p>Prepara cada carga, pesa la salida y enlaza el JSON. Las confirmaciones reales vienen de OPS, no de esta pantalla.</p>
         <div className="ops-roast-actions">
           <button type="button" className="ops-action-soft"
+            onClick={createNewSession} disabled={!hydrated}>
+            + Nueva sesión de tueste
+          </button>
+          <button type="button" className="ops-action-soft"
             onClick={reloadRegistered} disabled={refreshing}>
             {refreshing?"Actualizando…":"↻ Actualizar batches"}
           </button>
@@ -208,6 +270,7 @@ export function RoastingSessionPlanner({
           </button>
         </div>
         {copied&&<small role="status" className="status-ok">Copiado al portapapeles</small>}
+        {notice&&<p role="status" className="status-ok">{notice}</p>}
       </div>
       <div className="ops-roast-progress">
         <span>PROGRESO CONFIRMADO</span>
@@ -221,6 +284,23 @@ export function RoastingSessionPlanner({
       </div>
     </div>
 
+    {history.length>0&&<details className="ops-roast-session-history">
+      <summary>Planes anteriores guardados en este equipo ({history.length})</summary>
+      <div className="stack compact-stack">
+        {history.map(row=><div className="task" key={row.id}>
+          <div>
+            <strong>{row.lotName} · {fmt(Number(row.config.target)/1000,2)} kg</strong>
+            <div className="muted">Inicio: {row.config.startDate} · {row.confirmedBatches} batches confirmados ·
+              {" "}{fmt(row.confirmedGreenG)} g verdes</div>
+            {row.batchCodes.length>0&&<small className="muted">
+              Batches OPS: {row.batchCodes.join(", ")}
+            </small>}
+          </div>
+        </div>)}
+        <small className="muted">Este historial de planes está en este navegador.
+          El historial real de tuestes y los movimientos de inventario permanecen en OPS.</small>
+      </div>
+    </details>}
     <div className="ops-roast-steps" aria-label="Etapas de la sesión">
       <a href="#roast-setup"><span>01</span> Preparar</a>
       <a href="#roast-batches"><span>02</span> Producir</a>
@@ -270,9 +350,11 @@ export function RoastingSessionPlanner({
         </label>
       </div>
       <p className="ops-helper">
-        «Inicio de sesión» incluye los tuestes de ese lote desde la fecha indicada.
-        Si comenzaste ayer, conserva la fecha inicial. Cambiar la configuración
-        no modifica inventarios ni los batches ya registrados.
+        «Nueva sesión de tueste» crea un plan independiente y prepara 10 kg por defecto
+        (puedes cambiar la meta). Sólo cuenta los batches de este lote hechos
+        después de crear la nueva sesión; no vuelve a contar los 13 del plan anterior.
+        Para un plan antiguo, se conserva el criterio de fecha inicial.
+        Cambiar la configuración no modifica inventarios ni los batches registrados.
       </p>
     </details>
 
@@ -300,7 +382,7 @@ export function RoastingSessionPlanner({
     </p>}
     {outOfStock&&<p className="ops-inline-notice is-warning" role="alert">
       Faltan {fmt(pendingGreen-selected!.greenStockG!)} g para cumplir la meta.
-      Estás comparando únicamente lo pendiente, no los 5 kg originales.
+      Estás comparando lo pendiente con el inventario OPS; revisa si los 10 kg recibidos ya fueron registrados como entrada.
       Comprueba el stock físico antes del próximo batch.
     </p>}
     {overRecorded&&<p className="ops-inline-notice is-warning">
