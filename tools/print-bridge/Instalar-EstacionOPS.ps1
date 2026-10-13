@@ -16,7 +16,7 @@ function ResolveBrowser([string]$name) {
  if($name -eq 'Auto'){
   # Reutilizar el navegador donde OPS ya tiene la sesión y el puente configurados.
   $running=Get-Process -Name chrome,brave,msedge -ErrorAction SilentlyContinue |
-   Where-Object {$_.MainWindowTitle -match 'Caf[eé]\s*[eé]pico\s*Ops'} |
+   Where-Object {$_.MainWindowTitle -match 'Caf.\s*.pico\s*Ops'} |
    Select-Object -First 1
   if($running){
    $name=switch($running.ProcessName){'brave'{'Brave'}'msedge'{'Edge'}default{'Chrome'}}
@@ -60,7 +60,7 @@ if($Watch){
   try{
    StartBridges
    $open=@(Get-Process -Name chrome,brave,msedge -ErrorAction SilentlyContinue |
-    Where-Object {$_.MainWindowTitle -match 'Caf[eé]\s*[eé]pico\s*Ops'})
+    Where-Object {$_.MainWindowTitle -match 'Caf.\s*.pico\s*Ops'})
    if($open.Count -eq 0 -and ((Get-Date)-$last).TotalSeconds -ge 60){
     Start-Process -FilePath $browser.Exe -ArgumentList @(
       ('--app='+$url),
