@@ -733,6 +733,10 @@ export function PosClient({
                   <Link className="button pos-prebill-link" href={"/pos/orders/"+savedTicket.id+"/prebill"}>
                     Precuenta
                   </Link>
+                  <Link className="button" style={{gridColumn:"1 / -1"}}
+                    href={"/pos/orders/"+savedTicket.id+"/split"}>
+                    Dividir cuenta
+                  </Link>
                 </>
               :<>
                 <button type="submit" form="pos-order-command-form" formNoValidate
