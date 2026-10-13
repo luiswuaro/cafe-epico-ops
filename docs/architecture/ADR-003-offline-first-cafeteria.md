@@ -18,6 +18,19 @@ Inspiración documentada: Toast Offline Mode with local sync; Loyverse POS Offli
 - El puente Windows escucha solo loopback; teléfonos necesitan un servicio de aplicación en LAN que reenvíe impresión de forma autorizada hacia ese puente.
 - El hub de impresión en navegador no es un servicio Windows permanente. El hotfix de octubre controla trabajos retrasados, no crea operación offline.
 
+## 2.1. Decisión operativa confirmada
+
+El dueño confirmó que la **PC Windows conectada a la POS-58 permanece encendida desde la apertura hasta el cierre de la cafetería**. Por lo tanto:
+
+- **Nodo local elegido:** esa PC existente, sin adquirir inicialmente un servidor aparte.
+- **Arranque:** servicio Windows automático con recuperación después de fallos, sin necesidad de navegador abierto, sesión interactiva ni depender de Chrome en segundo plano.
+- **Acceso LAN:** PC, tableta y teléfonos dentro de la misma red Wi-Fi local. El router debe conservar la LAN si el enlace WAN falla; IP reservada para el nodo.
+- **Persistencia:** operaciones confirmadas en SQLite WAL antes de mostrarse como guardadas o cobradas; mantener outbox y snapshots tras apagar el equipo.
+- **Cierre sin internet:** permitir cierre provisional local; si se apaga Windows, conservar movimientos pendientes y reanudar la sincronización en el siguiente arranque. No marcar cierre como conciliado en nube hasta ACK total.
+- **Autonomía eléctrica:** el horario operativo de la PC no significa respaldo energético. UPS, suspensión de Windows y recuperación tras cortes de electricidad requieren prueba independiente.
+- **Servicio web local:** distribuir JS/CSS/HTML desde la PC y permitir reconexión local segura; no bastará con cachear una página de Vercel.
+- **Restricción de despliegue:** probar primero modo paralelo/simulado, sin doble escritura en inventario ni ventas reales, y efectuar el corte al nodo local solo al superar los criterios de aceptación.
+
 ## 3. Arquitectura decidida para desarrollar (no desplegar hasta pruebas)
 
 ```text
