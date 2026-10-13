@@ -65,7 +65,7 @@ const moneyOrUnknown=(n:number|null)=>n===null?"Pendiente":cashFmt.format(n);
 
 export function AbastoWorkbench({seeds,suppliers,observedDays}:Props){
  const [tab,setTab]=useState<Tab>("PLAN");
- const {vendors,setVendors,patch:patchVendor}=useLocalVendors(suppliers);
+ const {vendors,setVendors,patch:patchVendor,removeVendor}=useLocalVendors(suppliers);
  const [costPurchaseId,setCostPurchaseId]=useState("leche");
  const [costItemId,setCostItemId]=useState("");
  const [costUnits,setCostUnits]=useState("");
@@ -448,7 +448,7 @@ export function AbastoWorkbench({seeds,suppliers,observedDays}:Props){
     </div>
    </section>}
   {tab==="PROVEEDORES"&&<VendorManager vendors={vendors} patch={patchVendor}
-     add={v=>setVendors(x=>[v,...x])} remove={id=>setVendors(x=>x.filter(v=>v.id!==id))}/>}
+     add={v=>setVendors(x=>[v,...x])} remove={removeVendor}/>}
   {tab==="OFERTAS"&&<OfferDesk vendors={vendors}/>}
   {tab==="RECIBIR"&&<section className="abp-stacked">
     <div className="abp-panel">

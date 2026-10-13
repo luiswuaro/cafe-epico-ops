@@ -9,18 +9,33 @@ export function useLocalVendors(names:string[]){
  const [ready,setReady]=useState(false);
  useEffect(()=>{
   let saved:VendorProfile[]=[];
+  let hidden:string[]=[];
+  try{const blacklist=JSON.parse(localStorage.getItem(storeKey+"_hidden")||"[]");
+   if(Array.isArray(blacklist))hidden=blacklist.filter(x=>typeof x==="string");
+  }catch{}
   try{const v=JSON.parse(localStorage.getItem(storeKey)||"[]");
    if(Array.isArray(v))saved=v.filter(x=>x&&typeof x.id==="string"&&typeof x.name==="string").slice(0,150);
   }catch{}
   const complete=[...saved];
-  for(const name of names)if(!complete.some(v=>v.name.toLowerCase()===name.toLowerCase()))
+  for(const name of names)if(!hidden.includes(name.toLowerCase())&&
+   !complete.some(v=>v.name.toLowerCase()===name.toLowerCase()))
    complete.push({...newVendor(),name,provenance:"OPS"});
   setVendors(complete);setReady(true);
  },[names]);
  useEffect(()=>{if(ready)try{localStorage.setItem(storeKey,JSON.stringify(vendors));}catch{}},[vendors,ready]);
  const patch=(id:string,values:Partial<VendorProfile>)=>
   setVendors(a=>a.map(v=>v.id===id?{...v,...values}:v));
- return {vendors,setVendors,patch,ready};
+ const removeVendor=(id:string)=>{
+  const old=vendors.find(x=>x.id===id);
+  if(old?.provenance==="OPS")try{
+   const values=JSON.parse(localStorage.getItem(storeKey+"_hidden")||"[]");
+   const hidden=Array.isArray(values)?values.filter(x=>typeof x==="string"):[];
+   localStorage.setItem(storeKey+"_hidden",
+    JSON.stringify([...new Set([...hidden,old.name.toLowerCase()])]));
+  }catch{}
+  setVendors(list=>list.filter(x=>x.id!==id));
+ };
+ return {vendors,setVendors,patch,removeVendor,ready};
 }
 export function VendorManager({vendors,patch,add,remove}:{
  vendors:VendorProfile[];patch:(id:string,v:Partial<VendorProfile>)=>void;add:(v:VendorProfile)=>void;remove:(id:string)=>void;

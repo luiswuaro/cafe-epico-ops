@@ -1,5 +1,5 @@
 "use client";
-import {useMemo,useState} from "react";
+import {useEffect,useMemo,useState} from "react";
 import type {VendorProfile,RouteStop} from "@/src/domain/purchases/route-schedule";
 import {evaluateRoute,reorderByClosingTime,clock} from "@/src/domain/purchases/route-schedule";
 export function RouteItinerary({vendors,tripDate}:{vendors:VendorProfile[];tripDate:string}){
@@ -7,6 +7,18 @@ export function RouteItinerary({vendors,tripDate}:{vendors:VendorProfile[];tripD
  const [selected,setSelected]=useState("");
  const [depart,setDepart]=useState("07:00");
  const [notice,setNotice]=useState("");
+ const [hydrated,setHydrated]=useState(false);
+ useEffect(()=>{
+  try{const saved=JSON.parse(localStorage.getItem("epico-preview-itinerario-v1")||"null");
+   if(saved&&Array.isArray(saved.stops))setStops(saved.stops.filter((x:RouteStop)=>
+    x&&typeof x.id==="string"&&typeof x.vendorId==="string").slice(0,30));
+   if(typeof saved?.depart==="string")setDepart(saved.depart);
+  }catch{}
+  setHydrated(true);
+ },[]);
+ useEffect(()=>{if(!hydrated)return;
+   try{localStorage.setItem("epico-preview-itinerario-v1",JSON.stringify({stops,depart}));}catch{}
+ },[stops,depart,hydrated]);
  const result=useMemo(()=>evaluateRoute(stops,vendors,tripDate,depart),[stops,vendors,tripDate,depart]);
  const patch=(id:string,values:Partial<RouteStop>)=>
   setStops(s=>s.map(x=>x.id===id?{...x,...values}:x));
