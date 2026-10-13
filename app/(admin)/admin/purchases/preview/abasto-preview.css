@@ -1,0 +1,83 @@
+/* Preview Abastecimiento y Logística — estilo contenido, sin afectar producción. */
+.abp{max-width:1500px;width:100%;--abp-ink:var(--epic-fg);--abp-sub:var(--epic-secondary);
+  --abp-line:var(--epic-border);--abp-field:var(--epic-field);--abp-soft:var(--epic-soft);
+  --abp-card:var(--epic-card);color:var(--abp-ink)}
+.abp *{box-sizing:border-box}
+.abp-head{display:flex;align-items:start;justify-content:space-between;gap:1.5rem;margin:.35rem 0 1rem}
+.abp-head h1{font-size:clamp(1.5rem,2.5vw,2.25rem);letter-spacing:-.05em;margin:.2rem 0}
+.abp-head p{max-width:920px;margin:.4rem 0}
+.abp-warning{background:var(--epic-warn-bg);color:var(--epic-warn-ink);padding:.85rem 1rem;
+  border:1px solid var(--epic-border);border-radius:12px;font-size:.82rem;font-weight:750}
+.abp-panel{border:1px solid var(--abp-line);background:var(--abp-card);border-radius:15px;
+  padding:1.05rem;box-shadow:var(--epic-shadow)}
+.abp-tabs{display:flex;gap:.5rem;overflow-x:auto;margin:1rem 0;scrollbar-width:thin}
+.abp-tab{white-space:nowrap;min-height:44px;border:1px solid var(--abp-line);
+  border-radius:10px;background:var(--abp-card);color:var(--abp-ink);padding:.55rem .9rem;font-weight:800}
+.abp-tab[aria-selected="true"]{background:var(--epic-accent);color:var(--epic-accent-contrast);border-color:var(--epic-accent)}
+.abp-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.7rem;margin:.85rem 0}
+.abp-kpi{display:grid;gap:.32rem;padding:1rem;min-height:110px;border:1px solid var(--abp-line);
+  border-radius:13px;background:var(--abp-card)}
+.abp-kpi b{font-size:clamp(1.05rem,1.7vw,1.55rem);font-variant-numeric:tabular-nums;letter-spacing:-.035em}
+.abp-kpi small,.abp-muted{color:var(--abp-sub);font-size:.79rem;line-height:1.45}
+.abp-lead{font-size:.86rem;color:var(--abp-sub);margin:.25rem 0 .85rem}
+.abp h2{font-size:1.17rem;margin:.1rem 0 .7rem}
+.abp h3{font-size:.96rem;margin:.25rem 0 .5rem}
+.abp-fields{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.7rem}
+.abp-fields.cols-3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.abp-fields.cols-2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.abp label{display:grid;align-content:start;gap:.25rem;font-size:.8rem;font-weight:750;color:var(--abp-ink)}
+.abp label input,.abp label select,.abp label textarea{min-height:41px;padding:.53rem .6rem;margin:0;
+  width:100%;border-radius:10px;border:1px solid var(--abp-line);background:var(--abp-field);color:var(--abp-ink)}
+.abp input[type=checkbox]{accent-color:var(--epic-accent)}
+.abp label:has(> input[type=checkbox]){display:flex;align-items:center;gap:.45rem}
+.abp label:has(> input[type=checkbox]) input{min-height:auto;width:auto}
+.abp button,.abp .abp-button{cursor:pointer;color:var(--abp-ink)}
+.abp button:disabled{opacity:.45;cursor:not-allowed}
+.abp-button{display:inline-flex;align-items:center;justify-content:center;min-height:43px;
+  background:var(--abp-soft);border:1px solid var(--abp-line);border-radius:10px;
+  padding:.53rem .78rem;font-weight:800;font-size:.8rem;text-decoration:none}
+.abp-button.primary{background:var(--epic-accent);color:var(--epic-accent-contrast);border-color:var(--epic-accent)}
+.abp-button:focus-visible{outline:3px solid var(--epic-accent);outline-offset:2px}
+.abp-actions{display:flex;gap:.45rem;flex-wrap:wrap;align-items:center;margin:.6rem 0}
+.abp-chips{display:flex;flex-wrap:wrap;gap:.35rem}
+.abp-chip{font-size:.7rem;font-weight:800;background:var(--abp-soft);border:1px solid var(--abp-line);
+  color:var(--abp-ink);padding:.23rem .5rem;border-radius:999px;white-space:nowrap}
+.abp-chip.warn{background:var(--epic-warn-bg);color:var(--epic-warn-ink)}
+.abp-stacked{display:grid;gap:.7rem}
+.abp-two{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:.75rem}
+.abp-table-wrap{width:100%;overflow-x:auto}
+.abp-table{width:100%;border-collapse:collapse;font-size:.8rem}
+.abp-table th{text-align:left;color:var(--abp-sub);font-size:.69rem;letter-spacing:.05em;
+  text-transform:uppercase;background:var(--abp-soft);padding:.7rem .55rem}
+.abp-table td{padding:.64rem .55rem;border-bottom:1px solid var(--abp-line);vertical-align:middle}
+.abp-table th:last-child,.abp-table td:last-child{text-align:right}
+.abp-table input[type=checkbox]{width:18px;height:18px}
+.abp-table .abp-num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.abp-table select{min-width:90px;background:var(--abp-field);border:1px solid var(--abp-line);
+  color:var(--abp-ink);padding:.4rem;border-radius:8px}
+.abp-row-details{margin:.5rem 0;border:1px solid var(--abp-line);border-radius:10px;background:var(--abp-soft)}
+.abp-row-details summary{cursor:pointer;padding:.55rem .7rem;font-size:.75rem;font-weight:850}
+.abp-row-details>div{padding:.65rem;border-top:1px solid var(--abp-line)}
+.abp-list{display:grid;gap:.5rem;margin:.7rem 0}
+.abp-stop{display:flex;gap:.65rem;align-items:center;justify-content:space-between;
+  padding:.65rem;border:1px solid var(--abp-line);background:var(--abp-soft);border-radius:10px}
+.abp-stop strong{min-width:0;overflow-wrap:anywhere}
+.abp-stop .abp-actions{margin:0;flex-wrap:nowrap}
+.abp-stop .abp-button{min-height:36px;padding:.3rem .45rem}
+.abp-summary{display:grid;gap:.4rem;padding:.8rem;border-left:3px solid var(--epic-accent);
+  background:var(--abp-soft);border-radius:0 10px 10px 0;margin:.7rem 0;font-size:.85rem}
+.abp-alert{border-left-color:var(--epic-warn-ink)}
+.abp-inline{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}
+.abp-inline > label{flex:1 1 200px}
+.abp-foot{font-size:.75rem;color:var(--abp-sub);margin-top:.85rem}
+.abp-code{border:1px solid var(--abp-line);border-radius:10px;background:var(--abp-field);
+  padding:.7rem;white-space:pre-wrap;font-size:.76rem;max-height:370px;overflow:auto;overflow-wrap:anywhere}
+@media(max-width:1100px){.abp-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .abp-fields{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .abp-two{grid-template-columns:1fr}}
+@media(max-width:680px){.abp{padding:.6rem}.abp-head{flex-direction:column;gap:.35rem}
+  .abp-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:.45rem}
+  .abp-kpi{padding:.75rem;min-height:100px}.abp-panel{padding:.75rem}
+  .abp-fields,.abp-fields.cols-2,.abp-fields.cols-3{grid-template-columns:1fr}
+  .abp-stop{align-items:flex-start;flex-direction:column}
+  .abp-table{min-width:720px}.abp-tabs{margin:.8rem 0}}
