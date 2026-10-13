@@ -3006,3 +3006,38 @@ main.pos-shell .pos-table-shortcuts button[aria-pressed="true"] {
  border-radius:10px;background:var(--epic-accent);color:var(--epic-accent-contrast);
  font-weight:850;border:1px solid var(--epic-accent)}
 @media(min-width:900px){.ops-performance-kpis{grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}}
+
+/* OPS POS: mesa primero, botones legibles y un solo desplazamiento de escritorio. */
+.pos-ticket-identity{display:grid;gap:.45rem;padding:.7rem;border:1px solid var(--epic-border);
+  border-radius:12px;background:var(--epic-soft);color:var(--epic-fg);margin:.65rem 0}
+.pos-ticket-identity-title{font-size:.91rem}
+.pos-ticket-name-label{display:grid;gap:.12rem;font-size:.82rem;font-weight:700}
+.pos-ticket-name-label :is(input,select){margin-top:.12rem;min-height:43px}
+.pos-ticket-identity-help{font-size:.79rem;color:var(--epic-warn-ink);font-weight:750}
+.pos-cart-action-dock{display:grid;gap:.45rem;padding:.7rem;margin:.6rem 0 .7rem;
+  background:var(--epic-card);border:1px solid var(--epic-border);
+  border-radius:12px;box-shadow:var(--epic-shadow);color:var(--epic-fg)}
+.pos-cart-action-total{display:flex;justify-content:space-between;align-items:center;gap:.5rem;font-size:.83rem}
+.pos-cart-action-total strong{font-size:1.22rem;font-variant-numeric:tabular-nums}
+.pos-cart-action-buttons{display:grid;grid-template-columns:1fr 1fr;gap:.45rem}
+.pos-cart-action-buttons > :only-child{grid-column:1/-1}
+.pos-cart-action-buttons > :is(button,a){display:flex;justify-content:center;align-items:center;
+  text-align:center;min-height:48px;padding:.62rem .45rem;font-size:.81rem;line-height:1.2}
+.pos-cart .pos-unit-actions button{background:var(--epic-field);color:var(--epic-fg);
+  border:1px solid var(--epic-border);min-width:44px;min-height:44px}
+.pos-cart .pos-unit-actions button:not(:disabled):hover,
+.pos-cart .pos-unit-actions button:focus-visible{background:var(--epic-soft);border-color:var(--epic-accent)}
+.pos-cart .pos-command-button,.pos-cart .pos-mobile-cart-footer .pos-command-button{
+  background:var(--epic-soft);color:var(--epic-fg);border:1px solid var(--epic-border)}
+.pos-cart .pos-pay-button,.pos-cart .pos-mobile-cart-footer .pos-pay-button{
+  background:var(--epic-accent);color:var(--epic-accent-contrast);border:1px solid var(--epic-accent)}
+.command-card a.button.pos-prebill-link,.pos-cart a.button.pos-prebill-link{
+  background:var(--epic-soft);color:var(--epic-fg);border:1px solid var(--epic-border)}
+.command-card a.button.pos-prebill-link:hover,.pos-cart a.button.pos-prebill-link:hover{
+  background:var(--epic-field);border-color:var(--epic-accent)}
+@media(min-width:761px){
+  main.pos-shell .pos-cart{position:static;top:auto;max-height:none;overflow:visible;overscroll-behavior:auto}
+  main.pos-shell .pos-cart-action-dock{position:sticky;top:4.7rem;z-index:5}
+  main.pos-shell .pos-command-actions{display:none}
+}
+@media(max-width:760px){.pos-cart-action-dock{display:none}.pos-ticket-identity{padding:.6rem}}

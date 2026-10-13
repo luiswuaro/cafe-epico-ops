@@ -687,6 +687,69 @@ export function PosClient({
           </button>
         </div>
 
+        {!savedTicket&&<section className="pos-ticket-identity" aria-label="Identificar mesa o pedido">
+          <strong className="pos-ticket-identity-title">1 · Mesa o nombre del pedido</strong>
+          {ticketServiceMode==="DINE_IN"&&<div className="pos-table-shortcuts" aria-label="Seleccionar mesa en un toque">
+            {DINE_IN_TICKET_PRESETS.map(name=><button
+              key={name} type="button" aria-pressed={displayTicketNameOption===name}
+              className={displayTicketNameOption===name?"active":""}
+              onClick={()=>setTicketNameOption(name)}>
+              {name.replace("Mesa balcón ","B").replace("Mesa ","M")}
+            </button>)}
+          </div>}
+          <label className="pos-ticket-name-label">
+            {ticketServiceMode==="DINE_IN"?"Mesa / nombre de ticket":"Nombre para llevar"}
+            <select aria-label="Mesa o nombre del ticket" value={displayTicketNameOption}
+              onChange={event=>setTicketNameOption(event.target.value)}>
+              {ticketServiceMode==="DINE_IN"
+                ?<option value="">Selecciona una mesa…</option>
+                :<option value="AUTO">Número de orden de hoy · automático</option>}
+              {namePresets.map(name=><option key={name} value={name}>{name}</option>)}
+              <option value="CUSTOM">Nombre personalizado…</option>
+            </select>
+          </label>
+          {displayTicketNameOption==="CUSTOM"&&<label className="pos-ticket-name-label">Nombre personalizado
+            <input type="text" maxLength={100} autoComplete="off"
+              placeholder={ticketServiceMode==="DINE_IN"?"Ej. Mesa de cumpleaños":"Ej. Juan, pedido de María"}
+              value={customTicketName} onChange={event=>setCustomTicketName(event.target.value)}/>
+          </label>}
+          {missingTable&&<small className="pos-ticket-identity-help">Selecciona una mesa antes de guardar o cobrar.</small>}
+        </section>}
+        <div className="pos-cart-action-dock" aria-label="Acciones rápidas del pedido">
+          <div className="pos-cart-action-total">
+            <span>{savedTicket?"Cuenta y nueva ronda":"Total actual"}</span><strong>{money.format(total)}</strong>
+          </div>
+          <div className="pos-cart-action-buttons">
+            {savedTicket
+              ?cartLines.length>0
+                ?<button type="submit" form="pos-order-command-form" formNoValidate
+                    className="pos-command-button" disabled={savePending}>
+                    {savePending?"Guardando…":"Guardar nueva ronda · "+cartLines.length}
+                  </button>
+                :<>
+                  <Link className="button" href={"/pos/checkout?ticket="+savedTicket.id}>
+                    Cobrar cuenta · {money.format(savedTicket.total)}
+                  </Link>
+                  <Link className="button pos-prebill-link" href={"/pos/orders/"+savedTicket.id+"/prebill"}>
+                    Precuenta
+                  </Link>
+                </>
+              :<>
+                <button type="submit" form="pos-order-command-form" formNoValidate
+                  formAction={liveEnabled?saveAction:shadowSaveAction}
+                  className="pos-command-button"
+                  disabled={cartLines.length===0||savePending||shadowSavePending||missingTable}>
+                  {savePending?"Guardando…":"Guardar ticket"}
+                </button>
+                <button type="button" className="pos-pay-button"
+                  disabled={cartLines.length===0||missingTable}
+                  onClick={()=>{setMobileCartOpen(false);setCheckoutOpen(true);}}>
+                  {liveEnabled?"Cobrar":"Simular cobro"} · {money.format(total)}
+                </button>
+              </>}
+          </div>
+        </div>
+
         {savedTicket&&(
           <section className="stack" style={{gap:8}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:"2px solid currentColor",paddingBottom:8}}>
@@ -800,14 +863,14 @@ export function PosClient({
                   <button
                     type="button"
                     onClick={() => duplicate(line)}
-                    title="Agregar otra igual"
+                    title="Agregar otra igual" aria-label={"Agregar otro "+line.item.name}
                   >
                     +1
                   </button>
                   <button
                     type="button"
                     onClick={() => remove(line.key)}
-                    title="Quitar"
+                    title="Quitar" aria-label={"Quitar "+line.item.name}
                   >
                     ×
                   </button>
@@ -871,50 +934,7 @@ export function PosClient({
           <input type="hidden" name="courtesyCupCarriers4"
             value={hasTakeawayDrinks?courtesyCupCarriers4:0}/>
 
-          {!savedTicket&&ticketServiceMode==="DINE_IN"&&<div className="pos-table-shortcuts"
-            aria-label="Seleccionar mesa en un toque">
-            {DINE_IN_TICKET_PRESETS.map(name=><button
-              key={name} type="button" aria-pressed={displayTicketNameOption===name}
-              className={displayTicketNameOption===name?"active":""}
-              onClick={()=>setTicketNameOption(name)}>
-              {name.replace("Mesa balcón ","B").replace("Mesa ","M")}
-            </button>)}
-          </div>}
-          {!savedTicket && (
-            <details className="pos-cancel-panel" style={{padding:"8px 12px"}}>
-              <summary style={{cursor:"pointer",fontWeight:700}}>
-                {ticketServiceMode==="DINE_IN"?"Mesa / nombre de ticket":"Nombre para llevar"}
-                {" · "}{ticketNamePreview}
-              </summary>
-              <div className="stack" style={{paddingTop:10}}>
-                <small className="muted">
-                  {ticketServiceMode==="DINE_IN"
-                    ?"Obligatorio para consumir aquí. Elige una mesa o escribe un nombre."
-                    :"Opcional: si lo dejas automático, OPS asigna el número de orden del día al guardar o cobrar."}
-                </small>
-                <label>Identificar pedido
-                  <select aria-label="Mesa o nombre del ticket"
-                    value={displayTicketNameOption}
-                    onChange={event=>setTicketNameOption(event.target.value)}>
-                    {ticketServiceMode==="DINE_IN"
-                      ?<option value="">Selecciona una mesa…</option>
-                      :<option value="AUTO">Número de orden de hoy · automático</option>}
-                    {namePresets.map(name=><option key={name} value={name}>{name}</option>)}
-                    <option value="CUSTOM">Nombre personalizado…</option>
-                  </select>
-                </label>
-                {displayTicketNameOption==="CUSTOM"&&<label>Nombre personalizado
-                  <input type="text" maxLength={100} autoComplete="off"
-                    placeholder={ticketServiceMode==="DINE_IN"?"Ej. Mesa de cumpleaños":"Ej. Juan, pedido de María"}
-                    value={customTicketName} onChange={event=>setCustomTicketName(event.target.value)}/>
-                </label>}
-              </div>
-            </details>
-          )}
           {!savedTicket&&<input type="hidden" name="tableLabel" value={tableLabel}/>}
-          {missingTable&&<p role="alert" className="status-warn">
-            Elige la mesa en «Mesa / nombre de ticket» para poder guardar o cobrar.
-          </p>}
 
           {!savedTicket&&!liveEnabled&&<label>
             Método de pago
