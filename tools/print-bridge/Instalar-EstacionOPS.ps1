@@ -52,31 +52,60 @@ if($Uninstall){
  Write-Host 'Estación desinstalada. Puente y token sin cambios.'
  exit
 }
+function Test-OpsRunning {
+ # Inspección inicial solamente. No abrir nuevas ventanas durante la jornada.
+ $visible=@(Get-Process -Name chrome,brave,msedge -ErrorAction SilentlyContinue |
+  Where-Object {$_.MainWindowTitle -match 'Caf.\s*.pico\s*Ops'})
+ if($visible.Count -gt 0){return $true}
+ # Algunas instalaciones de Brave/Chrome exponen un título vacío en Get-Process.
+ try {
+  $app=@(Get-CimInstance Win32_Process -ErrorAction Stop |
+   Where-Object {$_.Name -in @('chrome.exe','brave.exe','msedge.exe') -and
+    $_.CommandLine -match '--app=https://cafe-epico-ops\.vercel\.app(/pos)?'})
+  return ($app.Count -gt 0)
+ }catch {return $false}
+}
 if($Watch){
- $selectedBrowser=ResolveBrowser $Browser
- $last=[datetime]::MinValue
- Log 'Inicia supervisor'
- while($true){
-  try{
-   StartBridges
-   $open=@(Get-Process -Name chrome,brave,msedge -ErrorAction SilentlyContinue |
-    Where-Object {$_.MainWindowTitle -match 'Caf.\s*.pico\s*Ops'})
-   if($open.Count -eq 0 -and ((Get-Date)-$last).TotalSeconds -ge 60){
-    Start-Process -FilePath $selectedBrowser.Exe -ArgumentList @(
-      ('--app='+$url),
-      '--disable-background-timer-throttling',
-      '--disable-renderer-backgrounding',
-      '--disable-backgrounding-occluded-windows'
-    )
-    $last=Get-Date
-    Log 'Ventana OPS abierta'
-   }
-  }catch{Log $_.Exception.Message}
-  Start-Sleep -Seconds 20
+ # Un proceso por sesión Windows incluso si se dispara doble la tarea.
+ $createdNew=$false
+ $mutex=[System.Threading.Mutex]::new($true,'Local\CafeEpicoOpsStationWatchdog',[ref]$createdNew)
+ if(-not $createdNew){$mutex.Dispose();exit 0}
+ try {
+  $selectedBrowser=ResolveBrowser $Browser
+  Log 'Supervisor iniciado; apertura única por sesión'
+  StartBridges
+  if(-not (Test-OpsRunning)){
+   Start-Process -FilePath $selectedBrowser.Exe -ArgumentList @(
+    ('--app='+$url),
+    '--disable-background-timer-throttling',
+    '--disable-renderer-backgrounding',
+    '--disable-backgrounding-occluded-windows'
+   )
+   Log 'OPS abierto una sola vez al iniciar sesión'
+  }else{Log 'OPS ya está abierto; no se lanza otra ventana'}
+  # JAMÁS lanzar más ventanas dentro del bucle: título/estado de Chrome
+  # no son señales suficientemente fiables y provocaron ventanas repetidas.
+  while($true){
+   try{StartBridges}catch{Log ('Supervisión puente: '+$_.Exception.Message)}
+   Start-Sleep -Seconds 20
+  }
+ }finally{
+  $mutex.ReleaseMutex()
+  $mutex.Dispose()
  }
 }
 $selectedBrowser=ResolveBrowser $Browser
 New-Item -ItemType Directory -Path $folder -Force | Out-Null
+# Sustituir el supervisor anterior antes de instalar la versión sin duplicados.
+$oldTask=Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+if($oldTask){Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue}
+try {
+ $oldWatchers=Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" -ErrorAction Stop |
+  Where-Object {$_.CommandLine -match 'Estacion-OPS\.ps1' -and $_.CommandLine -match '\-Watch'}
+ foreach($process in $oldWatchers){
+  Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue
+ }
+}catch{Log ('No se pudo detener supervisor anterior: '+$_.Exception.Message)}
 if($PSCommandPath -ne $installed){Copy-Item -LiteralPath $PSCommandPath -Destination $installed -Force}
 try {
  powercfg.exe /change standby-timeout-ac 0
