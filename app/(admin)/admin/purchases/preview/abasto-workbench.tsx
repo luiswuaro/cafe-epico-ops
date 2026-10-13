@@ -6,7 +6,7 @@ import {useLocalVendors,VendorManager} from "./vendor-manager";
 import {RouteItinerary} from "./route-itinerary";
 import {OfferDesk} from "./offer-desk";
 
-type Props={seeds:InventorySeed[];suppliers:string[];observedDays:number};
+type Props={seeds:InventorySeed[];suppliers:string[];observedDays:number;mapsApiEnabled:boolean};
 type Tab="PLAN"|"RUTA"|"RECIBIR"|"PROVEEDORES"|"OFERTAS"|"REGLAS";
 type DraftPurchase={id:string;name:string;amount:string;presentation:string;price:string;supplier:string};
 const cashFmt=new Intl.NumberFormat("es-MX",{style:"currency",currency:"MXN",maximumFractionDigits:2});
@@ -63,7 +63,7 @@ const examplePurchases:DraftPurchase[]=[
 ];
 const moneyOrUnknown=(n:number|null)=>n===null?"Pendiente":cashFmt.format(n);
 
-export function AbastoWorkbench({seeds,suppliers,observedDays}:Props){
+export function AbastoWorkbench({seeds,suppliers,observedDays,mapsApiEnabled}:Props){
  const [tab,setTab]=useState<Tab>("PLAN");
  const {vendors,setVendors,patch:patchVendor,removeVendor}=useLocalVendors(suppliers);
  const [costPurchaseId,setCostPurchaseId]=useState("leche");
@@ -389,7 +389,7 @@ export function AbastoWorkbench({seeds,suppliers,observedDays}:Props){
       pagada ni a una recepción de mercancía.</p>
    </div>
   </section>}
-  {tab==="RUTA"&&<RouteItinerary vendors={vendors} tripDate={tripDate}/>}
+  {tab==="RUTA"&&<RouteItinerary vendors={vendors} tripDate={tripDate} mapsApiEnabled={mapsApiEnabled}/>}
   {tab==="RUTA"&&<section className="abp-two">
     <div className="abp-stacked">
       <div className="abp-panel">

@@ -2,7 +2,7 @@
 import {useEffect,useMemo,useState} from "react";
 import type {VendorProfile,RouteStop} from "@/src/domain/purchases/route-schedule";
 import {evaluateRoute,reorderByClosingTime,clock} from "@/src/domain/purchases/route-schedule";
-export function RouteItinerary({vendors,tripDate}:{vendors:VendorProfile[];tripDate:string}){
+export function RouteItinerary({vendors,tripDate,mapsApiEnabled}:{vendors:VendorProfile[];tripDate:string;mapsApiEnabled:boolean}){
  const [stops,setStops]=useState<RouteStop[]>([]);
  const [selected,setSelected]=useState("");
  const [depart,setDepart]=useState("07:00");
@@ -108,8 +108,9 @@ export function RouteItinerary({vendors,tripDate}:{vendors:VendorProfile[];tripD
    </div>
   </div>
   <div className="abp-actions">
-   <button type="button" className="abp-button" disabled={!stops.length||routeBusy}
-     onClick={()=>void calculateOnline()}>{routeBusy?"Consultando…":"Optimizar ruta y tiempos automáticamente"}</button>
+   {mapsApiEnabled?<button type="button" className="abp-button" disabled={!stops.length||routeBusy}
+     onClick={()=>void calculateOnline()}>{routeBusy?"Consultando…":"Optimizar ruta y tiempos automáticamente"}</button>:
+     <span className="abp-chip warn">Optimización interna pendiente de activar Google Maps Platform</span>}
    <button type="button" className="abp-button" disabled={!vendors.some(v=>v.name.trim())}
     onClick={()=>{setStops(old=>{
       const used=new Set(old.map(x=>x.vendorId));

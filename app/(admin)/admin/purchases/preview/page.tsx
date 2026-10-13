@@ -55,6 +55,6 @@ export default async function AbastoPreviewPage(){
       compras, gastos, rutas ni movimientos de inventario. No se usa Loyverse.
     </p>
     <AbastoWorkbench seeds={seeds} suppliers={supplierRows.map(s=>s.name+(s.city?" · "+s.city:""))}
-      observedDays={forecast.sampleDays} />
+      observedDays={forecast.sampleDays} mapsApiEnabled={Boolean(process.env.GOOGLE_MAPS_API_KEY)}/>
   </main>;
 }
