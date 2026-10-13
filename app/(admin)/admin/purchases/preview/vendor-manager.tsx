@@ -50,7 +50,7 @@ export function VendorManager({vendors,patch,add,remove}:{
   <p className="abp-lead">Edita el nombre, dirección, CP y horario de cada sucursal.
    Los cambios solo se guardan en este navegador, no en la base OPS.</p>
   <PlaceFinder onChoose={(place:PlaceMatch)=>{
-   const chain=place.name.toLowerCase().includes("sam")?"SAMS":
+   const chain:VendorProfile["chain"]=place.name.toLowerCase().includes("sam")?"SAMS":
     place.name.toLowerCase().includes("walmart")?"WALMART":"OTRO";
    const existing=vendors.find(v=>v.placeId===place.placeId)||
      vendors.find(v=>v.name.toLowerCase()===place.name.toLowerCase());
