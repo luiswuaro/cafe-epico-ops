@@ -13,6 +13,7 @@ import {CheckoutLoyalty,redeemAmount,type CheckoutCustomer} from "./checkout/che
 import {calculateStaffTicket,calculateMixedTicketSettlement,type StaffBenefitKind} from "@/src/domain/pos/staff-ticket";
 import type {ExtraOption} from "@/src/application/pos/extra-catalog";
 import {OWN_CONTAINER_DISCOUNT_MXN,canUseOwnContainer,ownContainerUnitPrice} from "@/src/domain/pos/own-container";
+import {isEspressoTakeawayWithoutLid} from "@/src/domain/pos/takeaway-packaging";
 import {
   DINE_IN_TICKET_PRESETS,TAKEAWAY_TICKET_PRESETS,
   effectiveOrderServiceMode,
@@ -817,7 +818,8 @@ export function PosClient({
                       aria-label={"Servicio de "+line.item.name}
                       onChange={event=>updateServiceMode(line.key,event.target.value as ServiceMode)}>
                       <option value="DINE_IN">Aquí · sin vaso desechable</option>
-                      <option value="TAKEAWAY">Para llevar · con vaso y tapa</option>
+                      <option value="TAKEAWAY">{isEspressoTakeawayWithoutLid(line.item)
+                         ?"Para llevar · vaso 4 oz sin tapa":"Para llevar · con vaso y tapa"}</option>
                     </select>
                   </label>
                   {canUseOwnContainer(line.item,line.serviceMode)&&<label className="pos-own-thermos-control">
