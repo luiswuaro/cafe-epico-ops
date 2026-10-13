@@ -63,7 +63,7 @@ export function OfferDesk({vendors}:{vendors:VendorProfile[]}){
      const each=offer!==null&&count!==null&&count>0&&units!==null&&units>0?offer/(count*units):null;
      const expired=Boolean(q.validTo)&&q.validTo<new Date().toLocaleDateString("en-CA");
      const withEvidence=q.source.startsWith("https://")&&Boolean(q.date)&&Boolean(q.vendorId);
-     return <details key={q.id} className="abp-row-details" defaultOpen={!q.item}>
+     return <details key={q.id} className="abp-row-details">
       <summary>{q.item||"Cotización nueva"} · {vendors.find(x=>x.id===q.vendorId)?.name||"sin sucursal"}
        {" · "}{expired?"CADUCADA":withEvidence?"Con enlace (verificación manual)":"Sin fuente completa"}</summary>
       <div className="abp-stacked">
