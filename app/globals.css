@@ -3041,3 +3041,23 @@ main.pos-shell .pos-table-shortcuts button[aria-pressed="true"] {
   main.pos-shell .pos-command-actions{display:none}
 }
 @media(max-width:760px){.pos-cart-action-dock{display:none}.pos-ticket-identity{padding:.6rem}}
+
+/* POS 2026-10-12: botones de inventario compartidos con prioridad de tema */
+main.pos-shell button.pos-quick-reabasto-trigger{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:.25rem;
+  min-height:40px;
+  padding:.48rem .7rem;
+  border:1px solid var(--epic-border);
+  border-radius:10px;
+  background:var(--epic-field);
+  color:var(--epic-fg);
+  font-weight:800;
+}
+main.pos-shell button.pos-quick-reabasto-trigger:is(:hover,:focus-visible){
+  background:var(--epic-soft);
+  color:var(--epic-fg);
+  border-color:var(--epic-accent);
+}
