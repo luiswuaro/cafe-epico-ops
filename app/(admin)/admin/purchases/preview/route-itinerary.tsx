@@ -7,33 +7,81 @@ export function RouteItinerary({vendors,tripDate}:{vendors:VendorProfile[];tripD
  const [selected,setSelected]=useState("");
  const [depart,setDepart]=useState("07:00");
  const [notice,setNotice]=useState("");
+ const [routeBusy,setRouteBusy]=useState(false);
+ const [returnMinutes,setReturnMinutes]=useState<number|null>(null);
+ const [driveKm,setDriveKm]=useState<number|null>(null);
  const [hydrated,setHydrated]=useState(false);
  useEffect(()=>{
   try{const saved=JSON.parse(localStorage.getItem("epico-preview-itinerario-v1")||"null");
    if(saved&&Array.isArray(saved.stops))setStops(saved.stops.filter((x:RouteStop)=>
     x&&typeof x.id==="string"&&typeof x.vendorId==="string").slice(0,30));
    if(typeof saved?.depart==="string")setDepart(saved.depart);
+   if(typeof saved?.returnMinutes==="number")setReturnMinutes(saved.returnMinutes);
+   if(typeof saved?.driveKm==="number")setDriveKm(saved.driveKm);
   }catch{}
   setHydrated(true);
  },[]);
  useEffect(()=>{if(!hydrated)return;
-   try{localStorage.setItem("epico-preview-itinerario-v1",JSON.stringify({stops,depart}));}catch{}
- },[stops,depart,hydrated]);
+   try{localStorage.setItem("epico-preview-itinerario-v1",JSON.stringify({stops,depart,returnMinutes,driveKm}));}catch{}
+ },[stops,depart,returnMinutes,driveKm,hydrated]);
  const result=useMemo(()=>evaluateRoute(stops,vendors,tripDate,depart),[stops,vendors,tripDate,depart]);
+ const calculateOnline=async()=>{
+   const chosen=stops.map(stop=>vendors.find(v=>v.id===stop.vendorId));
+   if(!chosen.length||chosen.some(x=>!x?.name.trim())){setNotice("Agrega sucursales válidas.");return;}
+   setRouteBusy(true);
+   try{
+    const response=await fetch("/api/admin/purchases/route",{
+     method:"POST",headers:{"Content-Type":"application/json"},
+     body:JSON.stringify({stops:chosen.map(v=>v!.address||v!.name+" Puebla México"),optimize:true})
+    });
+    const data=await response.json() as {order?:number[];legMinutes?:number[];
+      returnMinutes?:number;distanceKm?:number;error?:string};
+    if(!response.ok||!data.order||!data.legMinutes)throw Error(data.error||"Rutas no disponibles.");
+    setStops(data.order.map((index,i)=>({
+      ...stops[index],legMinutes:String(data.legMinutes?.[i]??"")
+    })));
+    setReturnMinutes(data.returnMinutes??null);
+    setDriveKm(data.distanceKm??null);
+    setNotice("Distancias y orden calculados con Google Routes. Los horarios pueden tener excepciones.");
+   }catch(error){setNotice(error instanceof Error?error.message:"Error de consulta a Maps.");}
+   finally{setRouteBusy(false)}
+ };
  const patch=(id:string,values:Partial<RouteStop>)=>
   setStops(s=>s.map(x=>x.id===id?{...x,...values}:x));
  const changeOrder=(i:number,dir:number)=>{
   setStops(s=>{const a=s.map(x=>({...x,legMinutes:""})),j=i+dir;
    if(j<0||j>=a.length)return s;
    [a[i],a[j]]=[a[j],a[i]];return a;});
+  setReturnMinutes(null);setDriveKm(null);
   setNotice("Ruta cambiada: vuelve a introducir tiempos de traslado de cada tramo.");
  };
- const addressList=stops.map(s=>vendors.find(v=>v.id===s.vendorId)?.address||"");
- const mapUrl=addressList.length>0&&addressList.every(Boolean)?
-  "https://www.google.com/maps/dir/?"+new URLSearchParams({
-   api:"1",origin:"Tepexi de Rodríguez, Puebla, México",
-   destination:"Tepexi de Rodríguez, Puebla, México",
-   waypoints:addressList.join("|"),travelmode:"driving"}).toString():"";
+ const mapParts=useMemo(()=>{
+  const origin="Café Épico, Tepexi de Rodríguez, Puebla, México";
+  const named=stops.map(s=>vendors.find(v=>v.id===s.vendorId))
+   .filter((v):v is VendorProfile=>Boolean(v))
+   .map(v=>({text:v.address.trim()||v.name.trim()+" Puebla, México",id:v.placeId||""}))
+   .filter(v=>v.text.trim());
+  if(!named.length)return [] as {label:string;url:string}[];
+  const parts:{label:string;url:string}[]=[];
+  // Hasta 3 paradas en cada enlace: compatible con navegadores móviles.
+  for(let i=0;i<named.length;i+=3){
+   const chunk=named.slice(i,i+3);
+   const first=i===0?origin:named[i-1].text;
+   const last=i+3>=named.length;
+   const params=new URLSearchParams({api:"1",origin:first,
+     destination:last?origin:chunk[chunk.length-1].text,
+     travelmode:"driving"});
+   const waypoints=last?chunk:chunk.slice(0,-1);
+   if(waypoints.length){
+     params.set("waypoints",waypoints.map(w=>w.text).join("|"));
+     if(waypoints.every(w=>w.id))params.set("waypoint_place_ids",waypoints.map(w=>w.id).join("|"));
+   }
+   parts.push({label:named.length<=3?"Abrir ruta completa en Google Maps ↗":
+     "Maps · tramo "+(parts.length+1)+" ↗",
+     url:"https://www.google.com/maps/dir/?"+params.toString()});
+  }
+  return parts;
+ },[stops,vendors]);
  const textRoute=()=>{
   return ["CAFÉ ÉPICO · ITINERARIO PRELIMINAR",tripDate+" Salida: "+depart,
    ...result.steps.map((s,i)=>(i+1)+". "+s.vendor.name+
@@ -60,6 +108,14 @@ export function RouteItinerary({vendors,tripDate}:{vendors:VendorProfile[];tripD
    </div>
   </div>
   <div className="abp-actions">
+   <button type="button" className="abp-button" disabled={!stops.length||routeBusy}
+     onClick={()=>void calculateOnline()}>{routeBusy?"Consultando…":"Optimizar ruta y tiempos automáticamente"}</button>
+   <button type="button" className="abp-button" disabled={!vendors.some(v=>v.name.trim())}
+    onClick={()=>{setStops(old=>{
+      const used=new Set(old.map(x=>x.vendorId));
+      return [...old,...vendors.filter(v=>v.name.trim()&&!used.has(v.id)).slice(0,8).map(v=>({
+       id:crypto.randomUUID(),vendorId:v.id,legMinutes:"",visitMinutes:"20"}))];
+     });}}>Añadir proveedores a la ruta</button>
    <button type="button" className="abp-button" disabled={stops.length<2}
     onClick={()=>{setStops(s=>reorderByClosingTime(s,vendors));
      setNotice("Sugerencia de cierres más tempranos (NO optimiza kilómetros). Introduce tiempos por tramo.");}}>
@@ -67,14 +123,16 @@ export function RouteItinerary({vendors,tripDate}:{vendors:VendorProfile[];tripD
    <button type="button" className="abp-button"
     onClick={()=>{void navigator.clipboard.writeText(textRoute()).then(()=>setNotice("Itinerario copiado.")).catch(()=>setNotice("No se pudo copiar."));}}>
     Copiar itinerario</button>
-   {mapUrl&&<a className="abp-button primary" target="_blank" rel="noopener noreferrer" href={mapUrl}>
-    Abrir ruta en Google Maps ↗</a>}
+   {mapParts.map(part=><a key={part.url} className="abp-button primary"
+      target="_blank" rel="noopener noreferrer" href={part.url}>{part.label}</a>)}
   </div>
   {notice&&<p className="abp-warning" role="status">{notice}</p>}
   <div className="abp-summary">
    <strong>Inicio: Café Épico / Tepexi · {tripDate||"sin fecha"} {depart}</strong>
    <span>{result.steps.length} paradas · {result.warnings} observación(es)
-    · última salida calculable: {clock(result.endTime)}</span>
+    · última salida calculable: {clock(result.endTime)}
+    {returnMinutes!==null&&" · regreso "+returnMinutes+" min"}
+    {driveKm!==null&&" · "+driveKm.toFixed(1)+" km de traslado"}</span>
   </div>
   <div className="abp-list">{result.steps.map((s,i)=><div className="abp-route-stop" key={s.stop.id}>
     <div className="abp-inline" style={{justifyContent:"space-between"}}>
@@ -110,7 +168,9 @@ export function RouteItinerary({vendors,tripDate}:{vendors:VendorProfile[];tripD
    </div>)}
    {stops.length===0&&<p className="abp-muted">Agrega paradas. Primero configura los horarios en «Proveedores».</p>}
   </div>
-  <p className="abp-foot">El cálculo no incluye el regreso hasta Tepexi. La sugerencia por
+  <p className="abp-foot">La optimización automática usa Google Routes cuando haya una clave
+    habilitada. Mientras tanto el enlace a Maps funciona y allí se muestran los tiempos
+    con el tráfico disponible. El cálculo manual no incluye el regreso hasta Tepexi. La sugerencia por
    horario no sustituye optimización geográfica; confirmar aperturas y tráfico antes de salir.</p>
  </section>;
 }

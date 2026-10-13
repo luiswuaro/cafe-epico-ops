@@ -128,3 +128,38 @@
  .abp .abp-route-times{grid-template-columns:1fr 1fr}
  .abp .abp-quick-price .abp-muted{grid-column:auto}
 }
+
+/* Contraste uniforme para TODOS los inputs, incluidas las celdas sin <label>. */
+.abp :is(input:not([type="checkbox"]),textarea,select),
+.abp .abp-table-wrap .abp-table tbody td input,
+.abp .abp-table-wrap .abp-table tbody td select{
+  background-color:var(--epic-field)!important;
+  color:var(--epic-fg)!important;
+  -webkit-text-fill-color:var(--epic-fg);
+  border:1px solid var(--epic-border)!important;
+  opacity:1;
+}
+.abp :is(input,textarea)::placeholder,
+.abp .abp-table-wrap .abp-table tbody td input::placeholder{
+  color:var(--epic-secondary)!important;
+  -webkit-text-fill-color:var(--epic-secondary);
+  opacity:1!important;
+}
+.abp .abp-table tbody td{color:var(--epic-fg)}
+.abp .abp-table tbody td input{min-height:42px;max-width:100%}
+.abp .abp-save-status{background:var(--epic-success-bg);color:var(--epic-success-ink);
+  border:1px solid var(--epic-border);border-radius:8px;padding:.4rem .65rem;
+  margin:.55rem 0;font-size:.76rem;font-weight:800}
+.abp .abp-place-lookup{background:var(--epic-soft);
+  border:1px solid var(--epic-border);border-radius:12px;padding:.85rem;margin:.65rem 0}
+.abp .abp-place-lookup .abp-stop{background:var(--epic-card)}
+.abp .abp-panel button.abp-button.primary,
+.abp .abp-place-lookup button.abp-button.primary,
+.abp .abp-actions a.abp-button.primary{
+  background:var(--epic-accent);color:var(--epic-accent-contrast)!important;
+}
+.abp .abp-panel :is(h2,h3,strong,.abp-route-times strong){color:var(--epic-fg)}
+.abp .abp-panel .abp-route-warning strong,
+.abp .abp-panel .abp-warning strong{color:var(--epic-warn-ink)}
+.abp .abp-table tbody td :is(input,select):focus-visible{
+  outline:3px solid var(--epic-accent)!important;outline-offset:2px}

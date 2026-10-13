@@ -2,7 +2,8 @@
 export type VendorProfile = {
  id:string;name:string;chain:"SAMS"|"WALMART"|"OTRO";address:string;postal:string;
  opening:string;closing:string;openDays:string; notes:string; website:string;
- provenance:"OPS"|"MANUAL"|"PLANTILLA";
+ provenance:"OPS"|"MANUAL"|"PLANTILLA"|"GOOGLE_PLACES"|"DIRECTORIO";
+ placeId?:string;mapsUrl?:string;hoursNote?:string;fetchedAt?:string;
 };
 export type RouteStop={id:string;vendorId:string;legMinutes:string;visitMinutes:string};
 export type RouteStep={stop:RouteStop;vendor:VendorProfile;arrival:number|null;start:number|null;

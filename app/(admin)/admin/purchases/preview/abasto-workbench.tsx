@@ -1,5 +1,5 @@
 "use client";
-import {useEffect,useMemo,useState} from "react";
+import {useEffect,useMemo,useRef,useState} from "react";
 import type {BuyMode,InventorySeed,SupplyKind,SupplyLine,SupplyDecision} from "@/src/domain/purchases/abastecimiento-plan";
 import {calculateSupplyPlan,nonnegative} from "@/src/domain/purchases/abastecimiento-plan";
 import {useLocalVendors,VendorManager} from "./vendor-manager";
@@ -84,7 +84,11 @@ export function AbastoWorkbench({seeds,suppliers,observedDays}:Props){
  const [search,setSearch]=useState(""),[filter,setFilter]=useState("PRIORIDAD");
  const [notice,setNotice]=useState("");
  const [hydrated,setHydrated]=useState(false);
+ const loadedOnce=useRef(false);
+ const [storageStatus,setStorageStatus]=useState("Cargando datos del navegador…");
  useEffect(()=>{
+   if(loadedOnce.current)return;
+   loadedOnce.current=true;
    try{
      const saved=JSON.parse(window.localStorage.getItem(storageKey)||"null") as Record<string,unknown>|null;
      if(saved&&Array.isArray(saved.lines)){
@@ -132,7 +136,10 @@ export function AbastoWorkbench({seeds,suppliers,observedDays}:Props){
        shelfDays:x.shelfDays,inTransit:x.inTransit,buyMode:x.buyMode})),
      cash,reserve,tripDate,cycleDays,routeKm,fuelPrice,efficiency,tolls,parking,extra,
      timeHours,hourRate,tripPurpose,places,purchases
-   }));}catch{/* Disponible solo en esta sesión. */}
+   }));
+     const confirmation=window.localStorage.getItem(storageKey);
+     setStorageStatus(confirmation?"Guardado en este navegador":"No pudo confirmarse guardado");
+   }catch{setStorageStatus("Sin almacenamiento local disponible: los cambios podrían perderse");}
  },[hydrated,rows,cash,reserve,tripDate,cycleDays,routeKm,fuelPrice,efficiency,tolls,
    parking,extra,timeHours,hourRate,tripPurpose,places,purchases]);
  const update=(id:string,patch:Partial<SupplyLine>)=>
@@ -264,6 +271,8 @@ export function AbastoWorkbench({seeds,suppliers,observedDays}:Props){
        <p className="abp-lead">{seeds.length} insumos reales OPS · {chosen} seleccionados.
        {observedDays>=3?" Consumo observado en "+observedDays+" días con ventas LIVE.":
        " Historial insuficiente para extrapolar demanda. Configura cantidades manuales."}</p>
+       <p className="abp-save-status" role="status">{storageStatus}.
+        Abre siempre la misma dirección de preview para conservar tus precios.</p>
        <p className="abp-lead">La clasificación inicial de perecederos se sugiere por nombre;
         confirma tipo, caducidad, tamaño de caja y proveedor antes de confiar en el plan.</p></div>
       <div className="abp-actions"><button type="button" className="abp-button"
@@ -475,6 +484,8 @@ export function AbastoWorkbench({seeds,suppliers,observedDays}:Props){
           onClick={()=>setPurchases(ps=>ps.filter(q=>q.id!==p.id))}>×</button></td>
        </tr>)}</tbody>
       </table></div>
+      <p className="abp-save-status" role="status">{storageStatus}.
+       Los importes quedan en tu navegador, sin afectar producción.</p>
       <div className="abp-link-price">
        <h3>Vincular precios del ticket a insumos del simulador</h3>
        <p className="abp-lead">Elige la compra y el insumo exacto. Declara cuántos kg, L o pz contiene

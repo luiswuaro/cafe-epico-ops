@@ -1,6 +1,8 @@
 "use client";
 import {useEffect,useState} from "react";
 import type {VendorProfile} from "@/src/domain/purchases/route-schedule";
+import type {PlaceMatch} from "@/src/domain/purchases/place-references";
+import {PlaceFinder} from "./place-finder";
 export type {VendorProfile} from "@/src/domain/purchases/route-schedule";
 const storeKey="epico-abasto-vendors-v3";
 const newVendor=():VendorProfile=>({id:crypto.randomUUID(),name:"",chain:"OTRO",address:"",postal:"",opening:"",closing:"",openDays:"",notes:"",website:"",provenance:"MANUAL"});
@@ -41,11 +43,29 @@ export function VendorManager({vendors,patch,add,remove}:{
  vendors:VendorProfile[];patch:(id:string,v:Partial<VendorProfile>)=>void;add:(v:VendorProfile)=>void;remove:(id:string)=>void;
 }){
  const [query,setQuery]=useState("");
+ const [lookupFeedback,setLookupFeedback]=useState("");
  const list=vendors.filter(v=>(v.name+" "+v.postal+" "+v.address).toLowerCase().includes(query.toLowerCase()));
  return <section className="abp-panel">
   <h2>Directorio de proveedores y sucursales</h2>
   <p className="abp-lead">Edita el nombre, dirección, CP y horario de cada sucursal.
    Los cambios solo se guardan en este navegador, no en la base OPS.</p>
+  <PlaceFinder onChoose={(place:PlaceMatch)=>{
+   const chain=place.name.toLowerCase().includes("sam")?"SAMS":
+    place.name.toLowerCase().includes("walmart")?"WALMART":"OTRO";
+   const existing=vendors.find(v=>v.placeId===place.placeId)||
+     vendors.find(v=>v.name.toLowerCase()===place.name.toLowerCase());
+   const patchInfo:Partial<VendorProfile>={
+     name:place.name,chain,address:place.address,postal:place.postal,
+     opening:place.opening,closing:place.closing,openDays:place.openDays,
+     provenance:place.source,placeId:place.placeId,mapsUrl:place.mapsUrl,
+     hoursNote:place.hoursNote,fetchedAt:new Date().toISOString()
+   };
+   if(existing)patch(existing.id,patchInfo);
+   else add({...newVendor(),...patchInfo});
+   setLookupFeedback(place.name+" incorporado desde "+(place.source==="GOOGLE_PLACES"?
+    "Google Places":"directorio de referencia")+".");
+  }}/>
+  {lookupFeedback&&<p className="abp-warning" role="status">{lookupFeedback}</p>}
   <div className="abp-actions">
    <button type="button" className="abp-button primary" onClick={()=>add(newVendor())}>+ Nuevo proveedor</button>
    <button type="button" className="abp-button" onClick={()=>add({
@@ -83,12 +103,14 @@ export function VendorManager({vendors,patch,add,remove}:{
          v.openDays.replace(String(i),"")})}/>{day}</label>)}
     </div>
     <div className="abp-actions">
-     {v.address&&<a className="abp-button" target="_blank" rel="noopener noreferrer"
-      href={"https://www.google.com/maps/search/?api=1&query="+encodeURIComponent(v.address)}>
+     {(v.address||v.mapsUrl)&&<a className="abp-button" target="_blank" rel="noopener noreferrer"
+      href={v.mapsUrl||"https://www.google.com/maps/search/?api=1&query="+encodeURIComponent(v.address)}>
        Verificar ubicación ↗</a>}
      <button type="button" className="abp-button" onClick={()=>{if(window.confirm("¿Quitar de la preview sin modificar OPS?"))remove(v.id);}}>
        Quitar proveedor de preview</button>
     </div>
+    {v.hoursNote&&<p className="abp-foot">Fuente del horario: {v.hoursNote}
+     {v.fetchedAt&&" · Consulta "+new Date(v.fetchedAt).toLocaleDateString("es-MX")}.</p>}
     <p className="abp-foot">Horario sin capturar = desconocido; el itinerario no lo considerará confirmado.
      Proveedor original: {v.provenance==="OPS"?"registro OPS (no editable en producción desde aquí)":"escenario local"}.</p>
    </div>
