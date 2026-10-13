@@ -1,7 +1,7 @@
 "use client";
 import {useEffect,useRef,useState} from "react";
 import {DEFAULT_PAPER_CUT_GAP_SECONDS,PAPER_CUT_GAP_OPTIONS,getPaperCutGapSeconds,setPaperCutGapSeconds} from "@/src/application/pos/print-paper-gap";
-import {getPrintStationJobs,claimPrintStationJob,finishPrintStationJob,
+import {getPrintStationJobs,claimPrintStationJob,finishPrintStationJob,heartbeatPrintStation,
 } from "./hub-actions";
 import {printKitchenSlip} from "../orders/kitchen-print-button";
 import {acknowledgeKitchenPrint} from "../orders/print-timing-actions";
@@ -9,6 +9,23 @@ import {printReceiptWithBridge,type DirectReceiptTemplate} from "../receipt/[id]
 const STORAGE="cafe-epico-print-hub-pc-v1";
 const TICKET_CONFIG="cafe-epico-printer-bridge-v1";
 type HubState={enabled:boolean;since:string;stationId:string};
+/** Comprueba el puente físico antes de reportar la estación como saludable. */
+async function printerBridgeReady():Promise<boolean>{
+ try{
+  const raw=window.localStorage.getItem(TICKET_CONFIG);
+  if(!raw)return false;
+  const value=JSON.parse(raw) as {url?:string;token?:string};
+  if(!value.url||!value.token)return false;
+  const url=new URL(value.url);
+  if(!["localhost","127.0.0.1"].includes(url.hostname)||url.protocol!=="http:")return false;
+  const response=await fetch(url.origin+"/status",{
+   headers:{"X-Cafe-Epico-Token":value.token},
+   signal:AbortSignal.timeout(3000),
+  });
+  const data=await response.json() as {ok?:boolean;rasterBands?:boolean};
+  return response.ok&&data.ok===true&&data.rasterBands===true;
+ }catch{return false;}
+}
 export function PrintStation({template,preview,hiddenMode=false}:{
  template:DirectReceiptTemplate;preview:boolean;hiddenMode?:boolean;
 }){
@@ -18,6 +35,7 @@ export function PrintStation({template,preview,hiddenMode=false}:{
  const [pending,setPending]=useState(0);
  const [cutGap,setCutGap]=useState(DEFAULT_PAPER_CUT_GAP_SECONDS);
  const working=useRef(false);
+ const lastHeartbeat=useRef(0);
  useEffect(()=>{
   try{const raw=window.localStorage.getItem(STORAGE);if(raw)
    window.requestAnimationFrame(()=>setState(JSON.parse(raw) as HubState))}
@@ -54,11 +72,29 @@ export function PrintStation({template,preview,hiddenMode=false}:{
     working.current=true;
     try{
       const jobs=await getPrintStationJobs({since:state.since});
+      // No reclamar la cola cuando la impresora no responde: queda pendiente.
+      // Así una reconexión dentro del plazo puede imprimirla sin duplicarla.
+      const healthy=await printerBridgeReady();
+      if(Date.now()-lastHeartbeat.current>=12000){
+        await heartbeatPrintStation({stationId:state.stationId,since:state.since,
+          bridgeReady:healthy});
+        lastHeartbeat.current=Date.now();
+      }
       if(alive)setPending(jobs.length);
+      if(!healthy){
+        if(alive)setStatus("ALERTA: impresora desconectada. Comandas pendientes: "+jobs.length);
+        return;
+      }
       for(const job of jobs){
         if(!alive)break;
         const claimed=await claimPrintStationJob(job.key,state.stationId);
-        if(!claimed)continue;
+        if(!claimed){
+          if(alive&&job.kind==="KITCHEN"&&
+            Date.now()-new Date(job.createdAt).getTime()>5*60*1000)
+            setStatus("Comanda atrasada retenida: "+job.title+
+              ". Revisa el pedido antes de imprimir manualmente.");
+          continue;
+        }
         try{
           let printer="POS";
           if((job.kind==="KITCHEN"||job.kind==="VOID")&&job.slip){
@@ -91,7 +127,16 @@ export function PrintStation({template,preview,hiddenMode=false}:{
   };
   void tick();
   const timer=window.setInterval(()=>void tick(),4000);
-  return ()=>{alive=false;window.clearInterval(timer)};
+  // Al regresar de suspensión o de una pestaña en segundo plano, verificar de inmediato.
+  const wake=()=>{if(document.visibilityState==="visible")void tick();};
+  window.addEventListener("focus",wake);
+  window.addEventListener("online",wake);
+  document.addEventListener("visibilitychange",wake);
+  return ()=>{alive=false;window.clearInterval(timer);
+    window.removeEventListener("focus",wake);
+    window.removeEventListener("online",wake);
+    document.removeEventListener("visibilitychange",wake);
+  };
  },[state?.enabled,state?.since,state?.stationId,preview,template,hiddenMode]);
  const enabled=Boolean(state?.enabled)&&!preview;
  if(hiddenMode)return null;
@@ -129,7 +174,7 @@ export function PrintStation({template,preview,hiddenMode=false}:{
     activará únicamente después de publicar en producción.</p>}
    <p role="status" className="muted">{status}</p>
    {enabled&&<small className="muted">
-    Eventos encontrados: {pending}. Una impresión confirmada jamás se repite.
+    Eventos pendientes: {pending}. Las comandas con más de 5 minutos se retienen para revisión manual.
     Si el puente o internet falla después de reclamar el trabajo,
     OPS no lo reintenta a ciegas: revisa el papel e imprime manualmente si corresponde.
    </small>}
