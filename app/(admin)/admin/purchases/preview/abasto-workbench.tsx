@@ -2,9 +2,12 @@
 import {useEffect,useMemo,useState} from "react";
 import type {BuyMode,InventorySeed,SupplyKind,SupplyLine,SupplyDecision} from "@/src/domain/purchases/abastecimiento-plan";
 import {calculateSupplyPlan,nonnegative} from "@/src/domain/purchases/abastecimiento-plan";
+import {useLocalVendors,VendorManager} from "./vendor-manager";
+import {RouteItinerary} from "./route-itinerary";
+import {OfferDesk} from "./offer-desk";
 
 type Props={seeds:InventorySeed[];suppliers:string[];observedDays:number};
-type Tab="PLAN"|"RUTA"|"RECIBIR"|"REGLAS";
+type Tab="PLAN"|"RUTA"|"RECIBIR"|"PROVEEDORES"|"OFERTAS"|"REGLAS";
 type DraftPurchase={id:string;name:string;amount:string;presentation:string;price:string;supplier:string};
 const cashFmt=new Intl.NumberFormat("es-MX",{style:"currency",currency:"MXN",maximumFractionDigits:2});
 const numFmt=new Intl.NumberFormat("es-MX",{maximumFractionDigits:3});
@@ -62,6 +65,10 @@ const moneyOrUnknown=(n:number|null)=>n===null?"Pendiente":cashFmt.format(n);
 
 export function AbastoWorkbench({seeds,suppliers,observedDays}:Props){
  const [tab,setTab]=useState<Tab>("PLAN");
+ const {vendors,setVendors,patch:patchVendor}=useLocalVendors(suppliers);
+ const [costPurchaseId,setCostPurchaseId]=useState("leche");
+ const [costItemId,setCostItemId]=useState("");
+ const [costUnits,setCostUnits]=useState("");
  const [rows,setRows]=useState<SupplyLine[]>(()=>seeds.map(basicLine));
  const [cash,setCash]=useState(""),[reserve,setReserve]=useState("");
  const [tripDate,setTripDate]=useState(""),[cycleDays,setCycleDays]=useState("7");
@@ -191,7 +198,8 @@ export function AbastoWorkbench({seeds,suppliers,observedDays}:Props){
  }
  const tabs:[Tab,string][]=[
    ["PLAN","1 · Compras y liquidez"],["RUTA","2 · Ruta y costos"],
-   ["RECIBIR","3 · Recepción simulada"],["REGLAS","4 · Criterios y auditoría"]
+   ["RECIBIR","3 · Recepción"],["PROVEEDORES","4 · Proveedores"],
+   ["OFERTAS","5 · Precios y promociones"],["REGLAS","6 · Auditoría"]
  ];
  return <>
   <div className="abp-tabs" role="tablist" aria-label="Secciones de abastecimiento">
@@ -291,9 +299,20 @@ export function AbastoWorkbench({seeds,suppliers,observedDays}:Props){
             {d&&<span className={"abp-chip "+(d.status==="PARCIAL"||d.status==="SIN_PRESUPUESTO"?"warn":"")}>
               {labelStatus[d.status]}</span>}
           </div>
+          <div className="abp-quick-price">
+            <label>Precio suelto (MXN/{shopUnit(row.unit)})
+              <input type="number" min="0" step=".0001" value={row.unitPrice}
+               aria-label={"Precio suelto "+row.name} onChange={e=>update(row.id,{unitPrice:e.target.value})}
+               placeholder="Sin precio"/></label>
+            <label>Precio de caja (MXN)
+              <input type="number" min="0" step=".01" value={row.boxPrice}
+               aria-label={"Precio de caja "+row.name} onChange={e=>update(row.id,{boxPrice:e.target.value})}
+               placeholder="Sin precio"/></label>
+            <span className="abp-muted">Puedes cambiar ambos importes. Define contenido de la caja en «Más parámetros».</span>
+          </div>
           <details>
             <summary style={{cursor:"pointer",padding:".5rem .7rem",fontWeight:800,fontSize:".78rem"}}>
-             Editar: tipo, unidades, precio y caja
+             Más parámetros: cantidad, proveedor, contenido y caducidad
             </summary>
             <div style={{padding:".7rem",borderTop:"1px solid var(--abp-line)"}}>
               <div className="abp-fields">
@@ -310,17 +329,12 @@ export function AbastoWorkbench({seeds,suppliers,observedDays}:Props){
                   <input type="number" min="0" step="0.001" value={row.manualQty}
                     onChange={e=>update(row.id,{manualQty:e.target.value})}
                     placeholder="Vacío = calcular con OPS"/></label>
-                <label>Precio suelto (MXN / {shopUnit(row.unit)})
-                  <input type="number" min="0" step=".0001" value={row.unitPrice}
-                    onChange={e=>update(row.id,{unitPrice:e.target.value})}
-                    placeholder="Precio conocido"/></label>
+
                 <label>Contenido de una caja ({shopUnit(row.unit)})
                   <input type="number" min="0" step=".001" value={row.boxUnits}
                     onChange={e=>update(row.id,{boxUnits:e.target.value})}
                     placeholder="Ej. 12 L"/></label>
-                <label>Precio completo de la caja (MXN)
-                  <input type="number" min="0" step=".01" value={row.boxPrice}
-                    onChange={e=>update(row.id,{boxPrice:e.target.value})}/></label>
+
                 <label>Vida útil restante al recibir (días)
                   <input type="number" min="0" step="1" value={row.shelfDays}
                     onChange={e=>update(row.id,{shelfDays:e.target.value})}
@@ -366,47 +380,9 @@ export function AbastoWorkbench({seeds,suppliers,observedDays}:Props){
       pagada ni a una recepción de mercancía.</p>
    </div>
   </section>}
+  {tab==="RUTA"&&<RouteItinerary vendors={vendors} tripDate={tripDate}/>}
   {tab==="RUTA"&&<section className="abp-two">
     <div className="abp-stacked">
-      <div className="abp-panel">
-       <h2>Ruta semanal de abasto</h2>
-       <p className="abp-lead">Consolidar perecederos como motivo recurrente del viaje y añadir
-         proveedores de productos estables solo cuando coincida el recorrido. No hay distancias calculadas:
-         registra los km reales o una estimación identificada.</p>
-       <div className="abp-fields cols-2">
-        <label>Propósito de la salida
-         <select value={tripPurpose} onChange={e=>setTripPurpose(e.target.value)}>
-          <option>Compartido / semanal</option>
-          <option>Exclusivo cafetería</option>
-          <option>Compartido cafetería e ingeniería</option>
-          <option>Reposición extraordinaria</option>
-         </select></label>
-        <label>Proveedor o parada
-         <input list="abp-stops" value={placeInput} onChange={e=>setPlaceInput(e.target.value)}
-          placeholder="Nombre o referencia local"/></label>
-       </div>
-       <datalist id="abp-stops">{suppliers.map(s=><option key={s} value={s}/>)}</datalist>
-       <div className="abp-actions">
-        <button type="button" className="abp-button" disabled={!placeInput.trim()}
-          onClick={()=>{setPlaces(x=>[...x,placeInput.trim()]);setPlaceInput("");}}>
-          + Añadir parada</button>
-       </div>
-       <div className="abp-list">
-        <div className="abp-stop"><strong>Salida · Café Épico, Tepexi</strong><span className="abp-muted">Origen</span></div>
-        {places.map((place,i)=><div key={place+"-"+i} className="abp-stop">
-         <strong>{i+1}. {place}</strong>
-         <div className="abp-actions">
-           <button type="button" className="abp-button" aria-label={"Subir "+place} disabled={i===0}
-             onClick={()=>setPlaces(a=>{const copy=[...a];[copy[i-1],copy[i]]=[copy[i],copy[i-1]];return copy;})}>↑</button>
-           <button type="button" className="abp-button" aria-label={"Bajar "+place} disabled={i===places.length-1}
-             onClick={()=>setPlaces(a=>{const copy=[...a];[copy[i+1],copy[i]]=[copy[i],copy[i+1]];return copy;})}>↓</button>
-           <button type="button" className="abp-button" onClick={()=>setPlaces(a=>a.filter((_,j)=>i!==j))}>Quitar</button>
-         </div></div>)}
-        <div className="abp-stop"><strong>Regreso · Café Épico, Tepexi</strong><span className="abp-muted">Destino</span></div>
-       </div>
-       <p className="abp-foot">Orden manual de paradas, no ruta georreferenciada ni horario verificado.
-         La integración con mapas se hará cuando capturemos direcciones de proveedores.</p>
-      </div>
       <div className="abp-panel">
         <h2>Desembolso de traslado</h2>
         <div className="abp-fields cols-2">
@@ -471,6 +447,9 @@ export function AbastoWorkbench({seeds,suppliers,observedDays}:Props){
       </div>
     </div>
    </section>}
+  {tab==="PROVEEDORES"&&<VendorManager vendors={vendors} patch={patchVendor}
+     add={v=>setVendors(x=>[v,...x])} remove={id=>setVendors(x=>x.filter(v=>v.id!==id))}/>}
+  {tab==="OFERTAS"&&<OfferDesk vendors={vendors}/>}
   {tab==="RECIBIR"&&<section className="abp-stacked">
     <div className="abp-panel">
       <h2>Registrar compra de hoy · borrador</h2>
@@ -496,6 +475,41 @@ export function AbastoWorkbench({seeds,suppliers,observedDays}:Props){
           onClick={()=>setPurchases(ps=>ps.filter(q=>q.id!==p.id))}>×</button></td>
        </tr>)}</tbody>
       </table></div>
+      <div className="abp-link-price">
+       <h3>Vincular precios del ticket a insumos del simulador</h3>
+       <p className="abp-lead">Elige la compra y el insumo exacto. Declara cuántos kg, L o pz contiene
+        cada caja o presentación. Ejemplo: 5 cajas a $1,440, 12 L por caja: $288/caja y $24/L.
+        No se presume el contenido.</p>
+       <div className="abp-fields cols-3">
+        <label>Compra del ticket<select value={costPurchaseId} onChange={e=>setCostPurchaseId(e.target.value)}>
+         {purchases.map(p=><option key={p.id} value={p.id}>{p.name||"Sin nombre"} · {p.amount} {p.presentation}</option>)}
+        </select></label>
+        <label>Insumo exacto OPS<select value={costItemId} onChange={e=>setCostItemId(e.target.value)}>
+         <option value="">Elige un insumo…</option>
+         {rows.map(x=><option key={x.id} value={x.id}>{x.name} · {shopUnit(x.unit)}</option>)}
+        </select></label>
+        <label>Contenido por presentación (kg, L o pz)
+         <input type="number" min="0" step=".001" value={costUnits}
+          onChange={e=>setCostUnits(e.target.value)} placeholder="Ej. 12 para 12 L/caja"/></label>
+       </div>
+       <div className="abp-actions">
+        <button type="button" className="abp-button primary" onClick={()=>{
+         const p=purchases.find(x=>x.id===costPurchaseId),item=rows.find(x=>x.id===costItemId);
+         const count=p?nonnegative(p.amount):null,amount=p?nonnegative(p.price):null,
+           per=nonnegative(costUnits);
+         if(!p||!item||count===null||count<=0||amount===null||per===null||per<=0){
+          setNotice("Elige ticket e insumo y confirma cantidad, importe y contenido por presentación.");
+          return;
+         }
+         const box=amount/count,unit=box/per;
+         update(item.id,{chosen:true,unitPrice:unit.toFixed(4),
+          boxPrice:box.toFixed(2),boxUnits:String(per),supplier:p.supplier});
+         setNotice(item.name+": "+cashFmt.format(box)+"/presentación y "+
+          cashFmt.format(unit)+"/"+shopUnit(item.unit)+" (solo preview).");
+         setTab("PLAN");
+        }}>Aplicar costo al simulador →</button>
+       </div>
+      </div>
       <div className="abp-actions">
        <button type="button" className="abp-button" onClick={()=>setPurchases(p=>[...p,{
         id:"extra-"+String(Date.now()),name:"",amount:"",presentation:"pz",supplier:"",price:""
