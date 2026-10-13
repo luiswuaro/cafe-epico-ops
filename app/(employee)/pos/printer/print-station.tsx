@@ -72,14 +72,19 @@ export function PrintStation({template,preview,hiddenMode=false}:{
     working.current=true;
     try{
       const jobs=await getPrintStationJobs({since:state.since});
+      // No reclamar la cola cuando la impresora no responde: queda pendiente.
+      // Así una reconexión dentro del plazo puede imprimirla sin duplicarla.
+      const healthy=await printerBridgeReady();
       if(Date.now()-lastHeartbeat.current>=12000){
-        const healthy=await printerBridgeReady();
         await heartbeatPrintStation({stationId:state.stationId,since:state.since,
           bridgeReady:healthy});
         lastHeartbeat.current=Date.now();
-        if(!healthy&&alive)setStatus("ALERTA: puente de impresión desconectado. Revisa la PC antes de cobrar.");
       }
       if(alive)setPending(jobs.length);
+      if(!healthy){
+        if(alive)setStatus("ALERTA: impresora desconectada. Comandas pendientes: "+jobs.length);
+        return;
+      }
       for(const job of jobs){
         if(!alive)break;
         const claimed=await claimPrintStationJob(job.key,state.stationId);
