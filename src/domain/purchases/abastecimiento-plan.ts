@@ -89,12 +89,21 @@ export function calculateSupplyPlan(
         cost===null?"NO_PRECIO" as const:"PENDIENTE_PRESUPUESTO" as const,
       note,urgency:urgency(line,untilTrip)};
   });
+  // No comprometer efectivo en compras posponibles cuando falta cotizar
+  // pan, leche u otro insumo prioritario: el gasto básico está incompleto.
+  const essentialUnpriced=decisions.some(d=>d.urgency<=2&&
+    (d.status==="NO_DATOS"||d.status==="NO_PRECIO"));
   // Primera pasada: abastecimiento viable. Si falta dinero para una caja,
   // ofrecer compra suelta parcial cuando el precio está confirmado.
   for(const d of decisions){
     if(d.status==="NO_DATOS"){missingForecasts++;continue}
     if(d.status==="NO_PRECIO"){missingPrices++;continue}
     if(d.status==="NO_NECESARIO")continue;
+    if(essentialUnpriced&&d.urgency>2){
+      d.status="PENDIENTE_PRESUPUESTO";
+      d.note="No asignar efectivo a esta compra hasta cotizar necesidades esenciales.";
+      continue;
+    }
     if(remaining===null)continue;
     const needCost=d.estimatedCost!;
     if(needCost<=remaining+0.000001) {
