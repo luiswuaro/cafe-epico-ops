@@ -139,7 +139,6 @@ export function RoastingSessionPlanner({
     // 200 g or a test batch). Plan the remainder from actual consumption,
     // not the assumption that every confirmed batch weighed "charge" grams.
     const postedGreen=confirmed.reduce((sum,b)=>sum+b.greenWeightG,0);
-    const remainingGreen=Math.max(0,target-postedGreen);
     const remainingCharges=plannedRoastCharges(target,charge,confirmed.map(b=>b.greenWeightG));
     const total=confirmed.length+remainingCharges.length;
     return Array.from({length:total},(_,index)=>{
