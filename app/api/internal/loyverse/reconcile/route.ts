@@ -12,6 +12,15 @@ function authorized(request: Request) {
 }
 export async function POST(request: Request) {
   if (!authorized(request)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  // Desde octubre OPS es el POS e inventario oficial. La conciliación
+  // programada con Loyverse era legacy y generaba escrituras/consultas
+  // repetidas. Opt-in explícito para no seguir gastando egress Free.
+  // Conservar esta verificación DESPUÉS de validar CRON_SECRET.
+  if(process.env.OPS_LEGACY_LOYVERSE_AUTOSYNC!=="true"){
+    return NextResponse.json({
+      ok:true,mode:"disabled",reason:"OPS_PRIMARY_LEGACY_LOYVERSE_AUTOSYNC_OFF",
+    });
+  }
   try {
     const mode = new URL(request.url).searchParams.get("mode");
     if (mode === "initial") return NextResponse.json({ ok: true, mode, ...(await initialSyncLoyverse(30)) });
