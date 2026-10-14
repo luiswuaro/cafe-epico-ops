@@ -78,7 +78,7 @@ export function PrintStation({template,preview,hiddenMode=false}:{
       // No reclamar la cola cuando la impresora no responde: queda pendiente.
       // Así una reconexión dentro del plazo puede imprimirla sin duplicarla.
       const healthy=await printerBridgeReady();
-      if(Date.now()-lastHeartbeat.current>=12000){
+      if(Date.now()-lastHeartbeat.current>=20000){
         await heartbeatPrintStation({stationId:state.stationId,since:pollSince,
           bridgeReady:healthy});
         lastHeartbeat.current=Date.now();
