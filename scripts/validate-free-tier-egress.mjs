@@ -10,6 +10,7 @@ const base=fs.readFileSync("src/application/loyverse/cached-catalog-base.ts","ut
 const recipes=fs.readFileSync("src/application/loyverse/recipes.ts","utf8");
 const catalog=fs.readFileSync("src/application/pos/catalog.ts","utf8");
 const hub=fs.readFileSync("app/(employee)/pos/printer/hub-actions.ts","utf8");
+const printStation=fs.readFileSync("app/(employee)/pos/printer/print-station.tsx","utf8");
 const reconcileRoute=fs.readFileSync("app/api/internal/loyverse/reconcile/route.ts","utf8");
 assert.match(reconcileRoute,/process\.env\.OPS_LEGACY_LOYVERSE_AUTOSYNC!=="true"/);
 assert.ok(reconcileRoute.indexOf("if (!authorized(request))")<
@@ -61,6 +62,17 @@ try{
   assert.match(hub,/efficientPrintFeedSince\(allowedSince\(since\)\)/);
   assert.match(hub,/MAX_AUTO_PRINT_AGE_MS=5\*60\*1000/,
     "Nunca imprimir trabajos mayores a cinco minutos automáticamente");
+  // Al estar inactivo el POS, comprobar cambios sin cargar tickets completos.
+  // La sonda debe observar todas las clases de trabajos automáticos.
+  assert.match(hub,/lastVersion===version\)return \{jobs:\[\],version\}/);
+  for(const watched of ["pos_orders","pos_order_lines","pos_order_splits","audit_events"]){
+    assert.ok(hub.includes("public."+watched),
+      "La sonda necesita observar "+watched+" para no omitir impresiones");
+  }
+  assert.match(printStation,/lastFeedVersion\.current=jobs\.length===0\?feed\.version:null/,
+    "Con trabajo pendiente, consultar toda la cola para permitir la recuperación");
+  assert.match(printStation,/setInterval\(\(\)=>void tick\(\),4000\)/,
+    "Mantener revisión cada 4 s para no atrasar las comandas");
   assert.match(hub,/POS_PRINT_HUB_CLAIMED/);
   assert.match(hub,/POS_PRINT_HUB_DONE/);
   assert.match(hub,/if\(events\.some\(e=>e\.action==="POS_PRINT_HUB_CLAIMED"\)\)return false/,

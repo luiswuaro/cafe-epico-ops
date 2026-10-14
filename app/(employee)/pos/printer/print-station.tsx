@@ -36,6 +36,9 @@ export function PrintStation({template,preview,hiddenMode=false}:{
  const [cutGap,setCutGap]=useState(DEFAULT_PAPER_CUT_GAP_SECONDS);
  const working=useRef(false);
  const lastHeartbeat=useRef(0);
+ // Solo guardar el cursor si la cola quedó vacía. Nunca dejar de reintentar
+ // buscar un trabajo pendiente por el hecho de que el catálogo no cambió.
+ const lastFeedVersion=useRef<string|null>(null);
  useEffect(()=>{
   try{const raw=window.localStorage.getItem(STORAGE);if(raw)
    window.requestAnimationFrame(()=>setState(JSON.parse(raw) as HubState))}
@@ -67,6 +70,8 @@ export function PrintStation({template,preview,hiddenMode=false}:{
  useEffect(()=>{
   if(!state?.enabled||preview||!hiddenMode)return;
   let alive=true;
+  // Una reactivación/cambio de estación fuerza una lectura completa inicial.
+  lastFeedVersion.current=null;
   const tick=async()=>{
     if(!alive||working.current)return;
     working.current=true;
@@ -74,7 +79,12 @@ export function PrintStation({template,preview,hiddenMode=false}:{
       // Mantener una ventana móvil de 24 h: el alta puede durar meses sin superar el límite del servidor.
       // El servidor conserva su bloqueo de comandas >5 min y su deduplicación por trabajo.
       const pollSince=new Date(Math.max(new Date(state.since).getTime(),Date.now()-24*60*60*1000)).toISOString();
-      const jobs=await getPrintStationJobs({since:pollSince});
+      const feed=await getPrintStationJobs({since:pollSince,
+        lastVersion:lastFeedVersion.current??undefined});
+      const jobs=feed.jobs;
+      // Si hubo trabajo pendiente, nunca usar el atajo hasta confirmar
+      // que el servidor devuelve una cola vacía. Preserva recuperaciones.
+      lastFeedVersion.current=jobs.length===0?feed.version:null;
       // No reclamar la cola cuando la impresora no responde: queda pendiente.
       // Así una reconexión dentro del plazo puede imprimirla sin duplicarla.
       const healthy=await printerBridgeReady();
