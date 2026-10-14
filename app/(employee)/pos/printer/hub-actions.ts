@@ -18,7 +18,8 @@ export type HubJob={
  key:string;orderId:string;roundId?:string;kind:"KITCHEN"|"RECEIPT"|"PREBILL"|"VOID";
  createdAt:string;title:string;slip?:KitchenSlip;ticket?:DirectReceiptPayload;
 };
-type FeedInput={since:string};
+type FeedInput={since:string;lastVersion?:string};
+export type HubFeed={jobs:HubJob[];version:string};
 const MAX_AUTO_PRINT_AGE_MS=5*60*1000;
 const HEARTBEAT_TIMEOUT_MS=60*1000;
 
@@ -37,11 +38,38 @@ function allowedSince(value:string){
 /** La PC consulta órdenes nativas OPS, nunca el navegador del celular.
  * No activar históricos: los eventos deben ser posteriores al alta de estación.
  */
-export async function getPrintStationJobs({since}:FeedInput):Promise<HubJob[]>{
- if(process.env.VERCEL_ENV==="preview")return [];
- // Los trabajos de más de 5 min nunca se imprimen automáticamente.
- // Acotar las consultas evita volver a descargar hasta 24 h de tickets cada 4 segundos.
+export async function getPrintStationJobs({since,lastVersion}:FeedInput):Promise<HubFeed>{
+ if(process.env.VERCEL_ENV==="preview")return {jobs:[],version:"preview"};
+ // Sonda liviana en una sola consulta: si no hubo cambios, no descargar
+ // órdenes, líneas, pagos ni auditorías completas cada cuatro segundos.
+ // La identidad del empleado y pos.sell se comprueban SIEMPRE en el servidor.
  const {employee,storeId}=await principal(),start=efficientPrintFeedSince(allowedSince(since)),db=getDb();
+ const after=start.toISOString();
+ const probe=await db.execute(sql`
+   select
+     coalesce((select max(o.updated_at)::text from public.pos_orders o
+       where o.organization_id=${employee.organizationId}::uuid
+         and o.store_id=${storeId}::uuid and o.mode='LIVE'
+         and (o.updated_at>=${after}::timestamptz or o.created_at>=${after}::timestamptz)), '') || '|' ||
+     coalesce((select max(l.created_at)::text from public.pos_order_lines l
+       inner join public.pos_orders o on o.id=l.order_id
+       where o.organization_id=${employee.organizationId}::uuid
+         and o.store_id=${storeId}::uuid and o.mode='LIVE'
+         and l.created_at>=${after}::timestamptz), '') || '|' ||
+     coalesce((select max(s.paid_at)::text from public.pos_order_splits s
+       inner join public.pos_orders o on o.id=s.order_id
+       where o.organization_id=${employee.organizationId}::uuid
+         and o.store_id=${storeId}::uuid and o.mode='LIVE'
+         and s.paid_at>=${after}::timestamptz), '') || '|' ||
+     coalesce((select max(a.created_at)::text from public.audit_events a
+       where a.organization_id=${employee.organizationId}::uuid
+         and a.store_id=${storeId}::uuid and a.entity_type='pos_print_job'
+         and a.created_at>=${after}::timestamptz), '') as version
+ `);
+ const version=String((probe[0] as {version?:string}|undefined)?.version??"");
+ if(typeof lastVersion==="string"&&lastVersion===version)return {jobs:[],version};
+ // El feed completo mantiene intactas la deduplicación, la antigüedad máxima,
+ // las rondas de comanda y la generación de tickets con puntos/pagos.
  const orders=await db.select({order:posOrders,employeeName:employees.name,customerName:posCustomers.name,customerBalance:posCustomers.pointsBalance})
    .from(posOrders).leftJoin(employees,eq(employees.id,posOrders.employeeId))
    .leftJoin(posCustomers,eq(posCustomers.id,posOrders.customerId))
@@ -49,7 +77,7 @@ export async function getPrintStationJobs({since}:FeedInput):Promise<HubJob[]>{
       eq(posOrders.storeId,storeId),eq(posOrders.mode,"LIVE"),
       or(gte(posOrders.updatedAt,start),gte(posOrders.createdAt,start))))
    .orderBy(desc(posOrders.updatedAt)).limit(150);
- if(!orders.length)return [];
+ if(!orders.length)return {jobs:[],version};
  const ids=orders.map(r=>r.order.id);
  const [lines,splits,splitLines,payments,audits,earnRows]=await Promise.all([
   db.select().from(posOrderLines).where(inArray(posOrderLines.orderId,ids)),
@@ -201,7 +229,7 @@ export async function getPrintStationJobs({since}:FeedInput):Promise<HubJob[]>{
  }
  jobs.sort((a,b)=>a.createdAt.localeCompare(b.createdAt)||
    (a.kind==="KITCHEN"?-1:1));
- return jobs.slice(0,30);
+ return {jobs:jobs.slice(0,30),version};
 }
 async function verifyJob(jobKey:string,org:string,store:string,tx:Pick<ReturnType<typeof getDb>,"select">){
  const match=/^(KITCHEN|RECEIPT|PREBILL|VOID):([0-9a-f-]{36})(?::([A-Za-z0-9_-]{1,120}))?$/i.exec(jobKey);
