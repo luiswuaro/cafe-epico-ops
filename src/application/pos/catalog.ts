@@ -1,10 +1,8 @@
-import { and, eq, gte, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { getOperationalRecipeSource } from "@/src/application/loyverse/recipe-book";
-import {getCachedLoyverseCatalogBase} from "@/src/application/loyverse/cached-catalog-base";
+import {getCachedLoyverseCatalogBase,getCachedLoyversePopularity} from "@/src/application/loyverse/cached-catalog-base";
 import { getDb } from "@/src/infrastructure/db/client";
 import {
-  loyverseReceiptLines,
-  loyverseReceipts,
   posCatalogOverrides,
   posManualProducts,
 } from "@/src/infrastructure/db/schema";
@@ -135,8 +133,6 @@ export async function getPosCatalog(
   options: { includeDisabled?: boolean } = {},
 ) {
   const db = getDb();
-  const since = new Date(Date.now() - 30 * 86_400_000);
-  const itemNameExpr = sql<string>`${loyverseReceiptLines.payload}->>'item_name'`;
 
   // La base Loyverse se comparte por caché; overrides y precios OPS en vivo.
   const [source,legacy,overrides,manual,popularityRows] = await Promise.all([
@@ -150,34 +146,7 @@ export async function getPosCatalog(
         .select()
         .from(posManualProducts)
         .where(eq(posManualProducts.organizationId, organizationId)),
-      db
-        .select({
-          itemName: itemNameExpr,
-          units: sql<string>`sum(${loyverseReceiptLines.quantity})::text`,
-        })
-        .from(loyverseReceiptLines)
-        .innerJoin(
-          loyverseReceipts,
-          and(
-            eq(
-              loyverseReceipts.organizationId,
-              loyverseReceiptLines.organizationId,
-            ),
-            eq(
-              loyverseReceipts.externalId,
-              loyverseReceiptLines.receiptExternalId,
-            ),
-          ),
-        )
-        .where(
-          and(
-            eq(loyverseReceipts.organizationId, organizationId),
-            eq(loyverseReceipts.receiptType, "SALE"),
-            gte(loyverseReceipts.receiptDate, since),
-            sql`coalesce(${loyverseReceipts.payload}->>'cancelled_at','') = ''`,
-          ),
-        )
-        .groupBy(itemNameExpr),
+      getCachedLoyversePopularity(organizationId),
     ]);
   const {items,variants,categories}=legacy;
 
