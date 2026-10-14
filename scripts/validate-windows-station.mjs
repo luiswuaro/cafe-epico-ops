@@ -31,8 +31,8 @@ assert.match(installer,/\[switch\]\$Uninstall/);
 assert.doesNotMatch(installer,/--user-data-dir/);
 assert.doesNotMatch(installer,/-ResetToken/);
 assert.match(worker,/Date\.now\(\)-24\*60\*60\*1000/);
-assert.match(worker,/getPrintStationJobs\\(\\{since:pollSince,/);
-assert.match(worker,/lastVersion:lastFeedVersion\\.current\\?\\?undefined/,
+assert.ok(worker.includes("getPrintStationJobs({since:pollSince,"));
+assert.ok(worker.includes("lastVersion:lastFeedVersion.current??undefined"),
   "La PC solo recibe versiones de consulta para ahorrar tráfico, no cambia impresoras");
 assert.match(worker,/since:pollSince/);
 console.log("Estación Windows: PASS (autoarranque, restauración de ventana, puente intacto, ventana de 24h)");
