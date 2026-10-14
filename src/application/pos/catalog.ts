@@ -148,7 +148,10 @@ export async function getPosCatalog(
         .where(eq(posManualProducts.organizationId, organizationId)),
       getCachedLoyversePopularity(organizationId),
     ]);
-  const {items,variants,categories}=legacy;
+  const {items,categories}=legacy;
+  // El lector de recetas y el catálogo POS comparten la misma base.
+  // Preservar la forma itemExternalId que usa el catálogo anterior.
+  const variants=legacy.variants.map(row=>({...row,itemExternalId:row.loyverseItemExternalId}));
 
   const categoryById = new Map(
     categories.map((category) => [category.externalId, category.name]),
