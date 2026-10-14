@@ -1063,6 +1063,15 @@ export const posLoyaltyEntries = pgTable("pos_loyalty_entries", {
   index("pos_loyalty_order_idx").on(t.orderId),
 ]);
 
+/** Sólo estado actual: un registro por tienda. Sin evento de auditoría por cada pulso. */
+export const posPrintStationStatus = pgTable("pos_print_station_status", {
+  storeId:uuid("store_id").primaryKey().references(() => stores.id, {onDelete:"cascade"}),
+  organizationId:uuid("organization_id").notNull().references(() => organizations.id, {onDelete:"cascade"}),
+  stationId:uuid("station_id").notNull(),
+  bridgeReady:boolean("bridge_ready").notNull().default(false),
+  lastSeen:timestamp("last_seen",{withTimezone:true}).notNull().defaultNow(),
+});
+
 export const posPrintSettings = pgTable("pos_print_settings", {
   id: uuid("id").primaryKey().defaultRandom(),
   organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
