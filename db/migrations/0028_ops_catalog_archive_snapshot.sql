@@ -3,7 +3,7 @@
 -- Snapshot no destructivo: mantiene los IDs/JSON importados para compatibilidad de
 -- recetas y tickets existentes. Las ediciones de precio, recetas e inventario
 -- continúan en las tablas OPS nativas, fuera de este snapshot.
-CREATE TABLE IF NOT EXISTS public.ops_catalog_archive_snapshots (
+CREATE TABLE IF NOT EXISTS ops_catalog_archive_snapshots (
   organization_id uuid PRIMARY KEY REFERENCES public.organizations(id) ON DELETE CASCADE,
   items jsonb NOT NULL DEFAULT '[]'::jsonb,
   variants jsonb NOT NULL DEFAULT '[]'::jsonb,
