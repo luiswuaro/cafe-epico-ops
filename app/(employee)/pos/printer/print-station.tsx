@@ -80,11 +80,11 @@ export function PrintStation({template,preview,hiddenMode=false}:{
       // El servidor conserva su bloqueo de comandas >5 min y su deduplicación por trabajo.
       const pollSince=new Date(Math.max(new Date(state.since).getTime(),Date.now()-24*60*60*1000)).toISOString();
       const feed=await getPrintStationJobs({since:pollSince,
-        lastVersion:lastFeedVersion.current??undefined});
-      const jobs=feed.jobs;
+        lastVersion:lastFeedVersion.current??""});
+      const jobs=Array.isArray(feed)?feed:feed.jobs;
       // Si hubo trabajo pendiente, nunca usar el atajo hasta confirmar
       // que el servidor devuelve una cola vacía. Preserva recuperaciones.
-      lastFeedVersion.current=jobs.length===0?feed.version:null;
+      lastFeedVersion.current=jobs.length===0&&!Array.isArray(feed)?feed.version:null;
       // No reclamar la cola cuando la impresora no responde: queda pendiente.
       // Así una reconexión dentro del plazo puede imprimirla sin duplicarla.
       const healthy=await printerBridgeReady();
