@@ -5,7 +5,6 @@ CREATE TABLE IF NOT EXISTS public.pos_print_station_status (
   store_id uuid PRIMARY KEY REFERENCES public.stores(id) ON DELETE CASCADE,
   organization_id uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
   station_id uuid NOT NULL,
-  started_at timestamptz NOT NULL,
   bridge_ready boolean NOT NULL DEFAULT false,
   last_seen timestamptz NOT NULL DEFAULT now()
 ) WITH (fillfactor = 80);
