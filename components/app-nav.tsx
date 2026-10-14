@@ -9,7 +9,8 @@ export async function AppNav() {
   // Si no hay sesión, ocultar la navegación sin redirigir desde el layout global.
   const supabase = await createSupabaseServerClient();
   // Verificación criptográfica local del JWT en vez de consultar Auth en cada render.
-  const {data:{claims},error}=await supabase.auth.getClaims();
+  const {data,error}=await supabase.auth.getClaims();
+  const claims=data?.claims;
   if(error||!claims||claims.role!=="authenticated"||typeof claims.sub!=="string")return null;
 
   const {employee}=await getCurrentEmployee();
