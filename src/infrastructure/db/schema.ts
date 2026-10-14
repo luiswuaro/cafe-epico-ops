@@ -1068,7 +1068,6 @@ export const posPrintStationStatus = pgTable("pos_print_station_status", {
   storeId:uuid("store_id").primaryKey().references(() => stores.id, {onDelete:"cascade"}),
   organizationId:uuid("organization_id").notNull().references(() => organizations.id, {onDelete:"cascade"}),
   stationId:uuid("station_id").notNull(),
-  startedAt:timestamp("started_at",{withTimezone:true}).notNull(),
   bridgeReady:boolean("bridge_ready").notNull().default(false),
   lastSeen:timestamp("last_seen",{withTimezone:true}).notNull().defaultNow(),
 });
