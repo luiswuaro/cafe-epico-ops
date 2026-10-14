@@ -44,7 +44,12 @@ assert.match(files.employee,/claims\.role\s*!==\s*"authenticated"/,
  "Los JWT sin rol autenticado no deben permitir acceso");
 assert.match(files.employee,/eq\(employees\.isActive, true\)/,
  "La revocación de acceso al personal debe seguir consultándose en PostgreSQL");
-assert.match(files.client,/max: 3, idle_timeout: 20/);
+assert.match(files.client,/max: 2/,
+ "Hasta dos conexiones simultáneas por instancia, no una conexión por consulta");
+assert.match(files.client,/idle_timeout: 90/,
+ "Reutilizar conexiones entre polls cortos sin mantenerlas permanentemente");
+assert.match(files.client,/prepare: false/,
+ "El pooler de transacciones exige evitar sentencias preparadas");
 assert.match(files.board,/document\.visibilityState==="visible"/);
 assert.match(files.health,/document\.visibilityState!=="visible"/);
 assert.match(files.printer,/window\.setInterval\(\(\)=>void tick\(\),4000\)/,

@@ -60,6 +60,21 @@ try{
   assert.equal(efficientPrintFeedSince(day,now).toISOString(),"2026-10-13T19:45:00.000Z");
   assert.equal(efficientPrintFeedSince(recent,now).toISOString(),recent.toISOString());
   assert.match(hub,/efficientPrintFeedSince\(allowedSince\(since\)\)/);
+  assert.match(hub,/principal\(\{deferPermissionCheck:true\}\)/,
+    "Solo la sonda puede diferir un chequeo, nunca los cobros ni los ACKs");
+  assert.match(hub,/join public\.employee_roles er/);
+  assert.match(hub,/join public\.role_permissions rp/);
+  assert.match(hub,/join public\.permissions p/);
+  assert.match(hub,/e\.is_active=true/);
+  assert.match(hub,/p\.code='pos\.sell'/);
+  assert.match(hub,/er\.store_id is null or er\.store_id=/);
+  assert.match(hub,/if\(permissionGranted===false\)throw new Error\("Missing permission: pos\.sell"\)/,
+    "Permiso revocado debe fallar cerrado, no cargar trabajos");
+  assert.match(hub,/if\(permissionGranted===null\)await assertEmployeePermission/,
+    "Si falla la sonda, validar permisos en DB antes del fallback completo");
+  assert.match(hub,/if\(!deferPermissionCheck\)/,
+    "La impresión manual, los acuses y heartbeat siempre verifican permisos");
+
   assert.match(hub,/MAX_AUTO_PRINT_AGE_MS=5\*60\*1000/,
     "Nunca imprimir trabajos mayores a cinco minutos automáticamente");
   // Al estar inactivo el POS, comprobar cambios sin cargar tickets completos.
