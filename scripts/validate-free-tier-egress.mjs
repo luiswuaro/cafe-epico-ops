@@ -68,3 +68,15 @@ try{
   assert.match(hub,/eq\(posOrders\.mode,"LIVE"\)/);
   console.log("Supabase free-tier: PASS (legado cacheado, precios OPS en vivo, impresión <=15 min, sin duplicados)");
 }finally{fs.rmSync(temp,{recursive:true,force:true});}
+
+// Protege el hot path de autenticación frente a regresiones de egress.
+for(const path of ["src/infrastructure/auth/current-employee.ts","components/app-nav.tsx","proxy.ts"]){
+ const source=fs.readFileSync(path,"utf8");
+ assert.match(source,/\.auth\.getClaims\(/,`${path}: verificar JWT firmado localmente`);
+ assert.doesNotMatch(source,/\.auth\.getUser\(/,`${path}: no consultar Auth en cada refresco/poll`);
+ assert.match(source,/claims\.role\s*!==\s*["']authenticated["']/,
+   `${path}: se requiere rol authenticated`);
+ assert.match(source,/typeof claims\.sub\s*!==\s*["']string["']/,
+   `${path}: se requiere identidad válida`);
+}
+console.log("Auth egress: PASS (JWT ES256 local, protección de rutas y personal activa)");

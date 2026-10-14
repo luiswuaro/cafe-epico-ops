@@ -21,8 +21,12 @@ export async function proxy(request: NextRequest) {
     },
   });
 
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.redirect(new URL(`/login?next=${encodeURIComponent(request.nextUrl.pathname)}`, request.url));
+  // getClaims verifica firma/expiración del JWT localmente (ES256 + JWKS cacheado).
+  // getUser consultaba el servidor Auth en cada petición protegida.
+  const { data, error } = await supabase.auth.getClaims();
+  const claims = data?.claims;
+  if (error || !claims || claims.role !== "authenticated" || typeof claims.sub !== "string")
+    return NextResponse.redirect(new URL(`/login?next=${encodeURIComponent(request.nextUrl.pathname)}`, request.url));
   return response;
 }
 

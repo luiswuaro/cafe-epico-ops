@@ -38,8 +38,12 @@ assert.match(files.catalog,/\.from\(posManualProducts\)/);
 assert.match(files.finance,/getCachedLoyverseCatalogBase\(organizationId\)/);
 assert.doesNotMatch(files.finance,/\.from\(loyverse/);
 assert.match(files.employee,/cache\(async function getCurrentEmployee/);
-assert.match(files.employee,/supabase\.auth\.getUser\(\)/,
- "No cachear usuarios/permisos entre peticiones ni sustituir verificación Auth");
+assert.match(files.employee,/supabase\.auth\.getClaims\(\)/,
+ "La firma del JWT se verifica por solicitud sin tráfico remoto de getUser");
+assert.match(files.employee,/claims\.role\s*!==\s*"authenticated"/,
+ "Los JWT sin rol autenticado no deben permitir acceso");
+assert.match(files.employee,/eq\(employees\.isActive, true\)/,
+ "La revocación de acceso al personal debe seguir consultándose en PostgreSQL");
 assert.match(files.client,/max: 3, idle_timeout: 20/);
 assert.match(files.board,/document\.visibilityState==="visible"/);
 assert.match(files.health,/document\.visibilityState!=="visible"/);

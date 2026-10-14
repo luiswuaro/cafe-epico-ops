@@ -11,8 +11,15 @@ import { ensureBootstrapBaristaLink } from "./bootstrap-barista";
 // La autorización continúa validándose en cada solicitud/acción del servidor.
 export const getCurrentEmployee=cache(async function getCurrentEmployee() {
   const supabase = await createSupabaseServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  // La firma ES256 de Supabase se verifica localmente con JWKS cacheado.
+  // Evita una petición /auth/v1/user por cada refresco y acción de impresión.
+  // La autorización real sigue consultando employees.is_active y los permisos de DB.
+  const { data, error } = await supabase.auth.getClaims();
+  const claims = data?.claims;
+  if (error || !claims || claims.role !== "authenticated" || typeof claims.sub !== "string") {
+    redirect("/login");
+  }
+  const user = { id: claims.sub, email: typeof claims.email === "string" ? claims.email : null };
 
   const orgSlug = process.env.DEFAULT_ORGANIZATION_SLUG ?? "cafe-epico";
   const db = getDb();
