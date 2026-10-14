@@ -1,0 +1,18 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+const read=fs.readFileSync("src/application/decision-center/native-read.ts","utf8");
+const ui=fs.readFileSync("app/(admin)/admin/decision-center/page.tsx","utf8");
+assert.match(read,/getBusinessAnalytics.*analytics\/ops/);
+assert.match(read,/getNativePurchases/);
+assert.doesNotMatch(read,/from [^\n]*(?:analytics\/business|loyverse\/inventory-intelligence)/);
+assert.match(read,/cogsComplete/);
+assert.match(read,/costCoveragePct/);
+assert.match(read,/p\.cogsComplete&&popularMedian/);
+assert.match(read,/eq\(operationalEvents.organizationId,organizationId\)/);
+assert.match(read,/eq\(roastBatches.organizationId,organizationId\)/);
+assert.match(ui,/getNativeDecisionCenter/);
+assert.match(ui,/COGS incompleto/);
+assert.match(ui,/No calculable/);
+assert.doesNotMatch(ui,/Loyverse actual|Receta\/config\.|lote\(s\) de tueste sin vínculo a Loyverse/);
+assert.match(ui,/resolveOperationalIncident/);
+console.log("Native decisions: PASS (OPS LIVE only, true cost coverage, no legacy snapshots)");
