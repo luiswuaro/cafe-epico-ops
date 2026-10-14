@@ -23,10 +23,13 @@ export type HubFeed={jobs:HubJob[];version:string};
 const MAX_AUTO_PRINT_AGE_MS=5*60*1000;
 const HEARTBEAT_TIMEOUT_MS=60*1000;
 
-async function principal(){
+async function principal({deferPermissionCheck=false}:{deferPermissionCheck?:boolean}={}){
  const {user,employee}=await getCurrentEmployee();
  if(!employee.homeStoreId)throw new Error("Sin sucursal operativa");
- await assertEmployeePermission(employee.id,"pos.sell",employee.homeStoreId);
+ // La sonda del feed valida pos.sell EN LA MISMA consulta. Las acciones de
+ // reclamar, finalizar, latido y otras rutas conservan el chequeo explícito.
+ if(!deferPermissionCheck)
+   await assertEmployeePermission(employee.id,"pos.sell",employee.homeStoreId);
  return {user,employee,storeId:employee.homeStoreId};
 }
 function allowedSince(value:string){
@@ -47,14 +50,29 @@ export async function getPrintStationJobs(input:FeedInput):Promise<HubFeed|HubJo
  // Sonda liviana en una sola consulta: si no hubo cambios, no descargar
  // órdenes, líneas, pagos ni auditorías completas cada cuatro segundos.
  // La identidad del empleado y pos.sell se comprueban SIEMPRE en el servidor.
- const {employee,storeId}=await principal(),start=efficientPrintFeedSince(allowedSince(since)),db=getDb();
+ const {employee,storeId}=await principal({deferPermissionCheck:true}),start=efficientPrintFeedSince(allowedSince(since)),db=getDb();
  const after=start.toISOString();
  // Si la sonda no está disponible, abrir el feed completo: la continuidad
  // de comandas tiene prioridad sobre el ahorro de transferencia.
  let version="fallback:"+Date.now().toString();
+ let permissionGranted:boolean|null=null;
  try{
  const probe=await db.execute(sql`
-   select
+   with access as (
+     select exists (
+       select 1 from public.employees e
+       join public.employee_roles er on er.employee_id=e.id
+       join public.role_permissions rp on rp.role_id=er.role_id
+       join public.permissions p on p.id=rp.permission_id
+       where e.id=${employee.id}::uuid
+         and e.organization_id=${employee.organizationId}::uuid
+         and e.is_active=true
+         and p.code='pos.sell'
+         and (er.store_id is null or er.store_id=${storeId}::uuid)
+     ) as allowed
+   )
+   select (select allowed from access) as allowed,
+     case when (select allowed from access) then
      coalesce((select max(o.updated_at)::text from public.pos_orders o
        where o.organization_id=${employee.organizationId}::uuid
          and o.store_id=${storeId}::uuid and o.mode='LIVE'
@@ -72,14 +90,20 @@ export async function getPrintStationJobs(input:FeedInput):Promise<HubFeed|HubJo
      coalesce((select max(a.created_at)::text from public.audit_events a
        where a.organization_id=${employee.organizationId}::uuid
          and a.store_id=${storeId}::uuid and a.entity_type='pos_print_job'
-         and a.created_at>=${after}::timestamptz), '') as version
+         and a.created_at>=${after}::timestamptz), '')
+     else null end as version
  `);
- version=String((probe[0] as {version?:string}|undefined)?.version??"");
+ const row=probe[0] as {allowed?:boolean;version?:string|null}|undefined;
+ if(typeof row?.allowed!=="boolean")throw new Error("Sonda de impresión inválida");
+ permissionGranted=row.allowed;
+ version=typeof row.version==="string"?row.version:"";
  }catch{
-   // Fail-open: errores de la optimización NO detienen la impresión.
-   // No memorizar el resultado de la sonda fallida para el siguiente poll.
+   // Si falla el atajo, la ruta original sigue siendo la alternativa segura.
+   // Se obliga de nuevo a comprobar pos.sell antes de obtener cualquier ticket.
    version="fallback:"+Date.now().toString()+":"+Math.random().toString(36).slice(2);
  }
+ if(permissionGranted===false)throw new Error("Missing permission: pos.sell");
+ if(permissionGranted===null)await assertEmployeePermission(employee.id,"pos.sell",storeId);
  if(typeof lastVersion==="string"&&lastVersion===version)return {jobs:[],version};
  // El feed completo mantiene intactas la deduplicación, la antigüedad máxima,
  // las rondas de comanda y la generación de tickets con puntos/pagos.
