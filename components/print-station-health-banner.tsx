@@ -13,6 +13,8 @@ export function PrintStationHealthBanner(){
   if(!enabled)return;
   let active=true;
   const refresh=async()=>{
+   // La pantalla de alerta sólo se consulta cuando se está operando.
+   if(document.visibilityState!=="visible"||!navigator.onLine)return;
    try{
     const next=await getPrintStationHealth();
     if(active){setHealth(next);setFailed(false);}
