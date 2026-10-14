@@ -6,7 +6,7 @@ import {z} from "zod";
 import {getNativePurchases} from "@/src/application/purchases/native";
 import {requirePermission} from "@/src/infrastructure/auth/permissions";
 import {getDb} from "@/src/infrastructure/db/client";
-import {auditEvents,inventoryItems,itemCostHistory,itemPurchaseUnits,purchasePlans,purchasePlanLines} from "@/src/infrastructure/db/schema";
+import {auditEvents,inventoryItems,itemCostHistory,itemPurchaseUnits,purchasePlans,purchasePlanLines,suppliers} from "@/src/infrastructure/db/schema";
 import {assertNoPreviewMutation} from "@/src/shared/preview-guard";
 
 const input=z.object({
@@ -40,6 +40,12 @@ export async function saveNativePurchaseItem(formData:FormData){
       .where(and(eq(inventoryItems.id,v.itemId),eq(inventoryItems.organizationId,organizationId),
         eq(inventoryItems.isActive,true),eq(inventoryItems.trackingType,"QUANTITY"))).limit(1);
     if(!item)throw Error("Insumo OPS no encontrado.");
+    if(v.supplierId){
+      const [validSupplier]=await tx.select({id:suppliers.id}).from(suppliers)
+        .where(and(eq(suppliers.id,v.supplierId),eq(suppliers.organizationId,organizationId),
+          eq(suppliers.isActive,true))).limit(1);
+      if(!validSupplier)throw Error("Proveedor no pertenece a la cafetería.");
+    }
     await tx.update(inventoryItems).set({
       minimumStock:v.minimum===null?null:String(v.minimum),updatedAt:new Date(),
     }).where(and(eq(inventoryItems.id,v.itemId),eq(inventoryItems.organizationId,organizationId)));
