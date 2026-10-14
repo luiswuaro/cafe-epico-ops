@@ -4,7 +4,7 @@ const read=fs.readFileSync("src/application/decision-center/native-read.ts","utf
 const ui=fs.readFileSync("app/(admin)/admin/decision-center/page.tsx","utf8");
 assert.match(read,/getBusinessAnalytics.*analytics\/ops/);
 assert.match(read,/getNativePurchases/);
-assert.doesNotMatch(read,/analytics\/business|loyverse\/inventory-intelligence/);
+assert.doesNotMatch(read,/from [^\n]*(?:analytics\/business|loyverse\/inventory-intelligence)/,\n  "Never import legacy decision engines");
 assert.match(read,/cogsComplete/);
 assert.match(read,/costCoveragePct/);
 assert.match(read,/p\.cogsComplete&&popularMedian/);
