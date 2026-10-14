@@ -886,6 +886,7 @@ export const purchasePlanLines = pgTable("purchase_plan_lines", {
   organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
   purchasePlanId: uuid("purchase_plan_id").notNull().references(() => purchasePlans.id, { onDelete: "cascade" }),
   variantExternalId: text("variant_external_id"),
+  inventoryItemId: uuid("inventory_item_id").references(() => inventoryItems.id, { onDelete: "set null" }),
   itemNameSnapshot: text("item_name_snapshot").notNull(),
   supplierId: uuid("supplier_id").references(() => suppliers.id, { onDelete: "set null" }),
   requestedNativeQuantity: numeric("requested_native_quantity", { precision: 18, scale: 3 }),
@@ -902,6 +903,7 @@ export const purchasePlanLines = pgTable("purchase_plan_lines", {
 }, (t) => [
   index("purchase_plan_lines_plan_idx").on(t.purchasePlanId),
   index("purchase_plan_lines_variant_idx").on(t.organizationId, t.variantExternalId),
+  index("purchase_plan_lines_native_item_idx").on(t.organizationId,t.inventoryItemId),
 ]);
 
 export const loyverseReceipts = pgTable("loyverse_receipts", {
