@@ -1,7 +1,7 @@
 -- OPS print station: replace append-only, high-frequency audit heartbeats
 -- with one current-state record per store. Keep all historical audit events
 -- for diagnostics and keep CLAIM/DONE/FAILED/EXPIRED job events unchanged.
-CREATE TABLE IF NOT EXISTS public.pos_print_station_status (
+CREATE TABLE IF NOT EXISTS pos_print_station_status (
   store_id uuid PRIMARY KEY REFERENCES public.stores(id) ON DELETE CASCADE,
   organization_id uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
   station_id uuid NOT NULL,
