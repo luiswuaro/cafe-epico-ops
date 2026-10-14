@@ -66,5 +66,6 @@ SELECT o.id,
    ) x
  ),'[]'::jsonb)
 FROM public.organizations o
-WHERE EXISTS (SELECT 1 FROM public.loyverse_items i WHERE i.organization_id=o.id)
+-- También crear snapshot vacío para la organización QA: allí los productos
+-- pueden ser nativos sin contar con importación de Loyverse.
 ON CONFLICT(organization_id) DO NOTHING;
