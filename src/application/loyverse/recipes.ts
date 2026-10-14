@@ -1,10 +1,8 @@
-import { eq, isNull, and } from "drizzle-orm";
+import { eq } from "drizzle-orm";
+import {getCachedLoyverseCatalogBase} from "@/src/application/loyverse/cached-catalog-base";
 import { getDb } from "@/src/infrastructure/db/client";
 import {
-  loyverseCategories,
   loyverseItemSettings,
-  loyverseItems,
-  loyverseVariants,
 } from "@/src/infrastructure/db/schema";
 
 type ComponentRef = {
@@ -91,37 +89,10 @@ function availableForSale(variant: VariantRecord) {
 export async function getLoyverseRecipeSource(organizationId: string) {
   const db = getDb();
 
-  const [items, variants, categories, settings] = await Promise.all([
-    db
-      .select({
-        externalId: loyverseItems.externalId,
-        itemName: loyverseItems.itemName,
-        payload: loyverseItems.payload,
-      })
-      .from(loyverseItems)
-      .where(
-        and(
-          eq(loyverseItems.organizationId, organizationId),
-          isNull(loyverseItems.deletedAt),
-        ),
-      ),
-    db
-      .select({
-        externalId: loyverseVariants.externalId,
-        loyverseItemExternalId: loyverseVariants.loyverseItemExternalId,
-        variantName: loyverseVariants.variantName,
-        sku: loyverseVariants.sku,
-        payload: loyverseVariants.payload,
-      })
-      .from(loyverseVariants)
-      .where(eq(loyverseVariants.organizationId, organizationId)),
-    db
-      .select({
-        externalId: loyverseCategories.externalId,
-        name: loyverseCategories.name,
-      })
-      .from(loyverseCategories)
-      .where(eq(loyverseCategories.organizationId, organizationId)),
+  // Sólo la base histórica de Loyverse está cacheada; los costos y ajustes
+  // unitarios siguen leyéndose en vivo para que los cambios de OPS se reflejen.
+  const [{items,variants,categories},settings] = await Promise.all([
+    getCachedLoyverseCatalogBase(organizationId),
     db
       .select({
         variantExternalId: loyverseItemSettings.variantExternalId,
