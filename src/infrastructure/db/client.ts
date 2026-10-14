@@ -7,9 +7,17 @@ let client: ReturnType<typeof postgres> | undefined;
 
 export function getDb() {
   if (!client) {
-    // En Vercel cada instancia mantiene su propio pool. Limitar conexiones
-    // reduce procesos persistentes y tráfico de metadatos de PostgreSQL.
-    client = postgres(getServerEnv().DATABASE_URL, { prepare: false, max: 3, idle_timeout: 20 });
+    // Cada instancia serverless comparte este pool durante su vida útil.
+    // Máximo dos conexiones permite caja/impresión concurrentes sin abrir
+    // tres sesiones TLS por instancia; conservarlas brevemente amortiza
+    // los picos de reconexiones del pooler entre polls de 4 segundos.
+    // Transacciones, RLS y consultas siguen ejecutándose en PostgreSQL.
+    client = postgres(getServerEnv().DATABASE_URL, {
+      prepare: false,
+      max: 2,
+      idle_timeout: 90,
+      connect_timeout: 10,
+    });
   }
   return drizzle(client, { schema });
 }
