@@ -45,6 +45,10 @@ export async function getPrintStationJobs({since,lastVersion}:FeedInput):Promise
  // La identidad del empleado y pos.sell se comprueban SIEMPRE en el servidor.
  const {employee,storeId}=await principal(),start=efficientPrintFeedSince(allowedSince(since)),db=getDb();
  const after=start.toISOString();
+ // Si la sonda no está disponible, abrir el feed completo: la continuidad
+ // de comandas tiene prioridad sobre el ahorro de transferencia.
+ let version="fallback:"+Date.now().toString();
+ try{
  const probe=await db.execute(sql`
    select
      coalesce((select max(o.updated_at)::text from public.pos_orders o
@@ -66,7 +70,12 @@ export async function getPrintStationJobs({since,lastVersion}:FeedInput):Promise
          and a.store_id=${storeId}::uuid and a.entity_type='pos_print_job'
          and a.created_at>=${after}::timestamptz), '') as version
  `);
- const version=String((probe[0] as {version?:string}|undefined)?.version??"");
+ version=String((probe[0] as {version?:string}|undefined)?.version??"");
+ }catch{
+   // Fail-open: errores de la optimización NO detienen la impresión.
+   // No memorizar el resultado de la sonda fallida para el siguiente poll.
+   version="fallback:"+Date.now().toString()+":"+Math.random().toString(36).slice(2);
+ }
  if(typeof lastVersion==="string"&&lastVersion===version)return {jobs:[],version};
  // El feed completo mantiene intactas la deduplicación, la antigüedad máxima,
  // las rondas de comanda y la generación de tickets con puntos/pagos.
