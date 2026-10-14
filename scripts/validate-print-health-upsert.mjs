@@ -9,7 +9,7 @@ const heartbeat=hub.slice(hub.indexOf("export async function heartbeatPrintStati
   hub.indexOf("export async function getPrintStationHealth"));
 const health=hub.slice(hub.indexOf("export async function getPrintStationHealth"));
 
-assert.match(migration,/CREATE TABLE IF NOT EXISTS public\.pos_print_station_status/);
+assert.match(migration,/CREATE TABLE IF NOT EXISTS pos_print_station_status/);
 assert.match(migration,/store_id uuid PRIMARY KEY/);
 assert.match(migration,/ENABLE ROW LEVEL SECURITY/);
 assert.match(migration,/REVOKE ALL PRIVILEGES.*anon, authenticated/);
