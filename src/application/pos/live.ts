@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import {assertNoPreviewMutation} from "@/src/shared/preview-guard";
 import {calculatePaperBagPlan,incrementalPaperBags,isPaperBagInventoryItem,isFourCupCarrierInventoryItem,validateFreeCupCarriers,type PackagingLine} from "@/src/domain/pos/paper-bag-packaging";
 import { getPosCatalog, type PosServiceMode } from "@/src/application/pos/catalog";
@@ -212,6 +212,15 @@ export async function checkoutLiveOrder(input:{
       input.tenderedAmount < monetaryDue || input.tenderedAmount > 1000000)) {
     throw new Error("El efectivo entregado debe cubrir el importe restante tras el canje.");
   }
+  // No descargar las 54 equivalencias heredadas en cada venta. Sólo las
+  // variantes antiguas realmente usadas por ESTE carrito requieren mapeo.
+  // Productos con inventoryItemId nativo no consultan la tabla de Loyverse.
+  const legacyVariantIds=[...new Set(lines.flatMap(line=>
+    line.components.flatMap(component=>
+      !isCostOnlyComponent(component)&&!component.inventoryItemId&&
+      !component.inventoryLocationId&&component.variantExternalId
+        ?[component.variantExternalId]:[])
+  ))];
   const now=new Date();
   const result=await db.transaction(async tx=>{
     // Serializar cobros de una sucursal: validación de caja, inventario y cliente es atómica.
@@ -356,7 +365,7 @@ export async function checkoutLiveOrder(input:{
         throw new Error("Saldo de puntos insuficiente; actualiza la cuenta.");
     }
 
-    const mappings=await tx.select({
+    const mappings=legacyVariantIds.length?await tx.select({
       externalId:loyverseInventoryMappings.loyverseVariantExternalId,
       locationId:loyverseInventoryMappings.locationId,
       inventoryItemId:loyverseInventoryMappings.inventoryItemId,
@@ -370,7 +379,8 @@ export async function checkoutLiveOrder(input:{
         eq(loyverseInventoryMappings.storeId,input.storeId),
         eq(loyverseInventoryMappings.isActive,true),
         eq(inventoryItems.isActive,true),
-      ));
+        inArray(loyverseInventoryMappings.loyverseVariantExternalId,legacyVariantIds),
+      )):[];
     const byExternal=new Map(mappings.map(mapping=>[mapping.externalId,mapping]));
     const [nativeItems,locations]=await Promise.all([
       tx.select({
