@@ -38,8 +38,12 @@ function allowedSince(value:string){
 /** La PC consulta órdenes nativas OPS, nunca el navegador del celular.
  * No activar históricos: los eventos deben ser posteriores al alta de estación.
  */
-export async function getPrintStationJobs({since,lastVersion}:FeedInput):Promise<HubFeed>{
- if(process.env.VERCEL_ENV==="preview")return {jobs:[],version:"preview"};
+export async function getPrintStationJobs(input:FeedInput):Promise<HubFeed|HubJob[]>{
+ const {since,lastVersion}=input;
+ // Las estaciones que mantienen una pestaña anterior no envían lastVersion.
+ // Compatibilidad: responderles la lista antigua hasta que recarguen OPS.
+ const legacyClient=!Object.prototype.hasOwnProperty.call(input,"lastVersion");
+ if(process.env.VERCEL_ENV==="preview")return legacyClient?[]:{jobs:[],version:"preview"};
  // Sonda liviana en una sola consulta: si no hubo cambios, no descargar
  // órdenes, líneas, pagos ni auditorías completas cada cuatro segundos.
  // La identidad del empleado y pos.sell se comprueban SIEMPRE en el servidor.
@@ -86,7 +90,7 @@ export async function getPrintStationJobs({since,lastVersion}:FeedInput):Promise
       eq(posOrders.storeId,storeId),eq(posOrders.mode,"LIVE"),
       or(gte(posOrders.updatedAt,start),gte(posOrders.createdAt,start))))
    .orderBy(desc(posOrders.updatedAt)).limit(150);
- if(!orders.length)return {jobs:[],version};
+ if(!orders.length)return legacyClient?[]:{jobs:[],version};
  const ids=orders.map(r=>r.order.id);
  const [lines,splits,splitLines,payments,audits,earnRows]=await Promise.all([
   db.select().from(posOrderLines).where(inArray(posOrderLines.orderId,ids)),
@@ -238,7 +242,7 @@ export async function getPrintStationJobs({since,lastVersion}:FeedInput):Promise
  }
  jobs.sort((a,b)=>a.createdAt.localeCompare(b.createdAt)||
    (a.kind==="KITCHEN"?-1:1));
- return {jobs:jobs.slice(0,30),version};
+ return legacyClient?jobs.slice(0,30):{jobs:jobs.slice(0,30),version};
 }
 async function verifyJob(jobKey:string,org:string,store:string,tx:Pick<ReturnType<typeof getDb>,"select">){
  const match=/^(KITCHEN|RECEIPT|PREBILL|VOID):([0-9a-f-]{36})(?::([A-Za-z0-9_-]{1,120}))?$/i.exec(jobKey);
