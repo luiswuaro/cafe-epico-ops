@@ -51,6 +51,18 @@ export const organizations = pgTable("organizations", {
   ...timestamps,
 });
 
+/** Snapshot no destructivo de compatibilidad. El POS consulta esta copia OPS,
+ * nunca las tablas de sincronización Loyverse durante el servicio de barra. */
+export const opsCatalogArchiveSnapshots=pgTable("ops_catalog_archive_snapshots",{
+  organizationId:uuid("organization_id").primaryKey().references(()=>organizations.id,{onDelete:"cascade"}),
+  items:jsonb("items").$type<unknown[]>().notNull().default([]),
+  variants:jsonb("variants").$type<unknown[]>().notNull().default([]),
+  categories:jsonb("categories").$type<unknown[]>().notNull().default([]),
+  settings:jsonb("settings").$type<unknown[]>().notNull().default([]),
+  popularity:jsonb("popularity").$type<unknown[]>().notNull().default([]),
+  capturedAt:timestamp("captured_at",{withTimezone:true}).notNull().defaultNow(),
+});
+
 export const stores = pgTable("stores", {
   id: uuid("id").primaryKey().defaultRandom(),
   organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
