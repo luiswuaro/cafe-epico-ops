@@ -1,12 +1,10 @@
-import { and, eq, gte, isNull, sql } from "drizzle-orm";
+import { and, eq, gte, sql } from "drizzle-orm";
 import { getOperationalRecipeSource } from "@/src/application/loyverse/recipe-book";
+import {getCachedLoyverseCatalogBase} from "@/src/application/loyverse/cached-catalog-base";
 import { getDb } from "@/src/infrastructure/db/client";
 import {
-  loyverseCategories,
-  loyverseItems,
   loyverseReceiptLines,
   loyverseReceipts,
-  loyverseVariants,
   posCatalogOverrides,
   posManualProducts,
 } from "@/src/infrastructure/db/schema";
@@ -137,40 +135,13 @@ export async function getPosCatalog(
   options: { includeDisabled?: boolean } = {},
 ) {
   const db = getDb();
-  const source = await getOperationalRecipeSource(organizationId);
   const since = new Date(Date.now() - 30 * 86_400_000);
   const itemNameExpr = sql<string>`${loyverseReceiptLines.payload}->>'item_name'`;
 
-  const [items, variants, categories, overrides, manual, popularityRows] =
-    await Promise.all([
-      db
-        .select({
-          externalId: loyverseItems.externalId,
-          itemName: loyverseItems.itemName,
-          payload: loyverseItems.payload,
-        })
-        .from(loyverseItems)
-        .where(
-          and(
-            eq(loyverseItems.organizationId, organizationId),
-            isNull(loyverseItems.deletedAt),
-          ),
-        ),
-      db
-        .select({
-          externalId: loyverseVariants.externalId,
-          itemExternalId: loyverseVariants.loyverseItemExternalId,
-          payload: loyverseVariants.payload,
-        })
-        .from(loyverseVariants)
-        .where(eq(loyverseVariants.organizationId, organizationId)),
-      db
-        .select({
-          externalId: loyverseCategories.externalId,
-          name: loyverseCategories.name,
-        })
-        .from(loyverseCategories)
-        .where(eq(loyverseCategories.organizationId, organizationId)),
+  // La base Loyverse se comparte por caché; overrides y precios OPS en vivo.
+  const [source,legacy,overrides,manual,popularityRows] = await Promise.all([
+    getOperationalRecipeSource(organizationId),
+    getCachedLoyverseCatalogBase(organizationId),
       db
         .select()
         .from(posCatalogOverrides)
@@ -208,6 +179,7 @@ export async function getPosCatalog(
         )
         .groupBy(itemNameExpr),
     ]);
+  const {items,variants,categories}=legacy;
 
   const categoryById = new Map(
     categories.map((category) => [category.externalId, category.name]),
