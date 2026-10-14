@@ -1,7 +1,8 @@
 import { and, eq, gte, inArray } from "drizzle-orm";
 import { getDb } from "@/src/infrastructure/db/client";
 import { getPosCatalog } from "@/src/application/pos/catalog";
-import { loyverseItemSettings, loyverseVariants, posOrderLines, posOrders, posPayments } from "@/src/infrastructure/db/schema";
+import {getCachedLoyverseCatalogBase} from "@/src/application/loyverse/cached-catalog-base";
+import { posOrderLines, posOrders, posPayments } from "@/src/infrastructure/db/schema";
 
 type Component = {
   name: string; quantity: number; variantExternalId: string | null;
@@ -37,7 +38,7 @@ export async function getFinancialPreview(organizationId: string) {
   }).format(new Date());
   const [year, month] = localMonth.split("-").map(Number);
   const start = new Date(Date.UTC(year, month - 1, 1, 6));
-  const [orders, settings, variants, catalog] = await Promise.all([
+  const [orders, archived, catalog] = await Promise.all([
     db.select({
       id: posOrders.id, total: posOrders.total, paidAt: posOrders.paidAt,
     }).from(posOrders).where(and(
@@ -45,17 +46,14 @@ export async function getFinancialPreview(organizationId: string) {
       eq(posOrders.mode, "LIVE"), eq(posOrders.status, "PAID"),
       gte(posOrders.paidAt, start),
     )),
-    db.select({
-      variantId: loyverseItemSettings.variantExternalId,
-      unitCost: loyverseItemSettings.unitCostOverride,
-      packageQuantity: loyverseItemSettings.packageQuantityNative,
-      packagePrice: loyverseItemSettings.packagePrice,
-    }).from(loyverseItemSettings).where(eq(loyverseItemSettings.organizationId, organizationId)),
-    db.select({
-      externalId: loyverseVariants.externalId, payload: loyverseVariants.payload,
-    }).from(loyverseVariants).where(eq(loyverseVariants.organizationId, organizationId)),
+    getCachedLoyverseCatalogBase(organizationId),
     getPosCatalog(organizationId),
   ]);
+  const settings=archived.settings.map(row=>({
+    variantId:row.variantExternalId,unitCost:row.unitCostOverride,
+    packageQuantity:row.packageQuantityNative,packagePrice:row.packagePrice,
+  }));
+  const variants=archived.variants;
   const idList = orders.map(o => o.id);
   const [lines, payments] = idList.length ? await Promise.all([
     db.select({
