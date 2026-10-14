@@ -6,6 +6,7 @@ import {OPS_ARCHIVE_TAG} from "@/src/application/loyverse/cached-catalog-base";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { getInventoryIntelligence } from "@/src/application/loyverse/inventory-intelligence";
+import {assertNoPreviewMutation} from "@/src/shared/preview-guard";
 import { requirePermission } from "@/src/infrastructure/auth/permissions";
 import { getDb } from "@/src/infrastructure/db/client";
 import {
@@ -26,6 +27,7 @@ const optionalNumber = z.preprocess(
 );
 
 export async function createSupplier(formData: FormData) {
+  assertNoPreviewMutation();
   const name = String(formData.get("name") ?? "").trim();
   const city = String(formData.get("city") ?? "").trim() || null;
   const contact = String(formData.get("contact") ?? "").trim() || null;
@@ -79,6 +81,7 @@ const settingSchema = z.object({
 });
 
 export async function saveLoyverseItemSetting(formData: FormData) {
+  assertNoPreviewMutation();
   const rawSupplier = String(formData.get("supplierId") ?? "").trim();
   const rawDisplayUnit = String(formData.get("displayUnit") ?? "").trim();
 
@@ -203,6 +206,7 @@ export async function saveLoyverseItemSetting(formData: FormData) {
 }
 
 export async function generateSuggestedPurchasePlan(formData: FormData) {
+  assertNoPreviewMutation();
   const titleInput = String(formData.get("title") ?? "").trim();
   const destination =
     String(formData.get("destination") ?? "").trim() || "Puebla";
@@ -326,6 +330,7 @@ export async function generateSuggestedPurchasePlan(formData: FormData) {
 }
 
 export async function updatePurchasePlan(formData: FormData) {
+  assertNoPreviewMutation();
   const planId = String(formData.get("planId") ?? "");
   const title = String(formData.get("title") ?? "").trim();
   const destination =
@@ -399,6 +404,7 @@ export async function updatePurchasePlan(formData: FormData) {
 }
 
 export async function updatePurchaseLine(formData: FormData) {
+  assertNoPreviewMutation();
   const lineId = String(formData.get("lineId") ?? "");
   const rawSupplier = String(formData.get("supplierId") ?? "").trim();
   const status = String(formData.get("status") ?? "");
@@ -544,6 +550,7 @@ export async function updatePurchaseLine(formData: FormData) {
 }
 
 export async function addManualPurchaseLine(formData: FormData) {
+  assertNoPreviewMutation();
   const planId = String(formData.get("planId") ?? "");
   const itemName = String(formData.get("itemName") ?? "").trim();
   const rawSupplier = String(formData.get("supplierId") ?? "").trim();
@@ -644,6 +651,7 @@ export async function addManualPurchaseLine(formData: FormData) {
 }
 
 export async function togglePurchaseLine(formData: FormData) {
+  assertNoPreviewMutation();
   const lineId = String(formData.get("lineId") ?? "");
   const status = String(formData.get("status") ?? "");
   if (!lineId || !["PENDING", "BOUGHT", "SKIPPED"].includes(status)) {
