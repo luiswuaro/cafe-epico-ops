@@ -69,10 +69,12 @@ try{
     assert.ok(hub.includes("public."+watched),
       "La sonda necesita observar "+watched+" para no omitir impresiones");
   }
-  assert.match(printStation,/lastFeedVersion\.current=jobs\.length===0\?feed\.version:null/,
+  assert.match(printStation,/lastFeedVersion\.current=jobs\.length===0&&\!Array\.isArray\(feed\)\?feed\.version:null/,
     "Con trabajo pendiente, consultar toda la cola para permitir la recuperación");
   assert.match(printStation,/setInterval\(\(\)=>void tick\(\),4000\)/,
     "Mantener revisión cada 4 s para no atrasar las comandas");
+  assert.match(hub,/legacyClient\?jobs\.slice\(0,30\):\{jobs:jobs\.slice\(0,30\),version\}/,
+    "Mantener estaciones Windows ya abiertas con el formato anterior");
   assert.match(hub,/POS_PRINT_HUB_CLAIMED/);
   assert.match(hub,/POS_PRINT_HUB_DONE/);
   assert.match(hub,/if\(events\.some\(e=>e\.action==="POS_PRINT_HUB_CLAIMED"\)\)return false/,
