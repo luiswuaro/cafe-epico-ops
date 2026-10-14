@@ -8,8 +8,9 @@ export async function AppNav() {
   // empleado autorizado debe resolverse dentro de la organización QA.
   // Si no hay sesión, ocultar la navegación sin redirigir desde el layout global.
   const supabase = await createSupabaseServerClient();
-  const {data:{user}}=await supabase.auth.getUser();
-  if(!user)return null;
+  // Verificación criptográfica local del JWT en vez de consultar Auth en cada render.
+  const {data:{claims},error}=await supabase.auth.getClaims();
+  if(error||!claims||claims.role!=="authenticated"||typeof claims.sub!=="string")return null;
 
   const {employee}=await getCurrentEmployee();
   const storeId=employee.homeStoreId??undefined;
