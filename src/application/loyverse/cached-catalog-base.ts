@@ -8,6 +8,7 @@ import {getDb} from "@/src/infrastructure/db/client";
  * Modificadores/recetas/precios/stock en OPS permanecen EN VIVO.
  */
 export const LEGACY_LOYVERSE_CACHE_SECONDS=12*60*60;
+export const OPS_ARCHIVE_TAG="cafe-epico-ops-archive";
 
 type ArchivedItem={
   externalId:string;itemName:string;payload:Record<string,unknown>;
@@ -50,7 +51,7 @@ export const getCachedLoyverseCatalogBase=unstable_cache(
     return snapshot;
   },
   ["cafe-epico-ops-archived-catalog-v1"],
-  {revalidate:LEGACY_LOYVERSE_CACHE_SECONDS},
+  {revalidate:LEGACY_LOYVERSE_CACHE_SECONDS,tags:[OPS_ARCHIVE_TAG]},
 );
 
 /** Popularidad del momento de migración; las ventas desde octubre pertenecen a OPS. */

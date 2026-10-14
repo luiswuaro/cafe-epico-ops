@@ -1,10 +1,12 @@
 "use server";
 
-import { and, eq } from "drizzle-orm";
-import { revalidatePath } from "next/cache";
+import { and, eq, sql } from "drizzle-orm";
+import { revalidatePath, updateTag } from "next/cache";
+import {OPS_ARCHIVE_TAG} from "@/src/application/loyverse/cached-catalog-base";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { getInventoryIntelligence } from "@/src/application/loyverse/inventory-intelligence";
+import {assertNoPreviewMutation} from "@/src/shared/preview-guard";
 import { requirePermission } from "@/src/infrastructure/auth/permissions";
 import { getDb } from "@/src/infrastructure/db/client";
 import {
@@ -25,6 +27,7 @@ const optionalNumber = z.preprocess(
 );
 
 export async function createSupplier(formData: FormData) {
+  assertNoPreviewMutation();
   const name = String(formData.get("name") ?? "").trim();
   const city = String(formData.get("city") ?? "").trim() || null;
   const contact = String(formData.get("contact") ?? "").trim() || null;
@@ -78,6 +81,7 @@ const settingSchema = z.object({
 });
 
 export async function saveLoyverseItemSetting(formData: FormData) {
+  assertNoPreviewMutation();
   const rawSupplier = String(formData.get("supplierId") ?? "").trim();
   const rawDisplayUnit = String(formData.get("displayUnit") ?? "").trim();
 
@@ -104,7 +108,8 @@ export async function saveLoyverseItemSetting(formData: FormData) {
   const db = getDb();
   const data = parsed.data;
 
-  await db
+  await db.transaction(async (tx) => {
+  await tx
     .insert(loyverseItemSettings)
     .values({
       organizationId,
@@ -154,7 +159,31 @@ export async function saveLoyverseItemSetting(formData: FormData) {
       },
     });
 
-  await db.insert(auditEvents).values({
+  // La ficha heredada todavía se usa en costos de productos importados. La
+  // copia OPS debe actualizarse EN LA MISMA transacción que el precio editado.
+  // Esta agregación sólo se ejecuta al guardar (nunca en cada venta).
+  const refreshed=await tx.execute(sql`
+    UPDATE public.ops_catalog_archive_snapshots archive
+    SET settings=COALESCE((
+      SELECT jsonb_agg(jsonb_build_object(
+        'variantExternalId',s.variant_external_id,
+        'displayUnit',s.display_unit,
+        'displayFactor',s.display_factor,
+        'unitCostOverride',s.unit_cost_override,
+        'packagePrice',s.package_price,
+        'packageQuantityNative',s.package_quantity_native
+      ) ORDER BY s.variant_external_id)
+      FROM public.loyverse_item_settings s
+      WHERE s.organization_id=${organizationId}::uuid
+    ),'[]'::jsonb)
+    WHERE archive.organization_id=${organizationId}::uuid
+    RETURNING archive.organization_id
+  `);
+  if(refreshed.length!==1)throw new Error(
+    "No se pudo actualizar el archivo OPS. El costo NO se guardó; contacta administración."
+  );
+
+  await tx.insert(auditEvents).values({
     organizationId,
     actorUserId: user.id,
     actorEmployeeId: employeeId,
@@ -164,6 +193,11 @@ export async function saveLoyverseItemSetting(formData: FormData) {
     afterData: data,
   });
 
+  });
+  // Server Action Next 16: caduca el snapshot inmediatamente después del commit,
+  // evitando que finanzas y recetas lean el precio anterior por hasta 12 horas.
+  updateTag(OPS_ARCHIVE_TAG);
+
   revalidatePath("/admin/purchases");
   revalidatePath("/inventory");
   revalidatePath("/recipes");
@@ -172,6 +206,7 @@ export async function saveLoyverseItemSetting(formData: FormData) {
 }
 
 export async function generateSuggestedPurchasePlan(formData: FormData) {
+  assertNoPreviewMutation();
   const titleInput = String(formData.get("title") ?? "").trim();
   const destination =
     String(formData.get("destination") ?? "").trim() || "Puebla";
@@ -295,6 +330,7 @@ export async function generateSuggestedPurchasePlan(formData: FormData) {
 }
 
 export async function updatePurchasePlan(formData: FormData) {
+  assertNoPreviewMutation();
   const planId = String(formData.get("planId") ?? "");
   const title = String(formData.get("title") ?? "").trim();
   const destination =
@@ -368,6 +404,7 @@ export async function updatePurchasePlan(formData: FormData) {
 }
 
 export async function updatePurchaseLine(formData: FormData) {
+  assertNoPreviewMutation();
   const lineId = String(formData.get("lineId") ?? "");
   const rawSupplier = String(formData.get("supplierId") ?? "").trim();
   const status = String(formData.get("status") ?? "");
@@ -513,6 +550,7 @@ export async function updatePurchaseLine(formData: FormData) {
 }
 
 export async function addManualPurchaseLine(formData: FormData) {
+  assertNoPreviewMutation();
   const planId = String(formData.get("planId") ?? "");
   const itemName = String(formData.get("itemName") ?? "").trim();
   const rawSupplier = String(formData.get("supplierId") ?? "").trim();
@@ -613,6 +651,7 @@ export async function addManualPurchaseLine(formData: FormData) {
 }
 
 export async function togglePurchaseLine(formData: FormData) {
+  assertNoPreviewMutation();
   const lineId = String(formData.get("lineId") ?? "");
   const status = String(formData.get("status") ?? "");
   if (!lineId || !["PENDING", "BOUGHT", "SKIPPED"].includes(status)) {
