@@ -10,6 +10,14 @@ const base=fs.readFileSync("src/application/loyverse/cached-catalog-base.ts","ut
 const recipes=fs.readFileSync("src/application/loyverse/recipes.ts","utf8");
 const catalog=fs.readFileSync("src/application/pos/catalog.ts","utf8");
 const hub=fs.readFileSync("app/(employee)/pos/printer/hub-actions.ts","utf8");
+const reconcileRoute=fs.readFileSync("app/api/internal/loyverse/reconcile/route.ts","utf8");
+assert.match(reconcileRoute,/process\.env\.OPS_LEGACY_LOYVERSE_AUTOSYNC!=="true"/);
+assert.ok(reconcileRoute.indexOf("if (!authorized(request))")<
+  reconcileRoute.indexOf("OPS_LEGACY_LOYVERSE_AUTOSYNC"),
+  "El endpoint cron debe seguir rechazando solicitudes sin autenticación");
+assert.ok(reconcileRoute.indexOf("OPS_LEGACY_LOYVERSE_AUTOSYNC")<
+  reconcileRoute.indexOf("const webhookResult=await processPendingLoyverseWebhooks"),
+  "El cron legacy se detiene antes de abrir la base o llamar a Loyverse");
 
 assert.match(base,/unstable_cache/);
 assert.match(base,/getCachedLoyverseCatalogBase=unstable_cache/);
