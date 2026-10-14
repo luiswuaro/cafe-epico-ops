@@ -1,775 +1,247 @@
 import Link from "next/link";
-import {
-  addManualPurchaseLine,
-  createSupplier,
-  generateSuggestedPurchasePlan,
-  saveLoyverseItemSetting,
-  updatePurchaseLine,
-  updatePurchasePlan,
-} from "./actions";
-import { getPurchasingAdminData } from "@/src/application/purchases/admin";
-import { requirePermission } from "@/src/infrastructure/auth/permissions";
+import {createSupplier,updatePurchaseLine,updatePurchasePlan,addManualPurchaseLine} from "./actions";
+import {saveNativePurchaseItem,createNativePurchasePlan} from "./native-actions";
+import {getNativePurchases} from "@/src/application/purchases/native";
+import {requirePermission} from "@/src/infrastructure/auth/permissions";
 
-export const dynamic = "force-dynamic";
-
-const number = new Intl.NumberFormat("es-MX", {
-  maximumFractionDigits: 3,
-});
-const money = new Intl.NumberFormat("es-MX", {
-  style: "currency",
-  currency: "MXN",
-  maximumFractionDigits: 2,
-});
+export const dynamic="force-dynamic";
+const money=new Intl.NumberFormat("es-MX",{style:"currency",currency:"MXN",maximumFractionDigits:2});
+const qty=new Intl.NumberFormat("es-MX",{maximumFractionDigits:3});
 
 export default async function PurchasesAdminPage({
   searchParams,
-}: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
-}) {
-  const params = await searchParams;
-  const { organizationId } =
-    await requirePermission("purchase.manage");
-  const data = await getPurchasingAdminData(organizationId);
+}:{searchParams:Promise<Record<string,string|string[]|undefined>>}){
+  const params=await searchParams;
+  const {organizationId}=await requirePermission("purchase.manage");
+  const data=await getNativePurchases(organizationId);
+  const unknownCosts=data.suggested.filter(row=>row.suggestion?.estimatedCost==null).length;
+  const estimated=data.suggested.reduce((sum,row)=>sum+(row.suggestion?.estimatedCost??0),0);
 
-  const suggestions = data.inventory.smartRows.filter(
-    (row) => row.suggestedPurchase > 0.0005,
-  );
-
-  const supplierById = new Map(
-    data.suppliers.map((supplier) => [supplier.id, supplier]),
-  );
-  const tripGroups = new Map<
-    string,
-    {
-      supplier: string;
-      city: string;
-      items: number;
-      packages: number;
-      estimatedCost: number;
-      unknownCostItems: number;
-      earliestOrderDate: string | null;
-    }
-  >();
-
-  for (const row of suggestions) {
-    const supplier = row.supplierId
-      ? supplierById.get(row.supplierId)
-      : null;
-    const supplierName = supplier?.name ?? "Sin proveedor";
-    const city = supplier?.city ?? "Sin zona";
-    const key = supplierName + "|" + city;
-    const current = tripGroups.get(key) ?? {
-      supplier: supplierName,
-      city,
-      items: 0,
-      packages: 0,
-      estimatedCost: 0,
-      unknownCostItems: 0,
-      earliestOrderDate: null,
-    };
-    current.items += 1;
-    current.packages += row.suggestedPackages ?? 0;
-    if (row.suggestedCost == null) {
-      current.unknownCostItems += 1;
-    } else {
-      current.estimatedCost += row.suggestedCost;
-    }
-    if (
-      row.orderDate &&
-      (!current.earliestOrderDate ||
-        row.orderDate < current.earliestOrderDate)
-    ) {
-      current.earliestOrderDate = row.orderDate;
-    }
-    tripGroups.set(key, current);
-  }
-
-  const tripSummary = [...tripGroups.values()].sort(
-    (a, b) =>
-      a.city.localeCompare(b.city, "es") ||
-      b.estimatedCost - a.estimatedCost,
-  );
-
-  return (
-    <main className="shell">
-      <section className="hero">
-        <p className="eyebrow">ADMIN · COMPRAS</p>
-        <h1>Proveedores, costos y requisiciones</h1>
-        <p className="muted">
-          Loyverse sigue siendo la fuente de existencias. Aquí configuramos
-          costo real, presentación de compra, proveedor y viajes/requisiciones.
-        </p>
-      </section>
-
-      {params.supplier === "created" && (
-        <p className="card status-ok">Proveedor creado.</p>
-      )}
-      {params.setting === "saved" && (
-        <p className="card status-ok">Configuración de insumo guardada.</p>
-      )}
-      {typeof params.error === "string" && (
-        <p className="alert">
-          No se pudo completar la operación: {params.error}
-        </p>
-      )}
-
-      <section className="grid">
-        <form action={createSupplier} className="card stack">
-          <h2>Nuevo proveedor</h2>
-          <label>
-            Nombre
-            <input name="name" required placeholder="Ej. Sam's Club" />
-          </label>
-          <label>
-            Ciudad / zona
-            <input name="city" placeholder="Puebla" />
-          </label>
-          <label>
-            Contacto
-            <input name="contact" placeholder="Teléfono, WhatsApp o vendedor" />
-          </label>
-          <label>
-            Nota
-            <input name="notes" placeholder="Días de entrega, condiciones..." />
-          </label>
-          <button type="submit">Guardar proveedor</button>
-        </form>
-
-        <form action={generateSuggestedPurchasePlan} className="card stack">
-          <h2>Generar requisición automática</h2>
-          <p className="muted">
-            Usa stock Loyverse, consumo teórico, cobertura, lead time, stock de
-            seguridad y presentación de compra.
-          </p>
-          <label>
-            Título opcional
-            <input name="title" placeholder="Compra semanal" />
-          </label>
-          <label>
-            Destino
-            <input name="destination" defaultValue="Puebla" />
-          </label>
-          <label>
-            Fecha planeada opcional
-            <input name="plannedFor" type="date" />
-          </label>
-          <button type="submit" disabled={suggestions.length === 0}>
-            Crear plan con {suggestions.length} sugerencias
-          </button>
-        </form>
-      </section>
-
-      <section className="card" style={{ marginTop: "1rem" }}>
-        <p className="eyebrow">RUTA DE COMPRA</p>
-        <h2>Dinero y paradas sugeridas</h2>
-        <p className="muted">
-          Agrupa la reposición por proveedor y zona para preparar una salida de
-          compras sin recorrer la lista insumo por insumo.
-        </p>
-        {tripSummary.length === 0 ? (
-          <p className="status-ok">No hay compras sugeridas por ahora.</p>
-        ) : (
-          <div className="stack">
-            {tripSummary.map((group) => (
-              <div
-                className="task"
-                key={group.supplier + group.city}
-              >
-                <div style={{ flex: 1 }}>
-                  <strong>{group.supplier}</strong>
-                  <div className="muted">
-                    {group.city} · {group.items} insumo(s)
-                    {group.packages > 0
-                      ? " · " + group.packages + " paquete(s)"
-                      : ""}
-                  </div>
-                  <div className="muted">
-                    Comprar a más tardar:{" "}
-                    {group.earliestOrderDate ?? "sin fecha calculable"}
-                  </div>
-                </div>
-                <div style={{ textAlign: "right" }}>
-                  <div className="metric" style={{ fontSize: "1.35rem" }}>
-                    {money.format(group.estimatedCost)}
-                  </div>
-                  {group.unknownCostItems > 0 && (
-                    <div className="status-warn">
-                      + {group.unknownCostItems} sin costo
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
-
-      <section className="card" style={{ marginTop: "1rem" }}>
-        <h2>Qué comprar y cuándo</h2>
-        <p className="muted">
-          La cantidad sugerida se redondea a cajas/paquetes cuando defines una
-          presentación. El costo usa tu override; si no existe, usa el costo
-          Loyverse.
-        </p>
-        <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr>
-                <th style={{ textAlign: "left" }}>Insumo</th>
-                <th>Stock</th>
-                <th>Cons./día</th>
-                <th>Cobertura</th>
-                <th>Comprar</th>
-                <th>Empaques</th>
-                <th>Fecha</th>
-                <th>Costo</th>
-              </tr>
-            </thead>
-            <tbody>
-              {suggestions.map((row) => (
-                <tr key={row.variantExternalId}>
-                  <td>
-                    <strong>{row.itemName}</strong>
-                    <div className="muted">
-                      {row.supplierName ?? "Sin proveedor"}
-                    </div>
-                  </td>
-                  <td style={{ textAlign: "right" }}>
-                    {number.format(row.inStock)} {row.unitLabel}
-                  </td>
-                  <td style={{ textAlign: "right" }}>
-                    {number.format(row.avgDailyUsage14)}
-                  </td>
-                  <td style={{ textAlign: "right" }}>
-                    {row.daysCover == null
-                      ? "—"
-                      : row.daysCover.toFixed(1) + " d"}
-                  </td>
-                  <td style={{ textAlign: "right" }}>
-                    {number.format(row.suggestedPurchase)} {row.unitLabel}
-                  </td>
-                  <td style={{ textAlign: "right" }}>
-                    {row.suggestedPackages == null
-                      ? "—"
-                      : row.suggestedPackages +
-                        " × " +
-                        (row.packageName ?? "paquete")}
-                  </td>
-                  <td style={{ textAlign: "right" }}>
-                    {row.orderDate ?? "—"}
-                  </td>
-                  <td style={{ textAlign: "right" }}>
-                    {row.suggestedCost == null
-                      ? "—"
-                      : money.format(row.suggestedCost)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section className="card" style={{ marginTop: "1rem" }}>
-        <h2>Configurar insumos</h2>
-        <p className="muted">
-          Ejemplo leche: unidad Loyverse = L, costo override = 24, empaque =
-          “Caja 12 × 1 L”, cantidad por empaque = 12, precio = 288.
-        </p>
-
-        <div className="stack">
-          {data.inventory.rows.map((row) => (
-            <details className="task" key={row.variantExternalId}>
-              <summary style={{ cursor: "pointer" }}>
-                <strong>{row.itemName}</strong> · stock{" "}
-                {number.format(row.inStock)} {row.unitLabel} · costo{" "}
-                {row.purchaseCost == null
-                  ? "sin definir"
-                  : money.format(row.purchaseCost)}
-                {row.costSource === "OVERRIDE" ? " · override" : ""}
-              </summary>
-              <form
-                action={saveLoyverseItemSetting}
-                className="stack"
-                style={{ marginTop: ".8rem", width: "100%" }}
-              >
-                <input
-                  type="hidden"
-                  name="variantExternalId"
-                  value={row.variantExternalId}
-                />
-                <div className="grid">
-                  <label>
-                    Costo por unidad Loyverse
-                    <input
-                      name="unitCostOverride"
-                      type="number"
-                      min="0"
-                      step="0.0001"
-                      defaultValue={
-                        row.costSource === "OVERRIDE" &&
-                        row.purchaseCost != null
-                          ? row.purchaseCost
-                          : ""
-                      }
-                      placeholder={
-                        row.loyversePurchaseCost == null
-                          ? "Sin costo Loyverse"
-                          : String(row.loyversePurchaseCost)
-                      }
-                    />
-                  </label>
-
-                  <label>
-                    Proveedor
-                    <select
-                      name="supplierId"
-                      defaultValue={row.supplierId ?? ""}
-                    >
-                      <option value="">Sin proveedor</option>
-                      {data.suppliers
-                        .filter((supplier) => supplier.isActive)
-                        .map((supplier) => (
-                          <option value={supplier.id} key={supplier.id}>
-                            {supplier.name}
-                            {supplier.city ? " · " + supplier.city : ""}
-                          </option>
-                        ))}
-                    </select>
-                  </label>
-
-                  <label>
-                    Presentación
-                    <input
-                      name="packageName"
-                      defaultValue={row.packageName ?? ""}
-                      placeholder="Caja 12 × 1 L"
-                    />
-                  </label>
-
-                  <label>
-                    Cantidad por empaque
-                    <input
-                      name="packageQuantityNative"
-                      type="number"
-                      min="0"
-                      step="0.001"
-                      defaultValue={row.packageQuantityNative ?? ""}
-                      placeholder="12"
-                    />
-                  </label>
-
-                  <label>
-                    Precio del empaque
-                    <input
-                      name="packagePrice"
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      defaultValue={row.packagePrice ?? ""}
-                    />
-                  </label>
-
-                  <label>
-                    Lead time · días
-                    <input
-                      name="leadDays"
-                      type="number"
-                      min="0"
-                      max="60"
-                      defaultValue={row.leadDays}
-                    />
-                  </label>
-
-                  <label>
-                    Seguridad · días
-                    <input
-                      name="safetyDays"
-                      type="number"
-                      min="0"
-                      max="60"
-                      defaultValue={row.safetyDays}
-                    />
-                  </label>
-
-                  <label>
-                    Unidad para recetario
-                    <select
-                      name="displayUnit"
-                      defaultValue={row.displayUnit ?? ""}
-                    >
-                      <option value="">Automática</option>
-                      <option value="g">g</option>
-                      <option value="ml">ml</option>
-                      <option value="pz">pz</option>
-                      <option value="kg">kg</option>
-                      <option value="L">L</option>
-                    </select>
-                  </label>
-
-                  <label>
-                    Factor visual
-                    <input
-                      name="displayFactor"
-                      type="number"
-                      min="0"
-                      step="0.001"
-                      defaultValue={
-                        row.displayUnit ? row.displayFactor : ""
-                      }
-                      placeholder={
-                        row.soldByWeight ? "1000" : "1"
-                      }
-                    />
-                  </label>
-                </div>
-
-                <label>
-                  Nota de compra
-                  <input
-                    name="notes"
-                    maxLength={500}
-                    defaultValue={row.purchaseNotes ?? ""}
-                    placeholder="Ej. comprar solo cuando haya viaje a Puebla"
-                  />
-                </label>
-
-                <button type="submit">Guardar configuración</button>
-              </form>
-            </details>
-          ))}
-        </div>
-      </section>
-
-      <section className="card" style={{ marginTop: "1rem" }}>
-        <h2>Planes de compra</h2>
-        {data.plans.length === 0 ? (
-          <p className="muted">Todavía no hay requisiciones.</p>
-        ) : (
-          <div className="stack">
-            {data.plans.map((plan) => (
-              <details
-                className="task"
-                key={plan.id}
-                open={params.plan === plan.id}
-              >
-                <summary style={{ cursor: "pointer" }}>
-                  <strong>{plan.title}</strong> · {plan.status} ·{" "}
-                  {plan.estimatedBudget
-                    ? money.format(Number(plan.estimatedBudget))
-                    : "sin presupuesto"}
-                </summary>
-
-                <div style={{ width: "100%", marginTop: ".8rem" }}>
-                  <p className="muted">
-                    {plan.destination ?? "Sin destino"} ·{" "}
-                    {plan.plannedFor
-                      ? plan.plannedFor.toLocaleDateString("es-MX", {
-                          timeZone: "America/Mexico_City",
-                        })
-                      : "sin fecha"}
-                  </p>
-
-                  <div className="stack">
-                    {plan.lines.map((line) => (
-                      <details className="task" key={line.id}>
-                        <summary style={{ cursor: "pointer" }}>
-                          <strong>{line.itemNameSnapshot}</strong>
-                          {" · "}
-                          {line.status}
-                          {" · "}
-                          {line.packageCount
-                            ? line.packageCount +
-                              " × " +
-                              (line.packageNameSnapshot ?? "paquete")
-                            : (line.requestedNativeQuantity ?? "—") +
-                              " unidades"}
-                          {line.estimatedTotal
-                            ? " · " +
-                              money.format(Number(line.estimatedTotal))
-                            : ""}
-                        </summary>
-
-                        <form
-                          action={updatePurchaseLine}
-                          className="stack"
-                          style={{ marginTop: ".7rem", width: "100%" }}
-                        >
-                          <input
-                            type="hidden"
-                            name="lineId"
-                            value={line.id}
-                          />
-                          <div className="grid">
-                            <label>
-                              Proveedor
-                              <select
-                                name="supplierId"
-                                defaultValue={line.supplierId ?? ""}
-                              >
-                                <option value="">Sin proveedor</option>
-                                {data.suppliers
-                                  .filter((supplier) => supplier.isActive)
-                                  .map((supplier) => (
-                                    <option
-                                      value={supplier.id}
-                                      key={supplier.id}
-                                    >
-                                      {supplier.name}
-                                      {supplier.city
-                                        ? " · " + supplier.city
-                                        : ""}
-                                    </option>
-                                  ))}
-                              </select>
-                            </label>
-
-                            <label>
-                              Cantidad total
-                              <input
-                                name="requestedNativeQuantity"
-                                type="number"
-                                min="0"
-                                step="0.001"
-                                defaultValue={
-                                  line.requestedNativeQuantity ?? ""
-                                }
-                              />
-                            </label>
-
-                            <label>
-                              Cajas / paquetes
-                              <input
-                                name="packageCount"
-                                type="number"
-                                min="0"
-                                step="0.001"
-                                defaultValue={line.packageCount ?? ""}
-                              />
-                            </label>
-
-                            <label>
-                              Nombre empaque
-                              <input
-                                name="packageName"
-                                defaultValue={
-                                  line.packageNameSnapshot ?? ""
-                                }
-                              />
-                            </label>
-
-                            <label>
-                              Cantidad por empaque
-                              <input
-                                name="packageQuantity"
-                                type="number"
-                                min="0"
-                                step="0.001"
-                                defaultValue={
-                                  line.packageQuantitySnapshot ?? ""
-                                }
-                              />
-                            </label>
-
-                            <label>
-                              Costo unitario
-                              <input
-                                name="unitCost"
-                                type="number"
-                                min="0"
-                                step="0.0001"
-                                defaultValue={line.unitCostSnapshot ?? ""}
-                              />
-                            </label>
-
-                            <label>
-                              Precio por empaque
-                              <input
-                                name="packagePrice"
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                defaultValue={
-                                  line.packagePriceSnapshot ?? ""
-                                }
-                              />
-                            </label>
-
-                            <label>
-                              Gasto real de esta línea
-                              <input
-                                name="actualTotal"
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                defaultValue={line.actualTotal ?? ""}
-                              />
-                            </label>
-
-                            <label>
-                              Estado
-                              <select
-                                name="status"
-                                defaultValue={line.status}
-                              >
-                                <option value="PENDING">Pendiente</option>
-                                <option value="BOUGHT">Comprado</option>
-                                <option value="SKIPPED">Omitido</option>
-                              </select>
-                            </label>
-                          </div>
-
-                          <label>
-                            Nota
-                            <input
-                              name="note"
-                              defaultValue={line.note ?? ""}
-                            />
-                          </label>
-                          <button type="submit">
-                            Guardar ajuste de línea
-                          </button>
-                        </form>
-                      </details>
-                    ))}
-                  </div>
-
-                  <form
-                    action={addManualPurchaseLine}
-                    className="card stack"
-                    style={{ marginTop: "1rem" }}
-                  >
-                    <h3>Agregar compra manual</h3>
-                    <input type="hidden" name="planId" value={plan.id} />
-                    <div className="grid">
-                      <label>
-                        Artículo / insumo
-                        <input
-                          name="itemName"
-                          required
-                          placeholder="Ej. filtros V60"
-                        />
-                      </label>
-                      <label>
-                        Proveedor
-                        <select name="supplierId" defaultValue="">
-                          <option value="">Sin proveedor</option>
-                          {data.suppliers
-                            .filter((supplier) => supplier.isActive)
-                            .map((supplier) => (
-                              <option value={supplier.id} key={supplier.id}>
-                                {supplier.name}
-                              </option>
-                            ))}
-                        </select>
-                      </label>
-                      <label>
-                        Cantidad
-                        <input
-                          name="requestedNativeQuantity"
-                          type="number"
-                          min="0.001"
-                          step="0.001"
-                        />
-                      </label>
-                      <label>
-                        Costo unitario
-                        <input
-                          name="unitCost"
-                          type="number"
-                          min="0"
-                          step="0.01"
-                        />
-                      </label>
-                    </div>
-                    <label>
-                      Nota
-                      <input
-                        name="note"
-                        placeholder="Ej. aprovechar viaje a Puebla"
-                      />
-                    </label>
-                    <button type="submit">Agregar a requisición</button>
-                  </form>
-
-                  <form
-                    action={updatePurchasePlan}
-                    className="stack"
-                    style={{ marginTop: "1rem" }}
-                  >
-                    <input type="hidden" name="planId" value={plan.id} />
-                    <div className="grid">
-                      <label>
-                        Nombre del plan
-                        <input
-                          name="title"
-                          required
-                          defaultValue={plan.title}
-                        />
-                      </label>
-                      <label>
-                        Destino
-                        <input
-                          name="destination"
-                          defaultValue={plan.destination ?? ""}
-                        />
-                      </label>
-                      <label>
-                        Fecha del viaje / compra
-                        <input
-                          name="plannedFor"
-                          type="date"
-                          defaultValue={
-                            plan.plannedFor
-                              ? new Intl.DateTimeFormat("en-CA", {
-                                  timeZone: "America/Mexico_City",
-                                  year: "numeric",
-                                  month: "2-digit",
-                                  day: "2-digit",
-                                }).format(plan.plannedFor)
-                              : ""
-                          }
-                        />
-                      </label>
-                      <label>
-                        Estado
-                        <select name="status" defaultValue={plan.status}>
-                          <option value="DRAFT">Borrador</option>
-                          <option value="PLANNED">Planeado</option>
-                          <option value="PURCHASED">Comprado</option>
-                          <option value="CANCELLED">Cancelado</option>
-                        </select>
-                      </label>
-                      <label>
-                        Gasto real
-                        <input
-                          name="actualSpend"
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          defaultValue={plan.actualSpend ?? ""}
-                        />
-                      </label>
-                    </div>
-                    <label>
-                      Notas
-                      <input
-                        name="notes"
-                        defaultValue={plan.notes ?? ""}
-                      />
-                    </label>
-                    <button type="submit">Actualizar plan</button>
-                  </form>
-                </div>
-              </details>
-            ))}
-          </div>
-        )}
-      </section>
-
-      <p style={{ marginTop: "1rem" }}>
-        <Link href="/admin">← Volver a Admin</Link>
+  return <main className="shell">
+    <section className="hero">
+      <p className="eyebrow">ADMIN · COMPRAS OPS</p>
+      <h1>Reabasto e insumos</h1>
+      <p className="muted">
+        Fuente única: inventario OPS de {data.store.name}. Existencias por ubicación,
+        consumos de ventas LIVE y precios por unidad canónica en OPS.
+        Los planes históricos se conservan, pero no gobiernan la existencia actual.
       </p>
-    </main>
-  );
+      <p className="muted">Muestra de consumo: {data.sampleDays} día(s) con ventas pagadas.
+        Con menos de 3 días no se extrapola demanda.</p>
+    </section>
+    {params.setting==="saved"&&<p className="card status-ok" role="status">
+      Configuración de compra y costo nativo guardados en OPS.
+    </p>}
+    {params.supplier==="created"&&<p className="card status-ok">Proveedor registrado.</p>}
+    {typeof params.error==="string"&&<p className="card alert" role="alert">
+      No se completó la operación ({params.error}). Revisa la cantidad y presentación.
+    </p>}
+    <section className="grid">
+      <article className="card">
+        <p className="eyebrow">NECESIDADES REALES</p>
+        <div className="metric">{data.suggested.length}</div>
+        <p>insumos por reponer de {data.rows.length} inventariados.</p>
+        <p className="muted">{data.rows.filter(row=>row.minimum!==null).length}
+          {" "}insumos con mínimo configurado.</p>
+      </article>
+      <article className="card">
+        <p className="eyebrow">PRESUPUESTO CONOCIDO</p>
+        <div className="metric">{money.format(estimated)}</div>
+        <p className={unknownCosts?"status-warn":"muted"}>
+          {unknownCosts?unknownCosts+" insumo(s) sin precio: total incompleto":
+            "Todos los sugeridos tienen costo configurado."}</p>
+      </article>
+    </section>
+    <section className="grid" style={{marginTop:"1rem"}}>
+      <form action={createNativePurchasePlan} className="card stack">
+        <h2>Crear requisición OPS</h2>
+        <p className="muted">
+          Sólo los insumos bajo mínimo o con cobertura insuficiente.
+          Se redondea por empaque si está configurado; los costos desconocidos
+          nunca se inventan.
+        </p>
+        <label>Título <input name="title" placeholder="Compra semanal" maxLength={150}/></label>
+        <label>Destino <input name="destination" placeholder="Puebla / proveedor" maxLength={120}/></label>
+        <label>Fecha <input name="plannedFor" type="date"/></label>
+        <button type="submit" disabled={data.suggested.length===0}>
+          Crear plan de {data.suggested.length} insumo(s)
+        </button>
+      </form>
+      <form action={createSupplier} className="card stack">
+        <h2>Proveedor OPS</h2>
+        <label>Nombre <input name="name" required maxLength={150}/></label>
+        <label>Ciudad / zona <input name="city" placeholder="Puebla"/></label>
+        <label>Contacto <input name="contact" placeholder="WhatsApp, vendedor"/></label>
+        <label>Condiciones <input name="notes" placeholder="Entrega, precio, horarios"/></label>
+        <button type="submit">Guardar proveedor</button>
+      </form>
+    </section>
+    <section className="card" style={{marginTop:"1rem"}}>
+      <h2>Qué comprar y cuánto</h2>
+      <p className="muted">
+        Cálculo: mínimo (o 3 días de demanda observada) + demanda prevista de 7 días,
+        menos existencia OPS. Sin mínimo ni muestra suficiente, no se genera una
+        compra automática.
+      </p>
+      {data.suggested.length===0
+        ?<p className="status-ok">No hay compras calculables pendientes.
+          Configura mínimos y presentaciones abajo antes de confiar en las sugerencias.</p>
+        :<div style={{overflowX:"auto"}}>
+          <table style={{width:"100%"}}>
+            <thead><tr><th>Insumo</th><th>Disponible</th><th>Promedio/día</th>
+              <th>Solicitar</th><th>Presentación</th><th>Estimado</th></tr></thead>
+            <tbody>{data.suggested.map(row=><tr key={row.id}>
+              <td><strong>{row.name}</strong></td>
+              <td>{qty.format(row.stock)} {row.unit}</td>
+              <td>{qty.format(row.averageDaily)} {row.unit}</td>
+              <td>{qty.format(row.suggestion!.quantity)} {row.unit}</td>
+              <td>{row.suggestion!.packages!==null
+                ?row.suggestion!.packages+" × "+row.presentation?.name:"Unidad nativa"}</td>
+              <td>{row.suggestion!.estimatedCost===null?"Costo pendiente":
+                money.format(row.suggestion!.estimatedCost)}</td>
+            </tr>)}</tbody>
+          </table>
+        </div>}
+    </section>
+    <section className="card" style={{marginTop:"1rem"}}>
+      <h2>Ficha de compra por insumo</h2>
+      <p className="muted">
+        Define mínimo en g, ml o piezas según la unidad del inventario; el
+        precio por caja/paquete registra un costo por unidad nativa. Por ejemplo,
+        12 litros de leche = 12,000 ml. No introduzcas 12 si la ficha indica ml.
+        El costo histórico de ventas anteriores no se modifica.
+      </p>
+      <div className="stack">
+        {data.rows.map(row=><details className="task" key={row.id}>
+          <summary style={{cursor:"pointer"}}><strong>{row.name}</strong>{" · "}
+            {qty.format(row.stock)} {row.unit} en OPS{" · "}
+            {row.unitCost===null?"Costo pendiente":money.format(row.unitCost)+"/"+row.unit}
+            {row.minimum!==null?" · Mínimo "+qty.format(row.minimum):" · Sin mínimo"}
+          </summary>
+          <form action={saveNativePurchaseItem} className="stack"
+            style={{width:"100%",marginTop:".8rem"}}>
+            <input type="hidden" name="itemId" value={row.id}/>
+            <div className="grid">
+              <label>Mínimo ({row.unit})
+                <input name="minimum" type="number" min="0" step="0.001"
+                  defaultValue={row.minimum??""} placeholder={"Ej. 3000 "+row.unit}/></label>
+              <label>Presentación
+                <input name="packageName" maxLength={100}
+                  defaultValue={row.presentation?.name??""}
+                  placeholder="Caja de 12 litros"/></label>
+              <label>Cantidad por empaque ({row.unit})
+                <input name="packageQuantity" type="number" step="0.001" min="0.001"
+                  defaultValue={row.presentation?.canonicalQuantity??""}
+                  placeholder="Ej. 12000 ml"/></label>
+              <label>Precio de compra del empaque (MXN)
+                <input name="packagePrice" type="number" step="0.01" min="0"
+                  defaultValue={row.unitCost!==null&&row.presentation
+                    ?(Math.round(row.unitCost*row.presentation.canonicalQuantity*100)/100):""}
+                  placeholder="Precio total de caja"/></label>
+              <label>Proveedor
+                <select name="supplierId" defaultValue={row.presentation?.supplierId??""}>
+                  <option value="">Sin proveedor</option>
+                  {data.suppliers.filter(p=>p.isActive).map(p=>
+                    <option value={p.id} key={p.id}>{p.name}{p.city?" · "+p.city:""}</option>)}
+                </select></label>
+            </div>
+            <button type="submit">Guardar insumo OPS</button>
+          </form>
+        </details>)}
+      </div>
+    </section>
+    <section className="card" style={{marginTop:"1rem"}}>
+      <h2>Requisiciones guardadas</h2>
+      <p className="muted">Las anteriores importadas de Loyverse quedan como
+        referencia histórica. Los nuevos planes usan ID nativo de insumo OPS.</p>
+      {data.plans.length===0?<p className="muted">Sin requisiciones todavía.</p>:
+        <div className="stack">{data.plans.map(plan=><details className="task"
+          key={plan.id} open={params.plan===plan.id}>
+          <summary style={{cursor:"pointer"}}>
+            <strong>{plan.title}</strong>{" · "}{plan.status}{" · "}
+            {plan.estimatedBudget===null?"Presupuesto pendiente":
+              money.format(Number(plan.estimatedBudget))}
+          </summary>
+          <div className="stack" style={{marginTop:".7rem",width:"100%"}}>
+            <form action={updatePurchasePlan} className="stack">
+              <input type="hidden" name="planId" value={plan.id}/>
+              <div className="grid">
+                <label>Título <input name="title" defaultValue={plan.title} required/></label>
+                <label>Destino <input name="destination" defaultValue={plan.destination??""}/></label>
+                <label>Fecha <input type="date" name="plannedFor"
+                  defaultValue={plan.plannedFor?.toISOString().slice(0,10)??""}/></label>
+                <label>Estado <select name="status" defaultValue={plan.status}>
+                  {["DRAFT","PLANNED","PURCHASED","CANCELLED"].map(x=>
+                    <option key={x} value={x}>{x}</option>)}
+                </select></label>
+                <label>Gasto real (MXN)
+                  <input name="actualSpend" type="number" min="0" step=".01"
+                    defaultValue={plan.actualSpend??""}/></label>
+              </div>
+              <label>Notas <input name="notes" defaultValue={plan.notes??""}/></label>
+              <button type="submit">Actualizar plan</button>
+            </form>
+            {plan.lines.map(line=><details key={line.id} className="task">
+              <summary style={{cursor:"pointer"}}>
+                {line.itemNameSnapshot}{" · "}{line.status}{" · "}
+                {line.estimatedTotal?money.format(Number(line.estimatedTotal)):
+                  "Costo pendiente"}{line.inventoryItemId?" · OPS":" · histórico"}
+              </summary>
+              <form action={updatePurchaseLine} className="stack"
+                style={{width:"100%",marginTop:".5rem"}}>
+                <input name="lineId" type="hidden" value={line.id}/>
+                <div className="grid">
+                  <label>Estado <select name="status" defaultValue={line.status}>
+                    {["PENDING","BOUGHT","SKIPPED"].map(v=>
+                      <option key={v} value={v}>{v}</option>)}
+                  </select></label>
+                  <label>Cantidad ({line.inventoryItemId?"unidad OPS":"unidad histórica"})
+                    <input type="number" step=".001" min="0" name="requestedNativeQuantity"
+                      defaultValue={line.requestedNativeQuantity??""}/></label>
+                  <label>Paquetes <input type="number" step=".001" min="0"
+                    name="packageCount" defaultValue={line.packageCount??""}/></label>
+                  <label>Presentación <input name="packageName"
+                    defaultValue={line.packageNameSnapshot??""}/></label>
+                  <label>Contenido por empaque <input type="number" step=".001"
+                    min="0" name="packageQuantity"
+                    defaultValue={line.packageQuantitySnapshot??""}/></label>
+                  <label>Costo unitario <input type="number" min="0" step=".0001"
+                    name="unitCost" defaultValue={line.unitCostSnapshot??""}/></label>
+                  <label>Precio paquete <input type="number" min="0" step=".01"
+                    name="packagePrice" defaultValue={line.packagePriceSnapshot??""}/></label>
+                  <label>Gasto real <input type="number" min="0" step=".01"
+                    name="actualTotal" defaultValue={line.actualTotal??""}/></label>
+                </div>
+                <label>Proveedor <select name="supplierId" defaultValue={line.supplierId??""}>
+                  <option value="">Sin proveedor</option>
+                  {data.suppliers.filter(x=>x.isActive).map(x=>
+                    <option key={x.id} value={x.id}>{x.name}</option>)}
+                </select></label>
+                <label>Notas <input name="note" defaultValue={line.note??""}/></label>
+                <button type="submit">Guardar línea</button>
+              </form>
+            </details>)}
+            <form action={addManualPurchaseLine} className="stack">
+              <input type="hidden" name="planId" value={plan.id}/>
+              <h3>Añadir renglón libre</h3>
+              <label>Artículo <input name="itemName" required/></label>
+              <div className="grid">
+                <label>Cantidad <input name="requestedNativeQuantity" type="number"
+                  min="0" step=".001"/></label>
+                <label>Costo unitario <input name="unitCost" type="number"
+                  min="0" step=".0001"/></label>
+              </div>
+              <label>Nota <input name="note"/></label>
+              <label>Proveedor <select name="supplierId">
+                <option value="">Sin proveedor</option>
+                {data.suppliers.filter(x=>x.isActive).map(x=>
+                  <option key={x.id} value={x.id}>{x.name}</option>)}
+              </select></label>
+              <button type="submit">Añadir renglón manual</button>
+            </form>
+          </div>
+        </details>)}</div>}
+    </section>
+    <p style={{marginTop:"1rem"}}><Link href="/admin">← Volver a administración</Link></p>
+  </main>;
 }
