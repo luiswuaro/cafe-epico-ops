@@ -21,17 +21,17 @@ assert.ok(reconcileRoute.indexOf("OPS_LEGACY_LOYVERSE_AUTOSYNC")<
 
 assert.match(base,/unstable_cache/);
 assert.match(base,/getCachedLoyverseCatalogBase=unstable_cache/);
-assert.match(base,/getCachedLoyversePopularity=unstable_cache/);
+assert.match(base,/getCachedLoyversePopularity/);
 assert.match(base,/revalidate:LEGACY_LOYVERSE_CACHE_SECONDS/);
-assert.match(base,/LEGACY_LOYVERSE_CACHE_SECONDS=300/);
-assert.match(base,/loyverseItems\.organizationId,organizationId/);
-assert.match(base,/loyverseVariants\.organizationId,organizationId/);
-assert.match(base,/loyverseCategories\.organizationId,organizationId/);
+assert.match(base,/LEGACY_LOYVERSE_CACHE_SECONDS=12\*60\*60/);
+assert.match(base,/ops_catalog_archive_snapshots/);
+assert.doesNotMatch(base,/\.from\(loyverseItems\)/);
+assert.doesNotMatch(base,/\.from\(loyverseVariants\)/);
+assert.doesNotMatch(base,/\.from\(loyverseCategories\)/);
 assert.match(recipes,/getCachedLoyverseCatalogBase\(organizationId\)/);
-assert.match(recipes,/\.from\(loyverseItemSettings\)/,
-  "Los costos/editables de recetas se consultan siempre al momento");
-assert.doesNotMatch(recipes,/\.from\(loyverseItems\)/,
-  "No leer el catalogo heredado completo fuera de caché");
+assert.doesNotMatch(recipes,/\.from\(loyverseItemSettings\)/,
+  "La copia estática OPS incluye los costos antiguos sin lecturas repetidas");
+assert.doesNotMatch(recipes,/\.from\(loyverseItems\)/);
 assert.match(catalog,/getCachedLoyverseCatalogBase\(organizationId\)/);
 assert.match(catalog,/getCachedLoyversePopularity\(organizationId\)/);
 assert.match(catalog,/itemExternalId:row\.loyverseItemExternalId/,
