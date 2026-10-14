@@ -9,6 +9,7 @@ import {auditEvents,employees,posOrderLines,posOrderSplits,posOrderSplitLines,
   posOrders,posPayments,posCustomers,posLoyaltyEntries} from "@/src/infrastructure/db/schema";
 import {extraLabels} from "@/src/application/pos/extras";
 import {receiptLoyaltyView} from "@/src/domain/pos/receipt-loyalty";
+import {efficientPrintFeedSince} from "@/src/domain/pos/print-feed-window";
 import {kitchenOrderIdentity} from "@/src/application/pos/kitchen-slip";
 import type {KitchenSlip} from "@/src/application/pos/kitchen-slip";
 import type {DirectReceiptPayload} from "../receipt/[id]/direct-print-button";
@@ -38,7 +39,9 @@ function allowedSince(value:string){
  */
 export async function getPrintStationJobs({since}:FeedInput):Promise<HubJob[]>{
  if(process.env.VERCEL_ENV==="preview")return [];
- const {employee,storeId}=await principal(),start=allowedSince(since),db=getDb();
+ // Los trabajos de más de 5 min nunca se imprimen automáticamente.
+ // Acotar las consultas evita volver a descargar hasta 24 h de tickets cada 4 segundos.
+ const {employee,storeId}=await principal(),start=efficientPrintFeedSince(allowedSince(since)),db=getDb();
  const orders=await db.select({order:posOrders,employeeName:employees.name,customerName:posCustomers.name,customerBalance:posCustomers.pointsBalance})
    .from(posOrders).leftJoin(employees,eq(employees.id,posOrders.employeeId))
    .leftJoin(posCustomers,eq(posCustomers.id,posOrders.customerId))
