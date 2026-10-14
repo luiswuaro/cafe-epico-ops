@@ -16,7 +16,7 @@ assert.ok(reconcileRoute.indexOf("if (!authorized(request))")<
   reconcileRoute.indexOf("OPS_LEGACY_LOYVERSE_AUTOSYNC"),
   "El endpoint cron debe seguir rechazando solicitudes sin autenticación");
 assert.ok(reconcileRoute.indexOf("OPS_LEGACY_LOYVERSE_AUTOSYNC")<
-  reconcileRoute.indexOf("const webhookResult=await processPendingLoyverseWebhooks"),
+  reconcileRoute.indexOf("processPendingLoyverseWebhooks()"),
   "El cron legacy se detiene antes de abrir la base o llamar a Loyverse");
 
 assert.match(base,/unstable_cache/);
