@@ -19,11 +19,11 @@ const edit=actions.slice(actions.indexOf("export async function saveLoyverseItem
   actions.indexOf("export async function generateSuggestedPurchasePlan"));
 assert.match(edit,/await db\.transaction\(async \(tx\) => \{/);
 // A preview shares the database; purchases cannot mutate its live records.
-const purchaseMutations=[...actions.matchAll(/export async function (\\w+)\\(formData: FormData\\) \\{\\n/g)];
+const purchaseMutations=[...actions.matchAll(/export async function (\w+)\(formData: FormData\) \{\n/g)];
 assert.equal(purchaseMutations.length,7);
 for(const match of purchaseMutations){
   const after=actions.slice(match.index+match[0].length,match.index+match[0].length+90);
-  assert.match(after,/^  assertNoPreviewMutation\\(\\);/,
+  assert.match(after,/^  assertNoPreviewMutation\(\);/,
     "No preview guard on "+match[1]);
 }
 
