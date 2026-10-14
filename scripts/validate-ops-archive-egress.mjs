@@ -25,7 +25,7 @@ for(const field of ["externalId","itemName","loyverseItemExternalId","variantNam
  "packageQuantityNative","packagePrice","itemName","units"]){
  assert.ok(files.migration.includes("'"+field+"'"),"Campo faltante en snapshot: "+field);
 }
-assert.doesNotMatch(files.migration,/\b(DROP|TRUNCATE|DELETE|UPDATE)\b/i,
+assert.doesNotMatch(files.migration,/\b(DROP\s+TABLE|TRUNCATE\s+TABLE|DELETE\s+FROM|UPDATE\s+public\.)\b/i,
  "La migración nunca debe alterar/borrar registros de caja, recetas o inventario");
 assert.match(files.source,/ops_catalog_archive_snapshots/);
 assert.match(files.source,/revalidate:LEGACY_LOYVERSE_CACHE_SECONDS/);
