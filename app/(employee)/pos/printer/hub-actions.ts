@@ -6,7 +6,7 @@ import {getCurrentEmployee} from "@/src/infrastructure/auth/current-employee";
 import {assertEmployeePermission} from "@/src/infrastructure/auth/permissions";
 import {assertNoPreviewMutation} from "@/src/shared/preview-guard";
 import {auditEvents,employees,posOrderLines,posOrderSplits,posOrderSplitLines,
-  posOrders,posPayments,posCustomers,posLoyaltyEntries} from "@/src/infrastructure/db/schema";
+  posOrders,posPayments,posCustomers,posLoyaltyEntries,posPrintStationStatus} from "@/src/infrastructure/db/schema";
 import {extraLabels} from "@/src/application/pos/extras";
 import {receiptLoyaltyView} from "@/src/domain/pos/receipt-loyalty";
 import {efficientPrintFeedSince} from "@/src/domain/pos/print-feed-window";
@@ -20,7 +20,7 @@ export type HubJob={
 };
 type FeedInput={since:string};
 const MAX_AUTO_PRINT_AGE_MS=5*60*1000;
-const HEARTBEAT_TIMEOUT_MS=30*1000;
+const HEARTBEAT_TIMEOUT_MS=60*1000;
 
 async function principal(){
  const {user,employee}=await getCurrentEmployee();
@@ -347,36 +347,37 @@ export async function getPrintStationTemplate(){
  return getPosPrintSettings(employee.organizationId);
 }
 
-/** Señal de vida compartida: no publica token, dirección IP ni datos bancarios. */
+/** Una fila de estado por sucursal, sin escritura perpetua de eventos de auditoría.
+ * Los eventos CLAIM/DONE/FAILED/EXPIRED de cada trabajo siguen inmutables.
+ */
 export async function heartbeatPrintStation(input:{
- stationId:string;since:string;bridgeReady:boolean;
+  stationId:string;since:string;bridgeReady:boolean;
 }){
- assertNoPreviewMutation();
- const {employee,user,storeId}=await principal();
- if(!/^[0-9a-f-]{36}$/i.test(input.stationId))throw new Error("Estación inválida.");
- allowedSince(input.since);
- await getDb().insert(auditEvents).values({
-  organizationId:employee.organizationId,storeId,
-  actorUserId:user.id,actorEmployeeId:employee.id,
-  action:"POS_PRINT_STATION_HEARTBEAT",entityType:"pos_print_station",
-  entityId:storeId,
-  afterData:{stationId:input.stationId,since:input.since,
-   bridgeReady:input.bridgeReady},
- });
+  assertNoPreviewMutation();
+  const {employee,storeId}=await principal();
+  if(!/^[0-9a-f-]{36}$/i.test(input.stationId))throw new Error("Estación inválida.");
+  allowedSince(input.since);
+  await getDb().insert(posPrintStationStatus).values({
+    organizationId:employee.organizationId,storeId,
+    stationId:input.stationId,bridgeReady:input.bridgeReady,
+  }).onConflictDoUpdate({
+    target:posPrintStationStatus.storeId,
+    set:{stationId:input.stationId,bridgeReady:input.bridgeReady,
+      lastSeen:sql`now()`},
+  });
 }
 
-/** El POS consulta esta señal aun cuando el navegador de caja se suspenda. */
+/** Salud por PK, sin recorrer miles de eventos. */
 export async function getPrintStationHealth(){
  const {employee,storeId}=await principal();
- const [last]=await getDb().select({at:auditEvents.createdAt,
-   data:auditEvents.afterData}).from(auditEvents).where(and(
-   eq(auditEvents.organizationId,employee.organizationId),
-   eq(auditEvents.storeId,storeId),
-   eq(auditEvents.entityType,"pos_print_station"),
-   eq(auditEvents.entityId,storeId),
-   eq(auditEvents.action,"POS_PRINT_STATION_HEARTBEAT")))
-   .orderBy(desc(auditEvents.createdAt)).limit(1);
- const bridgeReady=last?.data?.bridgeReady===true;
+ const [last]=await getDb().select({
+   at:posPrintStationStatus.lastSeen,
+   bridgeReady:posPrintStationStatus.bridgeReady,
+ }).from(posPrintStationStatus).where(and(
+   eq(posPrintStationStatus.organizationId,employee.organizationId),
+   eq(posPrintStationStatus.storeId,storeId),
+ )).limit(1);
  const online=Boolean(last&&Date.now()-last.at.getTime()<HEARTBEAT_TIMEOUT_MS);
- return {online,bridgeReady,lastSeen:last?.at.toISOString()??null};
+ return {online,bridgeReady:last?.bridgeReady===true,
+   lastSeen:last?.at.toISOString()??null};
 }
