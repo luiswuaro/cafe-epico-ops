@@ -1,4 +1,5 @@
 import { and, eq } from "drizzle-orm";
+import {cache} from "react";
 import { redirect } from "next/navigation";
 import { getDb } from "@/src/infrastructure/db/client";
 import { employees, organizations } from "@/src/infrastructure/db/schema";
@@ -6,7 +7,9 @@ import { createSupabaseServerClient } from "./server";
 import { ensureBootstrapOwnerLink } from "./bootstrap-owner";
 import { ensureBootstrapBaristaLink } from "./bootstrap-barista";
 
-export async function getCurrentEmployee() {
+// Cache exclusivo del request React; jamás comparte permisos entre usuarios ni turnos.
+// La autorización continúa validándose en cada solicitud/acción del servidor.
+export const getCurrentEmployee=cache(async function getCurrentEmployee() {
   const supabase = await createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
@@ -78,4 +81,4 @@ export async function getCurrentEmployee() {
   }
 
   return { user, employee };
-}
+});

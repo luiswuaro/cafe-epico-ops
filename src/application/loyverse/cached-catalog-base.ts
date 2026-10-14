@@ -1,74 +1,60 @@
 import {unstable_cache} from "next/cache";
-import {and,eq,gte,isNull,sql} from "drizzle-orm";
+import {sql} from "drizzle-orm";
 import {getDb} from "@/src/infrastructure/db/client";
-import {loyverseItems,loyverseVariants,loyverseCategories,loyverseReceipts,loyverseReceiptLines} from "@/src/infrastructure/db/schema";
 
-/**
- * El antiguo Loyverse NO es el POS operativo.
- * Estas tres colecciones históricas rara vez cambian, pero antes se transferían
- * completas desde PostgreSQL cada vez que el POS se actualizaba.
- *
- * Caché de Next/Vercel compartida entre solicitudes (y regiones donde esté
- * soportada). El ID de organización es parte de la clave para aislar negocios.
- *
- * Sólo cachear los registros heredados: precios/recetas OPS, saldos nativos,
- * clientes, caja, comandas y permisos permanecen sin caché.
- * Un nuevo sync histórico de Loyverse puede reflejarse en hasta 5 minutos.
+/** Importación histórica de compatibilidad, congelada dentro de OPS.
+ * A partir de esta versión jamás se consultan las tablas Loyverse desde
+ * el catálogo operativo. El archivo se crea por migración SQL 0028.
+ * Modificadores/recetas/precios/stock en OPS permanecen EN VIVO.
  */
-export const LEGACY_LOYVERSE_CACHE_SECONDS=300;
+export const LEGACY_LOYVERSE_CACHE_SECONDS=12*60*60;
+
+type ArchivedItem={
+  externalId:string;itemName:string;payload:Record<string,unknown>;
+};
+type ArchivedVariant={
+  externalId:string;loyverseItemExternalId:string|null;
+  variantName:string|null;sku:string|null;payload:Record<string,unknown>;
+};
+type ArchivedCategory={externalId:string;name:string};
+type ArchivedUnitSetting={
+  variantExternalId:string;displayUnit:string|null;displayFactor:string|number|null;
+  unitCostOverride:string|number|null;packagePrice:string|number|null;
+  packageQuantityNative:string|number|null;
+};
+type ArchivedPopularity={itemName:string|null;units:string};
+
+type Snapshot={
+  items:ArchivedItem[];variants:ArchivedVariant[];
+  categories:ArchivedCategory[];settings:ArchivedUnitSetting[];
+  popularity:ArchivedPopularity[];
+};
 
 export const getCachedLoyverseCatalogBase=unstable_cache(
-  async (organizationId:string)=>{
-    const db=getDb();
-    const [items,variants,categories]=await Promise.all([
-      db.select({
-        externalId:loyverseItems.externalId,
-        itemName:loyverseItems.itemName,
-        payload:loyverseItems.payload,
-      }).from(loyverseItems).where(and(
-        eq(loyverseItems.organizationId,organizationId),
-        isNull(loyverseItems.deletedAt),
-      )),
-      db.select({
-        externalId:loyverseVariants.externalId,
-        loyverseItemExternalId:loyverseVariants.loyverseItemExternalId,
-        variantName:loyverseVariants.variantName,
-        sku:loyverseVariants.sku,
-        payload:loyverseVariants.payload,
-      }).from(loyverseVariants).where(eq(loyverseVariants.organizationId,organizationId)),
-      db.select({
-        externalId:loyverseCategories.externalId,
-        name:loyverseCategories.name,
-      }).from(loyverseCategories).where(eq(loyverseCategories.organizationId,organizationId)),
-    ]);
-    return {items,variants,categories};
+  async(organizationId:string):Promise<Snapshot>=>{
+    // Una sola fila de OPS, sin queries, joins ni egress desde
+    // los originales Loyverse después de la migración.
+    const rows=await getDb().execute(sql`
+      select items,variants,categories,settings,popularity
+      from public.ops_catalog_archive_snapshots
+      where organization_id=${organizationId}::uuid
+      limit 1
+    `);
+    const snapshot=rows[0] as Snapshot|undefined;
+    if(!snapshot||!Array.isArray(snapshot.items)||
+      !Array.isArray(snapshot.variants)||!Array.isArray(snapshot.categories)||
+      !Array.isArray(snapshot.settings)||!Array.isArray(snapshot.popularity)){
+      // Fallo explícito en vez de servir un menú incompleto o cambiar precios.
+      throw new Error("Falta la copia del catálogo en OPS. No editar ni cobrar con un menú incompleto.");
+    }
+    return snapshot;
   },
-  ["cafe-epico-loyverse-static-catalog-v1"],
+  ["cafe-epico-ops-archived-catalog-v1"],
   {revalidate:LEGACY_LOYVERSE_CACHE_SECONDS},
 );
 
-/** Popularidad histórica Loyverse: no cambia con ventas nativas OPS.
- * Se recalcula cada 5 minutos para evitar volver a sumar el histórico en cada POS.
- */
-export const getCachedLoyversePopularity=unstable_cache(
-  async (organizationId:string)=>{
-    const db=getDb();
-    const since=new Date(Date.now()-30*86_400_000);
-    const itemNameExpr=sql<string>`${loyverseReceiptLines.payload}->>'item_name'`;
-    return db.select({
-      itemName:itemNameExpr,
-      units:sql<string>`sum(${loyverseReceiptLines.quantity})::text`,
-    }).from(loyverseReceiptLines)
-      .innerJoin(loyverseReceipts,and(
-        eq(loyverseReceipts.organizationId,loyverseReceiptLines.organizationId),
-        eq(loyverseReceipts.externalId,loyverseReceiptLines.receiptExternalId),
-      )).where(and(
-        eq(loyverseReceipts.organizationId,organizationId),
-        eq(loyverseReceipts.receiptType,"SALE"),
-        gte(loyverseReceipts.receiptDate,since),
-        sql`coalesce(${loyverseReceipts.payload}->>'cancelled_at','') = ''`,
-      )).groupBy(itemNameExpr);
-  },
-  ["cafe-epico-loyverse-popularity-v1"],
-  {revalidate:LEGACY_LOYVERSE_CACHE_SECONDS},
-);
+/** Popularidad del momento de migración; las ventas desde octubre pertenecen a OPS. */
+export async function getCachedLoyversePopularity(organizationId:string){
+  const snapshot=await getCachedLoyverseCatalogBase(organizationId);
+  return snapshot.popularity;
+}

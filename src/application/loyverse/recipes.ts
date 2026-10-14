@@ -1,9 +1,4 @@
-import { eq } from "drizzle-orm";
 import {getCachedLoyverseCatalogBase} from "@/src/application/loyverse/cached-catalog-base";
-import { getDb } from "@/src/infrastructure/db/client";
-import {
-  loyverseItemSettings,
-} from "@/src/infrastructure/db/schema";
 
 type ComponentRef = {
   variantExternalId: string;
@@ -87,24 +82,10 @@ function availableForSale(variant: VariantRecord) {
 }
 
 export async function getLoyverseRecipeSource(organizationId: string) {
-  const db = getDb();
-
-  // Sólo la base histórica de Loyverse está cacheada; los costos y ajustes
-  // unitarios siguen leyéndose en vivo para que los cambios de OPS se reflejen.
-  const [{items,variants,categories},settings] = await Promise.all([
-    getCachedLoyverseCatalogBase(organizationId),
-    db
-      .select({
-        variantExternalId: loyverseItemSettings.variantExternalId,
-        displayUnit: loyverseItemSettings.displayUnit,
-        displayFactor: loyverseItemSettings.displayFactor,
-        unitCostOverride: loyverseItemSettings.unitCostOverride,
-        packagePrice: loyverseItemSettings.packagePrice,
-        packageQuantityNative: loyverseItemSettings.packageQuantityNative,
-      })
-      .from(loyverseItemSettings)
-      .where(eq(loyverseItemSettings.organizationId, organizationId)),
-  ]);
+  // El recetario histórico es un snapshot OPS inmutable.
+  // Los cambios operativos se realizan sobre los overrides nativos de OPS.
+  const {items,variants,categories,settings}=
+    await getCachedLoyverseCatalogBase(organizationId);
 
   const itemById = new Map(
     items.map((item) => [item.externalId, item as ItemRecord]),
