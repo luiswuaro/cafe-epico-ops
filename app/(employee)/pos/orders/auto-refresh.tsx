@@ -17,7 +17,8 @@ export function CommandBoardAutoRefresh() {
     // Los cambios en órdenes, líneas, pagos y estados disparan actualización
     // en la próxima revisión visible de 5 segundos.
     const refreshVisible=async()=>{
-      if(!active||inFlight||document.visibilityState!=="visible"||!navigator.onLine)return;
+      const visible=document.visibilityState==="visible";
+      if(!active||inFlight||!visible||!navigator.onLine)return;
       inFlight=true;
       try{
         const version=await getCommandBoardVersion();
