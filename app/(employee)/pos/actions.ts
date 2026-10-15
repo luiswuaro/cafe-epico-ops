@@ -47,7 +47,7 @@ const cartSchema = z
 
 const serviceModeSchema = z.enum(["DINE_IN", "TAKEAWAY"]);
 const paymentSchema = z.enum(["CASH", "CARD", "TRANSFER"]);
-const commandStatusSchema = z.enum(["SENT", "PREPARING", "READY"]);
+const commandStatusSchema = z.enum(["PREPARING", "READY"]);
 
 function businessDate(date = new Date()) {
   return new Intl.DateTimeFormat("en-CA", {
@@ -542,14 +542,25 @@ export async function updateCommandStatus(formData: FormData) {
     if(current.status==="PAID" && !(current.mode==="LIVE"&&
       orderLines.some(l=>l.expected?.serviceMode==="TAKEAWAY")))
       throw new Error("La preparación de tickets pagados sólo aplica para llevar.");
-    const [recent]=await tx.select({id:auditEvents.id}).from(auditEvents).where(and(
+    // Una sola consulta por ronda: no regresar de LISTA a PREPARANDO
+    // aunque llegue un clic tardío, una pestaña desactualizada o un pago
+    // posterior (PAID conserva su estado financiero).
+    const previous=await tx.select({
+      previousStatus:sql<string>`${auditEvents.afterData}->>'status'`,
+    }).from(auditEvents).where(and(
       eq(auditEvents.organizationId,employee.organizationId),
       eq(auditEvents.entityType,"pos_order"),eq(auditEvents.entityId,current.id),
       eq(auditEvents.action,"POS_COMMAND_STATUS_CHANGED"),
-      sql`${auditEvents.afterData}->>'status' = ${status}`,
       sql`COALESCE(${auditEvents.afterData}->>'roundId','INITIAL') = ${roundId}`,
-    )).limit(1);
-    if(recent) return;
+    ));
+    const alreadyReady=current.status==="READY"||
+      previous.some(event=>event.previousStatus==="READY");
+    const alreadyPreparing=current.status==="PREPARING"||
+      previous.some(event=>event.previousStatus==="PREPARING");
+    // Listo implica preparación terminada, incluso sin marcaje Preparando.
+    // No fabricar un tiempo de inicio; el cronómetro real inicia al acuse
+    // de impresión, y termina con el evento READY de esta misma ronda.
+    if(alreadyReady||status==="PREPARING"&&alreadyPreparing)return;
     if(current.status===status)return;
     if(current.status!=="PAID"){
       await tx.update(posOrders)
@@ -560,7 +571,11 @@ export async function updateCommandStatus(formData: FormData) {
       organizationId:employee.organizationId,storeId:employee.homeStoreId,
       actorUserId:user.id,actorEmployeeId:employee.id,
       action:"POS_COMMAND_STATUS_CHANGED",entityType:"pos_order",entityId:current.id,
-      beforeData:{status:current.status},afterData:{status,roundId},
+      beforeData:{status:current.status},afterData:{
+        status,roundId,
+        preparationCompleted:status==="READY",
+        preparingSkipped:status==="READY"&&!alreadyPreparing,
+      },
     });
   });
 
