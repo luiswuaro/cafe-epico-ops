@@ -37,5 +37,29 @@ try{
  }]});
  assert.equal(zero.pointsEarned,"0.00");
  assert.equal(zero.pointsBalance,"0.00");
- console.log("RECIBOS: puntos completos en normal, cuentas divididas, sin crédito, canceladas y saldo cero");
+ // Distintos comensales pueden elegir destinatarios independientes.
+ const group=[
+  {customerId:"clienteA",name:"Comensal A",balance:"12.25",points:"5.25",note:"Cuenta 1 · SH-TEST"},
+  {customerId:"clienteB",name:"Comensal B",balance:"31.50",points:"4.25",note:"Cuenta 2 · SH-TEST"},
+ ];
+ const receiptA=receiptLoyaltyView({entries:group,splitLabel:"Cuenta 1"});
+ const receiptB=receiptLoyaltyView({entries:group,splitLabel:"Cuenta 2"});
+ assert.equal(receiptA.customer,"Comensal A");
+ assert.equal(receiptA.pointsEarned,"5.25");
+ assert.equal(receiptB.customer,"Comensal B");
+ assert.equal(receiptB.pointsEarned,"4.25");
+ assert.equal(receiptLoyaltyView({entries:group}).customer,"Varios clientes");
+ // Guardrails sobre el checkout transaccional existente: no volver a bloquear
+ // clientes distintos ni perder destinatarios, puntos o protección doble cobro.
+ const live=fs.readFileSync("src/application/pos/live.ts","utf8");
+ const action=fs.readFileSync("app/(employee)/pos/orders/[id]/split/actions.ts","utf8");
+ assert.doesNotMatch(live,/pending\\.customerId\\s*!==\\s*input\\.customerId/,
+  "Las cuentas separadas no deben compartir obligatoriamente un solo cliente");
+ assert.match(live,/customerId:split\\?pending\\.customerId:input\\.customerId/);
+ assert.match(live,/Number\\(pending\\.loyaltyPointsPreview\\?\\?0\\)/);
+ assert.match(live,/if\\(split\\.status==="PAID"\\)return \\{id:pending\\.id,alreadyRecorded:true\\}/);
+ assert.match(live,/eq\\(posOrderSplits\\.status,"OPEN"\\)/);
+ assert.match(action,/POS_LIVE_SPLIT_PAYMENT_FAILED/);
+ assert.match(action,/redirect\\(back\\+"\\?error="/);
+ console.log("RECIBOS: clientes independientes, puntos por cuenta e idempotencia de pagos divididos");
 }finally{fs.rmSync(dir,{recursive:true,force:true});}
