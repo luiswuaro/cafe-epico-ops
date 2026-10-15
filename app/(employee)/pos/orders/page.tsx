@@ -22,10 +22,7 @@ import {
 import { getCashState } from "@/src/application/pos/cash";
 import { getOpenPosOrders } from "@/src/application/pos/orders";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
-import {
-  assertEmployeePermission,
-  employeeHasPermission,
-} from "@/src/infrastructure/auth/permissions";
+import { getEmployeePermissions } from "@/src/infrastructure/auth/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -52,19 +49,16 @@ export default async function PosOrdersPage({
   const { employee } = await getCurrentEmployee();
   if (!employee.homeStoreId) throw new Error("Sin sucursal asignada");
 
-  await assertEmployeePermission(
-    employee.id,
-    "pos.sell",
-    employee.homeStoreId,
-  );
+  // Autorizar la vista y su botón de cancelación en la misma lectura.
+  // Sin caché entre refrescos: un empleado desactivado o revocado pierde acceso.
+  const grants=await getEmployeePermissions(employee.id,[
+    "pos.sell","pos.cancel",
+  ],employee.homeStoreId);
+  if(!grants.has("pos.sell"))throw new Error("Missing permission: pos.sell");
+  const canCancel=grants.has("pos.cancel");
 
-  const [orders, canCancel, cash, catalog, customers, extrasOptions] = await Promise.all([
+  const [orders, cash, catalog, customers, extrasOptions] = await Promise.all([
     getOpenPosOrders(employee.organizationId, employee.homeStoreId),
-    employeeHasPermission(
-      employee.id,
-      "pos.cancel",
-      employee.homeStoreId,
-    ),
     getCashState(employee.organizationId, employee.homeStoreId),
     getPosCatalog(employee.organizationId),
     getPosCustomers(employee.organizationId),

@@ -1,5 +1,5 @@
 import { AppNavClient } from "./app-nav-client";
-import { employeeHasPermission } from "@/src/infrastructure/auth/permissions";
+import { getEmployeePermissions } from "@/src/infrastructure/auth/permissions";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
 import { createSupabaseServerClient } from "@/src/infrastructure/auth/server";
 
@@ -15,11 +15,14 @@ export async function AppNav() {
 
   const {employee}=await getCurrentEmployee();
   const storeId=employee.homeStoreId??undefined;
-  const [canAdmin,canPos,canCash]=await Promise.all([
-    employeeHasPermission(employee.id,"admin.access",storeId),
-    employeeHasPermission(employee.id,"pos.sell",storeId),
-    employeeHasPermission(employee.id,"pos.cash.manage",storeId),
-  ]);
+  // Un solo viaje a PostgreSQL para los tres permisos de navegación.
+  // La consulta se ejecuta otra vez en cada request; no persiste autorizaciones.
+  const grants=await getEmployeePermissions(employee.id,[
+    "admin.access","pos.sell","pos.cash.manage",
+  ],storeId);
+  const canAdmin=grants.has("admin.access");
+  const canPos=grants.has("pos.sell");
+  const canCash=grants.has("pos.cash.manage");
 
   return <AppNavClient canAdmin={canAdmin} canPos={canPos} canCash={canCash}/>;
 }
