@@ -86,7 +86,7 @@ export default async function PosPerformance(){
       <div>
         <p className="eyebrow">INGENIERÍA DE OPERACIONES · ÚLTIMOS 7 DÍAS</p>
         <h1>Tiempos de servicio</h1>
-        <p className="muted">Medición por ticket y ronda vigente. No se inventan tiempos de impresión o preparación que nunca se registraron.</p>
+        <p className="muted">El tiempo principal de barra va del acuse de impresión a Lista, con o sin pulsar Preparando. Sólo se usan eventos reales por ticket y ronda vigente.</p>
       </div>
       <div className="pos-result-actions">
         <Link className="button" href="/pos/orders">Comandas</Link>
@@ -94,13 +94,13 @@ export default async function PosPerformance(){
       </div>
     </header>
     <section className="ops-performance-kpis">
-      <article className="card"><p className="eyebrow">Impresora → Lista</p>
+      <article className="card"><p className="eyebrow">Preparación total · Impresora → Lista</p>
         <strong className="metric">{formatted(average(barValues))}</strong>
         <small className="muted">{barValues.length} rondas con acuse y listo · mediana {formatted(median(barValues))}</small>
       </article>
-      <article className="card"><p className="eyebrow">Preparando → Lista</p>
+      <article className="card"><p className="eyebrow">Fase manual · Preparando → Lista</p>
         <strong className="metric">{formatted(average(prepValues))}</strong>
-        <small className="muted">{prepValues.length} rondas con ambos estados registrados</small>
+        <small className="muted">{prepValues.length} rondas con ambos estados registrados · paso opcional</small>
       </article>
       <article className="card"><p className="eyebrow">Para llevar: pedido → entregado</p>
         <strong className="metric">{formatted(average(dispatched))}</strong>
@@ -116,14 +116,14 @@ export default async function PosPerformance(){
       </article>
     </section>
     <p className="muted ops-performance-method">
-      La hora de impresión es el acuse <strong>OK del puente ESC/POS</strong>, no una prueba física del papel.
+      La hora de impresión es el acuse <strong>OK del puente ESC/POS</strong>, no una prueba física del papel. Un pedido marcado Lista directamente cuenta como preparación completada aunque no tenga hora de inicio manual.
       La estancia de mesa empieza al abrir la cuenta y termina al cobrarla, no cuando sale el cliente.
       La muestra incluye hasta 150 tickets recientes; si falta un evento se muestra «—».
     </p>
     <div className="ops-performance-scroll">
       <table className="ops-performance-table">
         <thead><tr><th>Pedido</th><th>Servicio</th><th>Estado</th><th>Impresora → Lista</th>
-          <th>Preparación</th><th>Pedido → entregado</th><th>Listo → entregado</th><th>Mesa abierta / duración</th><th>Acción</th></tr></thead>
+          <th>Preparando (opcional) → Lista</th><th>Pedido → entregado</th><th>Listo → entregado</th><th>Mesa abierta / duración</th><th>Acción</th></tr></thead>
         <tbody>{details.map(d=><tr key={d.id}>
           <td><strong>{d.tableLabel||d.folio}</strong><small>{d.createdAt.toLocaleString("es-MX",{timeZone:"America/Mexico_City"})}</small></td>
           <td>{d.serviceMode==="TAKEAWAY"?"Para llevar":d.hasTakeaway?"Mixto":"Aquí"}</td>
