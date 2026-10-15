@@ -58,7 +58,7 @@ export async function getPrintStationJobs(input:FeedInput):Promise<HubFeed|HubJo
  // La identidad, empleado activo, alcance de sucursal y pos.sell se comprueban
  // en UN viaje a PostgreSQL. El JWT se verifica ANTES de ejecutar la sonda.
  // Sin caché entre requests: revocar permisos/empleados actúa inmediatamente.
- let employee:{id:string;organizationId:string}|null=null;
+ let employee:{id:string;organizationId:string};
  let storeId="";
  let version="fallback:"+Date.now().toString();
  let permissionGranted:boolean|null=null;
