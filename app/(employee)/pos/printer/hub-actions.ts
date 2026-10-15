@@ -3,6 +3,7 @@
 import {and,desc,eq,gte,inArray,or,sql} from "drizzle-orm";
 import {getDb} from "@/src/infrastructure/db/client";
 import {getCurrentEmployee} from "@/src/infrastructure/auth/current-employee";
+import {getVerifiedHotPathUserId} from "@/src/infrastructure/auth/verified-hot-path-user";
 import {assertEmployeePermission} from "@/src/infrastructure/auth/permissions";
 import {assertNoPreviewMutation} from "@/src/shared/preview-guard";
 import {auditEvents,employees,posOrderLines,posOrderSplits,posOrderSplitLines,
@@ -50,56 +51,78 @@ export async function getPrintStationJobs(input:FeedInput):Promise<HubFeed|HubJo
  // Sonda liviana en una sola consulta: si no hubo cambios, no descargar
  // órdenes, líneas, pagos ni auditorías completas cada cuatro segundos.
  // La identidad del empleado y pos.sell se comprueban SIEMPRE en el servidor.
- const {employee,storeId}=await principal({deferPermissionCheck:true}),start=efficientPrintFeedSince(allowedSince(since)),db=getDb();
+ const userId=await getVerifiedHotPathUserId();
+ const organizationSlug=process.env.DEFAULT_ORGANIZATION_SLUG??"cafe-epico";
+ const start=efficientPrintFeedSince(allowedSince(since)),db=getDb();
  const after=start.toISOString();
- // Si la sonda no está disponible, abrir el feed completo: la continuidad
- // de comandas tiene prioridad sobre el ahorro de transferencia.
+ // La identidad, empleado activo, alcance de sucursal y pos.sell se comprueban
+ // en UN viaje a PostgreSQL. El JWT se verifica ANTES de ejecutar la sonda.
+ // Sin caché entre requests: revocar permisos/empleados actúa inmediatamente.
+ let employee:{id:string;organizationId:string};
+ let storeId="";
  let version="fallback:"+Date.now().toString();
  let permissionGranted:boolean|null=null;
  try{
  const probe=await db.execute(sql`
-   with access as (
-     select exists (
-       select 1 from public.employees e
-       join public.employee_roles er on er.employee_id=e.id
-       join public.role_permissions rp on rp.role_id=er.role_id
-       join public.permissions p on p.id=rp.permission_id
-       where e.id=${employee.id}::uuid
-         and e.organization_id=${employee.organizationId}::uuid
-         and e.is_active=true
-         and p.code='pos.sell'
-         and (er.store_id is null or er.store_id=${storeId}::uuid)
-     ) as allowed
+   with staff as (
+     select e.id,e.organization_id,e.home_store_id
+     from public.employees e
+     join public.organizations org on org.id=e.organization_id
+     where e.user_id=${userId}::uuid
+       and org.slug=${organizationSlug}
+       and e.is_active=true
+     limit 1
+   ), access as (
+     select s.id,s.organization_id,s.home_store_id,
+       exists (
+         select 1 from public.employee_roles er
+         join public.role_permissions rp on rp.role_id=er.role_id
+         join public.permissions p on p.id=rp.permission_id
+         where er.employee_id=s.id
+           and p.code='pos.sell'
+           and (er.store_id is null or er.store_id=s.home_store_id)
+       ) as allowed
+     from staff s
    )
-   select (select allowed from access) as allowed,
-     case when (select allowed from access) then
-     coalesce((select max(o.updated_at)::text from public.pos_orders o
-       where o.organization_id=${employee.organizationId}::uuid
-         and o.store_id=${storeId}::uuid and o.mode='LIVE'
-         and (o.updated_at>=${after}::timestamptz or o.created_at>=${after}::timestamptz)), '') || '|' ||
-     coalesce((select max(l.created_at)::text from public.pos_order_lines l
-       inner join public.pos_orders o on o.id=l.order_id
-       where o.organization_id=${employee.organizationId}::uuid
-         and o.store_id=${storeId}::uuid and o.mode='LIVE'
-         and l.created_at>=${after}::timestamptz), '') || '|' ||
-     coalesce((select max(s.paid_at)::text from public.pos_order_splits s
-       inner join public.pos_orders o on o.id=s.order_id
-       where o.organization_id=${employee.organizationId}::uuid
-         and o.store_id=${storeId}::uuid and o.mode='LIVE'
-         and s.paid_at>=${after}::timestamptz), '') || '|' ||
-     coalesce((select max(a.created_at)::text from public.audit_events a
-       where a.organization_id=${employee.organizationId}::uuid
-         and a.store_id=${storeId}::uuid and a.entity_type='pos_print_job'
-         and a.created_at>=${after}::timestamptz), '')
+   select access.id as employee_id,access.organization_id,access.home_store_id,
+     access.allowed,
+     case when access.allowed and access.home_store_id is not null then
+       coalesce((select max(o.updated_at)::text from public.pos_orders o
+         where o.organization_id=access.organization_id
+           and o.store_id=access.home_store_id and o.mode='LIVE'
+           and (o.updated_at>=${after}::timestamptz or o.created_at>=${after}::timestamptz)), '') || '|' ||
+       coalesce((select max(l.created_at)::text from public.pos_order_lines l
+         inner join public.pos_orders o on o.id=l.order_id
+         where o.organization_id=access.organization_id
+           and o.store_id=access.home_store_id and o.mode='LIVE'
+           and l.created_at>=${after}::timestamptz), '') || '|' ||
+       coalesce((select max(s.paid_at)::text from public.pos_order_splits s
+         inner join public.pos_orders o on o.id=s.order_id
+         where o.organization_id=access.organization_id
+           and o.store_id=access.home_store_id and o.mode='LIVE'
+           and s.paid_at>=${after}::timestamptz), '') || '|' ||
+       coalesce((select max(a.created_at)::text from public.audit_events a
+         where a.organization_id=access.organization_id
+           and a.store_id=access.home_store_id and a.entity_type='pos_print_job'
+           and a.created_at>=${after}::timestamptz), '')
      else null end as version
+   from access
  `);
- const row=probe[0] as {allowed?:boolean;version?:string|null}|undefined;
- if(typeof row?.allowed!=="boolean")throw new Error("Sonda de impresión inválida");
+ const row=probe[0] as {employee_id?:string;organization_id?:string;
+   home_store_id?:string|null;allowed?:boolean;version?:string|null}|undefined;
+ if(!row?.employee_id||!row.organization_id||!row.home_store_id||
+     typeof row.allowed!=="boolean")
+   throw new Error("Identidad o sucursal no resuelta en la sonda.");
+ employee={id:row.employee_id,organizationId:row.organization_id};
+ storeId=row.home_store_id;
  permissionGranted=row.allowed;
  version=typeof row.version==="string"?row.version:"";
  }catch{
-   // Si falla el atajo, la ruta original sigue siendo la alternativa segura.
-   // Se obliga de nuevo a comprobar pos.sell antes de obtener cualquier ticket.
+   // Bootstrap, errores SQL y sesiones no vinculadas usan la ruta original,
+   // que vuelve a verificar empleado activo, sucursal y pos.sell antes de leer.
+   const original=await principal();
+   employee=original.employee;
+   storeId=original.storeId;
    version="fallback:"+Date.now().toString()+":"+Math.random().toString(36).slice(2);
  }
  if(permissionGranted===false)throw new Error("Missing permission: pos.sell");
