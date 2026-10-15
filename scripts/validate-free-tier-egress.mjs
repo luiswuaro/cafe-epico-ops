@@ -60,8 +60,12 @@ try{
   assert.equal(efficientPrintFeedSince(day,now).toISOString(),"2026-10-13T19:45:00.000Z");
   assert.equal(efficientPrintFeedSince(recent,now).toISOString(),recent.toISOString());
   assert.match(hub,/efficientPrintFeedSince\(allowedSince\(since\)\)/);
-  assert.match(hub,/principal\(\{deferPermissionCheck:true\}\)/,
-    "Solo la sonda puede diferir un chequeo, nunca los cobros ni los ACKs");
+  assert.match(hub,/getVerifiedHotPathUserId\(\)/,
+    "Solo la sonda combina JWT firmado, empleado activo y autorización en un SQL");
+  assert.match(hub,/const original=await principal\(\)/,
+    "Ante error de SQL, la sonda vuelve a la autorización original");
+  assert.match(hub,/if\(!deferPermissionCheck\)/,
+    "Cobros, ACKs y operaciones de impresora conservan la validación explícita");
   assert.match(hub,/join public\.employee_roles er/);
   assert.match(hub,/join public\.role_permissions rp/);
   assert.match(hub,/join public\.permissions p/);
