@@ -66,7 +66,7 @@ try{
     "Ante error de SQL, la sonda vuelve a la autorización original");
   assert.match(hub,/if\(!deferPermissionCheck\)/,
     "Cobros, ACKs y operaciones de impresora conservan la validación explícita");
-  assert.match(hub,/join public\.employee_roles er/);
+  assert.match(hub,/(?:from|join) public\.employee_roles er/);
   assert.match(hub,/join public\.role_permissions rp/);
   assert.match(hub,/join public\.permissions p/);
   assert.match(hub,/e\.is_active=true/);
