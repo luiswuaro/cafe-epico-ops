@@ -7,15 +7,27 @@ export function PrintJobIndicator({jobKey,kind}:{jobKey:string;kind:"comanda"|"t
  const [state,setState]=useState<"UNCLAIMED"|"CLAIMED"|"DONE"|"FAILED"|"EXPIRED"|null>(null);
  useEffect(()=>{
    let active=true;
+   let settled=false;
+   let interval:number|null=null;
    const refresh=async()=>{
+     if(!active||settled)return;
      try{
        const result=await getPrintStationJobStatus(jobKey);
-       if(active){setState(result);if(result==="UNCLAIMED"||result==="CLAIMED")setPendingSeconds(value=>value+3);}
+       if(!active||settled)return;
+       setState(result);
+       if(result==="UNCLAIMED"||result==="CLAIMED"){
+         setPendingSeconds(value=>value+3);
+       }else{
+         // DONE / FAILED / EXPIRED son terminales: cero consultas
+         // adicionales aunque la vista POS permanezca abierta todo el día.
+         settled=true;
+         if(interval!==null)window.clearInterval(interval);
+       }
      }catch{/* No afirmar que se imprimió si falla la conexión */}
    };
    void refresh();
-   const interval=window.setInterval(()=>void refresh(),3000);
-   return ()=>{active=false;window.clearInterval(interval)};
+   interval=window.setInterval(()=>void refresh(),3000);
+   return ()=>{active=false;if(interval!==null)window.clearInterval(interval)};
  },[jobKey]);
  const texts={
    UNCLAIMED:"Pedido guardado. La "+kind+" está pendiente de la estación de impresión.",

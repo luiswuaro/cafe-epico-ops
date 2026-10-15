@@ -145,3 +145,37 @@ assert.match(fs.readFileSync("app/(employee)/pos/orders/auto-refresh.tsx","utf8"
   "No retrasar la actualización de comandas");
 console.log("RBAC egress: PASS (permisos actuales agrupados, alcance sucursal y seguridad intactos)");
 
+// El incidente del 12/10 nació de sondeos persistentes por pestaña y
+// router.refresh() que descargaba el tablero completo cada cinco segundos.
+const indicator=fs.readFileSync("components/print-job-indicator.tsx","utf8");
+const boardProbe=fs.readFileSync("app/(employee)/pos/orders/version-actions.ts","utf8");
+const boardPoll=fs.readFileSync("app/(employee)/pos/orders/auto-refresh.tsx","utf8");
+assert.match(indicator,/settled=true/);
+assert.match(indicator,/result==="UNCLAIMED"\|\|result==="CLAIMED"/);
+assert.match(indicator,/window.clearInterval\(interval\)/,
+  "Dejar de consultar cuando DONE, FAILED o EXPIRED");
+assert.match(printStation,/navigator\.locks\.request\("cafe-epico-ops-print-feed"/,
+  "No abrir dos sondeos simultáneos desde varias pestañas");
+assert.match(printStation,/if\(!lock\|\|!alive\)return/,
+  "Solo la pestaña que consiguió el bloqueo revisa Supabase");
+assert.match(printStation,/Date\.now\(\)-last<3500/,
+  "Respetar intervalo entre pestañas, no multiplicar consultas");
+assert.match(printStation,/claimPrintStationJob\(job\.key,state\.stationId\)/,
+  "La deduplicación transaccional sigue siendo la última barrera");
+assert.match(boardProbe,/assertEmployeePermission\(employee\.id,"pos\.sell",employee\.homeStoreId\)/);
+for(const table of ["pos_orders","pos_order_lines","audit_events","pos_order_splits","pos_payments","pos_customers","pos_cash_sessions","pos_catalog_overrides"]){
+  assert.ok(boardProbe.includes("public."+table),
+    "La firma debe observar "+table+" para detectar cambios operativos");
+}
+assert.match(boardPoll,/getCommandBoardVersion\(\)/);
+assert.match(boardPoll,/lastVersion!==version/);
+assert.match(boardPoll,/lastFullRefresh>=60000/,
+  "Recuperación de cambios no cubiertos por la firma en 60 s");
+assert.match(boardPoll,/setInterval\(refreshVisible,5000\)/,
+  "No demorar la visibilidad de nuevas comandas");
+assert.match(boardPoll,/catch\{/);
+assert.match(boardPoll,/router\.refresh\(\)/,
+  "Si falla la sonda, refrescar la lista en vez de ocultarla");
+console.log("Incidente 12/oct: PASS (estado terminal, pestaña única y feed del tablero seguro)");
+
+
