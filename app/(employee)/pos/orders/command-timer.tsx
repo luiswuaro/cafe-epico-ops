@@ -25,12 +25,13 @@ export function CommandTimer({createdAt,roundStartedAt,printAckAt,preparingAt,re
   const level=queueSeconds>=900?"late":queueSeconds>=480?"attention":"ok";
   return <div className={"command-live-timing command-live-timing-"+level} aria-label="Tiempo de servicio">
     <span><strong>Pedido:</strong> {now===null?"—":since(roundStartedAt,null)}</span>
-    <span><strong>Barra:</strong> {printAckAt
-      ?(readyAt?"Impresora → lista "+since(printAckAt,readyAt)
-        :now===null?"—":"Desde impresora "+since(printAckAt,null))
+    <span><strong>Preparación total:</strong> {printAckAt
+      ?(readyAt?"Impresión → listo · "+since(printAckAt,readyAt)
+        :now===null?"—":"Desde impresión · "+since(printAckAt,null))
       : "Sin acuse de impresión"}</span>
-    {preparingAt&&<span><strong>Preparación:</strong> {readyAt
+    {preparingAt&&<span><strong>Preparando (marcaje manual):</strong> {readyAt
       ?since(preparingAt,readyAt):now===null?"—":since(preparingAt,null)}</span>}
+    {readyAt&&!preparingAt&&<small>Lista directamente · preparación finalizada.</small>}
     {hasTakeaway&&<span>
       <strong>Despacho:</strong> {dispatchedAt
         ?"Entregado · "+since(roundStartedAt,dispatchedAt)

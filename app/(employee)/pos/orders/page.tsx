@@ -156,13 +156,19 @@ export default async function PosOrdersPage({
             const roundKey=(line:typeof order.lines[number])=>
               typeof line.expectedConsumption?.roundId==="string"?line.expectedConsumption.roundId:"INITIAL";
             const roundKeys=[...new Set(order.lines.map(roundKey))];
+            // LISTA es terminal para la ronda, aunque no se haya pulsado
+            // PREPARANDO. También vale para pedidos PAID para llevar.
+            const isReady=order.status==="READY"||Boolean(order.readyAt);
+            const isPreparing=order.status==="PREPARING"||Boolean(order.preparingAt);
 
             return (
               <article className="card command-card" key={order.id}>
                 <div className="section-heading">
                   <div>
                     <p className="eyebrow">
-                      {order.mode === "LIVE" ? "LIVE · " : "ESPEJO · "}{statusLabel(order.status)}
+                      {order.mode === "LIVE" ? "LIVE · " : "ESPEJO · "}{order.status==="PAID"&&order.hasTakeaway
+                        ?isReady?"LISTA · COBRADA":isPreparing?"PREPARANDO · COBRADA":"COBRADA · EN BARRA"
+                        :statusLabel(order.status)}
                     </p>
                     <h2>
                       {kitchenOrderIdentity({
@@ -273,7 +279,7 @@ export default async function PosOrdersPage({
 
                 {(!partiallyPaid && (order.status!=="PAID"||order.mode==="LIVE"&&order.hasTakeaway)) && (
                   <div className="command-status-actions">
-                    {(order.status==="PAID"?!order.preparingAt:order.status !== "PREPARING") && (
+                    {!isReady&&!isPreparing && (
                       <form action={updateCommandStatus}>
                         <input
                           type="hidden"
@@ -288,7 +294,7 @@ export default async function PosOrdersPage({
                         <button type="submit">Preparando</button>
                       </form>
                     )}
-                    {(order.status==="PAID"?!order.readyAt:order.status !== "READY") && (
+                    {!isReady && (
                       <form action={updateCommandStatus}>
                         <input
                           type="hidden"

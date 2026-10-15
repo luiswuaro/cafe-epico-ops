@@ -15,6 +15,7 @@ import { cancelLiveOrder } from "@/src/application/pos/live-cancellation";
 import { checkoutLiveOrder, isPosLiveEnabled } from "@/src/application/pos/live";
 import { getPosReadiness } from "@/src/application/pos/readiness";
 import {shadowPaymentFields} from "@/src/domain/pos/shadow-payment";
+import {commandPreparationDecision} from "@/src/domain/pos/command-preparation";
 import {validateFreeCupCarriers} from "@/src/domain/pos/paper-bag-packaging";
 import { syncLoyverseReceipts } from "@/src/application/loyverse/sync";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
@@ -47,7 +48,7 @@ const cartSchema = z
 
 const serviceModeSchema = z.enum(["DINE_IN", "TAKEAWAY"]);
 const paymentSchema = z.enum(["CASH", "CARD", "TRANSFER"]);
-const commandStatusSchema = z.enum(["SENT", "PREPARING", "READY"]);
+const commandStatusSchema = z.enum(["PREPARING", "READY"]);
 
 function businessDate(date = new Date()) {
   return new Intl.DateTimeFormat("en-CA", {
@@ -542,15 +543,23 @@ export async function updateCommandStatus(formData: FormData) {
     if(current.status==="PAID" && !(current.mode==="LIVE"&&
       orderLines.some(l=>l.expected?.serviceMode==="TAKEAWAY")))
       throw new Error("La preparación de tickets pagados sólo aplica para llevar.");
-    const [recent]=await tx.select({id:auditEvents.id}).from(auditEvents).where(and(
+    // Una sola consulta por ronda: no regresar de LISTA a PREPARANDO
+    // aunque llegue un clic tardío, una pestaña desactualizada o un pago
+    // posterior (PAID conserva su estado financiero).
+    const previous=await tx.select({
+      previousStatus:sql<string>`${auditEvents.afterData}->>'status'`,
+    }).from(auditEvents).where(and(
       eq(auditEvents.organizationId,employee.organizationId),
       eq(auditEvents.entityType,"pos_order"),eq(auditEvents.entityId,current.id),
       eq(auditEvents.action,"POS_COMMAND_STATUS_CHANGED"),
-      sql`${auditEvents.afterData}->>'status' = ${status}`,
       sql`COALESCE(${auditEvents.afterData}->>'roundId','INITIAL') = ${roundId}`,
-    )).limit(1);
-    if(recent) return;
-    if(current.status===status)return;
+    ));
+    const decision=commandPreparationDecision(
+      current.status,status,previous.map(event=>event.previousStatus));
+    // Listo implica preparación terminada, incluso sin marcaje Preparando.
+    // No fabricar un tiempo de inicio; el cronómetro real inicia al acuse
+    // de impresión, y termina con el evento READY de esta misma ronda.
+    if(!decision.shouldRecord)return;
     if(current.status!=="PAID"){
       await tx.update(posOrders)
         .set({status,updatedAt:new Date()})
@@ -560,7 +569,11 @@ export async function updateCommandStatus(formData: FormData) {
       organizationId:employee.organizationId,storeId:employee.homeStoreId,
       actorUserId:user.id,actorEmployeeId:employee.id,
       action:"POS_COMMAND_STATUS_CHANGED",entityType:"pos_order",entityId:current.id,
-      beforeData:{status:current.status},afterData:{status,roundId},
+      beforeData:{status:current.status},afterData:{
+        status,roundId,
+        preparationCompleted:status==="READY",
+        preparingSkipped:decision.preparingSkipped,
+      },
     });
   });
 
