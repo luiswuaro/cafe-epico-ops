@@ -99,11 +99,11 @@ export async function getCommandBoardVersion():Promise<string>{
           ) as allowed
         from staff s
       )
-      select a.allowed,a.home_store_id as store_id,
-        case when a.allowed and a.home_store_id is not null
-          then ${commandBoardFingerprint(sql`a.organization_id`,sql`a.home_store_id`)}
+      select staff_access.allowed,staff_access.home_store_id as store_id,
+        case when staff_access.allowed and staff_access.home_store_id is not null
+          then ${commandBoardFingerprint(sql`staff_access.organization_id`,sql`staff_access.home_store_id`)}
           else null end as version
-      from access a
+      from access staff_access
     `);
     const candidate=row as {allowed?:boolean;store_id?:string|null;version?:string|null}|undefined;
     if(!candidate||typeof candidate.allowed!=="boolean")
