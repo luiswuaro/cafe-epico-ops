@@ -401,9 +401,36 @@ export async function payOrderSplit(formData:FormData){
       error,
     });
     const raw=error instanceof Error?error.message:"";
-    const safe=/^(Falta |Abre |La cuenta |La comanda |Esta cuenta |El total |Los datos |Producto |Cuenta |Insumo |Unidad |Sólo |El efectivo |Cliente |Hay cuentas |Piloto |Cobros LIVE)/.test(raw)
+    // Sólo en errores: auditoría diagnóstica privada, sin guardar datos de
+    // terminal/tarjeta y sin modificar dinero, inventario ni puntos.
+    // Si el mismo servicio DB está caído, el fallo del diagnóstico no
+    // debe bloquear que el operador vuelva a la pantalla de la cuenta.
+    if(/^[0-9a-f-]{36}$/i.test(orderId)){
+      try{
+        const {user,employee}=await getCurrentEmployee();
+        if(employee.homeStoreId){
+          const code=typeof (error as {code?:unknown})?.code==="string"
+            ?String((error as {code:string}).code).slice(0,20):null;
+          await getDb().insert(auditEvents).values({
+            organizationId:employee.organizationId,storeId:employee.homeStoreId,
+            actorUserId:user.id,actorEmployeeId:employee.id,
+            action:"POS_LIVE_SPLIT_PAYMENT_FAILED",
+            entityType:"pos_order",entityId:orderId,
+            afterData:{
+              splitId:String(formData.get("splitId")??"").slice(0,36),
+              errorType:error instanceof Error?error.name.slice(0,80):"unknown",
+              errorCode:code,
+              errorMessage:raw.slice(0,240),
+            },
+          });
+        }
+      }catch(auditError){
+        console.error("POS_SPLIT_PAYMENT_FAILURE_AUDIT_UNAVAILABLE",{orderId,auditError});
+      }
+    }
+    const safe=/^(Falta |Abre |La cuenta |La comanda |Esta cuenta |El total |Los datos |Producto |Cuenta |Insumo |Unidad |Sólo |El efectivo |Cliente |Hay cuentas |Piloto |Cobros LIVE|Para dividir |La receta |El servicio |El estado |Selecciona |Una cortesía |No se encontró )/.test(raw)
       ?raw.slice(0,260)
-      :"No se pudo confirmar el cobro. Verifica el estado de la cuenta y los movimientos antes de reintentar.";
+      :"No se pudo confirmar el cobro. La cuenta sigue pendiente; verifica caja e historial antes de reintentar.";
     redirect(back+"?error="+encodeURIComponent(safe));
   }
   redirect(destination);

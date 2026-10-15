@@ -351,8 +351,8 @@ export async function checkoutLiveOrder(input:{
         throw new Error("Este trabajador ya registró su bebida gratuita de hoy. Las siguientes bebidas se cobran normalmente.");
     }
     
-    if(split && pending && pending.customerId!==input.customerId)
-      throw new Error("Para dividir la cuenta, usa el cliente registrado en la mesa.");
+    // Los clientes de cuentas divididas son independientes del cliente de la mesa.
+    // Cada destinatario de puntos se registra mediante pos_loyalty_entries por cuenta.
     if(input.customerId){
       const [customer]=await tx.select({id:posCustomers.id,pointsBalance:posCustomers.pointsBalance})
         .from(posCustomers).where(and(
@@ -565,8 +565,14 @@ export async function checkoutLiveOrder(input:{
           status:split&&!finalSplitPayment?"PARTIALLY_PAID":"PAID",
           paidAt:split&&!finalSplitPayment?null:now,updatedAt:now,
           inventoryEffectApplied:true,
-          customerId:input.customerId,
-          loyaltyPointsPreview:(input.customerId?calculateEarnedPointsFromRealMoney(monetaryDue):0).toFixed(2),
+          // No sobrescribir el cliente original de la mesa con el último
+          // comensal que liquide una cuenta. La atribución real de puntos
+          // se conserva en pos_loyalty_entries identificados por split.
+          customerId:split?pending.customerId:input.customerId,
+          loyaltyPointsPreview:split
+            ?(Number(pending.loyaltyPointsPreview??0)+
+              (input.customerId?calculateEarnedPointsFromRealMoney(monetaryDue):0)).toFixed(2)
+            :(input.customerId?calculateEarnedPointsFromRealMoney(monetaryDue):0).toFixed(2),
           loyaltyEffectApplied:Boolean(input.customerId)||pending.loyaltyEffectApplied,
         }).where(and(eq(posOrders.id,pending.id),eq(posOrders.status,pending.status)))
           .returning({id:posOrders.id,folio:posOrders.folio})
