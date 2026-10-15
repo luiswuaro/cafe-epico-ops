@@ -8,7 +8,7 @@ export function PrintJobIndicator({jobKey,kind}:{jobKey:string;kind:"comanda"|"t
  useEffect(()=>{
    let active=true;
    let settled=false;
-   let interval:ReturnType<typeof setInterval>|null=null;
+   let interval:number|null=null;
    const refresh=async()=>{
      if(!active||settled)return;
      try{
