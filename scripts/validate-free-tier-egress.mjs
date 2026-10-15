@@ -179,3 +179,45 @@ assert.match(boardPoll,/router\.refresh\(\)/,
 console.log("Incidente 12/oct: PASS (estado terminal, pestaña única y feed del tablero seguro)");
 
 
+
+
+// No volver a duplicar el viaje a la BD de identidad + permiso en
+// las dos sondas permanentes. La vía original se conserva solo como
+// fallback seguro (bootstrap/error SQL); nunca cachear RBAC entre polls.
+const hotJwt=fs.readFileSync("src/infrastructure/auth/verified-hot-path-user.ts","utf8");
+const newPrinterProbe=fs.readFileSync("app/(employee)/pos/printer/hub-actions.ts","utf8");
+const newBoardProbe=fs.readFileSync("app/(employee)/pos/orders/version-actions.ts","utf8");
+assert.match(hotJwt,/\.auth\.getClaims\(\)/);
+assert.match(hotJwt,/claims\.role\s*!==\s*"authenticated"/);
+assert.match(hotJwt,/typeof claims\.sub\s*!==\s*"string"/);
+assert.doesNotMatch(hotJwt,/\.auth\.getUser\(|user_metadata|unstable_cache/);
+for(const [name,source] of [["Impresión",newPrinterProbe],["Comandas",newBoardProbe]]){
+  assert.match(source,/getVerifiedHotPathUserId\(\)/,
+    name+": verificar JWT ES256 antes de la consulta SQL");
+  assert.match(source,/e\.user_id=\$\{userId\}::uuid/,
+    name+": nunca resolver otro empleado ni confiar en datos del navegador");
+  assert.match(source,/org\.slug=\$\{organizationSlug\}/,
+    name+": exigir organización activa correcta");
+  assert.match(source,/e\.is_active=true/,
+    name+": verificar revocación de empleado en CADA lectura");
+  assert.match(source,/p\.code='pos\.sell'/,
+    name+": comprobar acceso a venta en CADA lectura");
+  assert.match(source,/er\.store_id is null or er\.store_id=s\.home_store_id/,
+    name+": mantener alcance de permisos global o por sucursal");
+  assert.match(source,/getCurrentEmployee\(\)/,
+    name+": fallback a vinculación original y validación de empleado");
+  assert.match(source,/assertEmployeePermission\(employee\.id,"pos\.sell",employee\.homeStoreId\)|if\(permissionGranted===null\)await assertEmployeePermission/,
+    name+": fallo de SQL no debe omitir RBAC");
+}
+assert.match(newPrinterProbe,/case when access\.allowed and access\.home_store_id is not null then/);
+assert.match(newPrinterProbe,/if\(permissionGranted===false\)throw new Error\("Missing permission: pos\.sell"\)/);
+assert.match(newPrinterProbe,/const original=await principal\(\)/,
+  "Fallos de la sonda deben invocar ruta anterior antes de leer tickets");
+assert.match(newBoardProbe,/case when staff_access\.allowed and staff_access\.home_store_id is not null/);
+assert.match(newBoardProbe,/if\(!candidate\.allowed\)throw new Error\("Missing permission: pos\.sell"\)/);
+assert.match(newBoardProbe,/from access staff_access/,
+  "Alias de acceso no puede confundirse con audit_events a");
+assert.doesNotMatch(newBoardProbe,/from access a\b/,
+  "Evitamos en SQL la sombra del alias audit_events a");
+assert.match(newBoardProbe,/catch\(error\)/);
+console.log("Hot path egress: PASS (JWT, empleado activo, organización, permisos, fallback)");
