@@ -53,13 +53,13 @@ try{
  // clientes distintos ni perder destinatarios, puntos o protección doble cobro.
  const live=fs.readFileSync("src/application/pos/live.ts","utf8");
  const action=fs.readFileSync("app/(employee)/pos/orders/[id]/split/actions.ts","utf8");
- assert.doesNotMatch(live,/pending\\.customerId\\s*!==\\s*input\\.customerId/,
+ assert.ok(!live.includes("pending.customerId!==input.customerId"),
   "Las cuentas separadas no deben compartir obligatoriamente un solo cliente");
- assert.match(live,/customerId:split\\?pending\\.customerId:input\\.customerId/);
- assert.match(live,/Number\\(pending\\.loyaltyPointsPreview\\?\\?0\\)/);
- assert.match(live,/if\\(split\\.status==="PAID"\\)return \\{id:pending\\.id,alreadyRecorded:true\\}/);
- assert.match(live,/eq\\(posOrderSplits\\.status,"OPEN"\\)/);
- assert.match(action,/POS_LIVE_SPLIT_PAYMENT_FAILED/);
- assert.match(action,/redirect\\(back\\+"\\?error="/);
+ assert.ok(live.includes("customerId:split?pending.customerId:input.customerId"));
+ assert.ok(live.includes("Number(pending.loyaltyPointsPreview??0)"));
+ assert.ok(live.includes('if(split.status==="PAID")return {id:pending.id,alreadyRecorded:true}'));
+ assert.ok(live.includes('eq(posOrderSplits.status,"OPEN")'));
+ assert.ok(action.includes("POS_LIVE_SPLIT_PAYMENT_FAILED"));
+ assert.ok(action.includes('redirect(back+"?error="'));
  console.log("RECIBOS: clientes independientes, puntos por cuenta e idempotencia de pagos divididos");
 }finally{fs.rmSync(dir,{recursive:true,force:true});}
