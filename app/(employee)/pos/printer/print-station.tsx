@@ -72,7 +72,7 @@ export function PrintStation({template,preview,hiddenMode=false}:{
   let alive=true;
   // Una reactivación/cambio de estación fuerza una lectura completa inicial.
   lastFeedVersion.current=null;
-  const tick=async()=>{
+  const runPoll=async()=>{
     if(!alive||working.current)return;
     working.current=true;
     try{
@@ -137,6 +137,31 @@ export function PrintStation({template,preview,hiddenMode=false}:{
     }catch(error){
       if(alive)setStatus(error instanceof Error?error.message:"Sin conexión con OPS");
     }finally{working.current=false;}
+  };
+  // Bloqueo compartido por pestañas del mismo origen: sólo una consulta
+  // remota por periodo, sin bloquear la impresora cuando otra pestaña se cierra.
+  // El claim atómico de la BD sigue siendo la protección definitiva.
+  const tick=async()=>{
+    if(!alive||working.current)return;
+    if(!navigator.locks?.request){await runPoll();return;}
+    try{
+      await navigator.locks.request("cafe-epico-ops-print-feed",{
+        mode:"exclusive",ifAvailable:true,
+      },async lock=>{
+        if(!lock||!alive)return;
+        const pollKey="cafe-epico-print-feed-last-poll-v1";
+        try{
+          const last=Number(window.localStorage.getItem(pollKey)||0);
+          if(last>0&&Date.now()-last<3500)return;
+          window.localStorage.setItem(pollKey,String(Date.now()));
+        }catch{/* Sin almacenamiento: el bloqueo sigue evitando simultaneidad */}
+        await runPoll();
+      });
+    }catch{
+      // El bloqueo puede fallar en navegadores restringidos: en ese caso
+      // mantener el servicio; el servidor impide duplicar comandas.
+      if(alive)await runPoll();
+    }
   };
   void tick();
   const timer=window.setInterval(()=>void tick(),4000);
