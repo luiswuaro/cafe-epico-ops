@@ -15,6 +15,7 @@ import { cancelLiveOrder } from "@/src/application/pos/live-cancellation";
 import { checkoutLiveOrder, isPosLiveEnabled } from "@/src/application/pos/live";
 import { getPosReadiness } from "@/src/application/pos/readiness";
 import {shadowPaymentFields} from "@/src/domain/pos/shadow-payment";
+import {commandPreparationDecision} from "@/src/domain/pos/command-preparation";
 import {validateFreeCupCarriers} from "@/src/domain/pos/paper-bag-packaging";
 import { syncLoyverseReceipts } from "@/src/application/loyverse/sync";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
@@ -553,15 +554,12 @@ export async function updateCommandStatus(formData: FormData) {
       eq(auditEvents.action,"POS_COMMAND_STATUS_CHANGED"),
       sql`COALESCE(${auditEvents.afterData}->>'roundId','INITIAL') = ${roundId}`,
     ));
-    const alreadyReady=current.status==="READY"||
-      previous.some(event=>event.previousStatus==="READY");
-    const alreadyPreparing=current.status==="PREPARING"||
-      previous.some(event=>event.previousStatus==="PREPARING");
+    const decision=commandPreparationDecision(
+      current.status,status,previous.map(event=>event.previousStatus));
     // Listo implica preparación terminada, incluso sin marcaje Preparando.
     // No fabricar un tiempo de inicio; el cronómetro real inicia al acuse
     // de impresión, y termina con el evento READY de esta misma ronda.
-    if(alreadyReady||status==="PREPARING"&&alreadyPreparing)return;
-    if(current.status===status)return;
+    if(!decision.shouldRecord)return;
     if(current.status!=="PAID"){
       await tx.update(posOrders)
         .set({status,updatedAt:new Date()})
@@ -574,7 +572,7 @@ export async function updateCommandStatus(formData: FormData) {
       beforeData:{status:current.status},afterData:{
         status,roundId,
         preparationCompleted:status==="READY",
-        preparingSkipped:status==="READY"&&!alreadyPreparing,
+        preparingSkipped:decision.preparingSkipped,
       },
     });
   });
