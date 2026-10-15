@@ -109,3 +109,39 @@ for(const path of ["src/infrastructure/auth/current-employee.ts","components/app
    `${path}: se requiere identidad válida`);
 }
 console.log("Auth egress: PASS (JWT ES256 local, protección de rutas y personal activa)");
+
+// Evitar repetir 2-3 joins RBAC en el mismo render sin introducir una caché
+// que mantenga visibles accesos revocados al personal.
+const permissionsSource=fs.readFileSync("src/infrastructure/auth/permissions.ts","utf8");
+const navSource=fs.readFileSync("components/app-nav.tsx","utf8");
+const boardSource=fs.readFileSync("app/(employee)/pos/orders/page.tsx","utf8");
+assert.match(permissionsSource,/export async function getEmployeePermissions\(/);
+assert.match(permissionsSource,/eq\(employees\.isActive, true\)/,
+  "La consulta RBAC debe negar accesos a empleados desactivados");
+assert.match(permissionsSource,/inArray\(permissions\.code, \[\.\.\.permissionCodes\]\)/,
+  "Obtener múltiples permisos desde la misma consulta parametrizada");
+assert.match(permissionsSource,/isNull\(employeeRoles\.storeId\)/,
+  "Los roles generales deben seguir funcionando");
+assert.match(permissionsSource,/eq\(employeeRoles\.storeId, storeId\)/,
+  "Los roles por sucursal deben seguir filtrados");
+assert.doesNotMatch(permissionsSource,/unstable_cache|revalidateTag|setTimeout/,
+  "Nunca cachear autorizaciones de empleados entre solicitudes");
+assert.match(navSource,/getEmployeePermissions\(employee\.id,\[/);
+assert.match(navSource,/grants\.has\("admin\.access"\)/);
+assert.match(navSource,/grants\.has\("pos\.sell"\)/);
+assert.match(navSource,/grants\.has\("pos\.cash\.manage"\)/);
+assert.doesNotMatch(navSource,/employeeHasPermission\(/,
+  "Navegación no debe repetir tres lecturas de permisos");
+assert.match(boardSource,/getEmployeePermissions\(employee\.id,\[/);
+assert.match(boardSource,/if\(!grants\.has\("pos\.sell"\)\)throw new Error/,
+  "Negar acceso al tablero ANTES de leer comandas");
+assert.ok(boardSource.indexOf('if(!grants.has("pos.sell"))')<
+  boardSource.indexOf("getOpenPosOrders("),
+  "Nunca consultar pedidos a quien no tenga pos.sell");
+assert.match(boardSource,/const canCancel=grants\.has\("pos\.cancel"\)/,
+  "La cancelación sigue oculta para quienes no tengan permiso");
+assert.match(fs.readFileSync("app/(employee)/pos/orders/auto-refresh.tsx","utf8"),
+  /setInterval\(refreshVisible,5000\)/,
+  "No retrasar la actualización de comandas");
+console.log("RBAC egress: PASS (permisos actuales agrupados, alcance sucursal y seguridad intactos)");
+
