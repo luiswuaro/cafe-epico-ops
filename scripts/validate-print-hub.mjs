@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 const hub=fs.readFileSync("app/(employee)/pos/printer/hub-actions.ts","utf8");
 const client=fs.readFileSync("app/(employee)/pos/printer/print-station.tsx","utf8");
+const background=fs.readFileSync("components/print-station-background.tsx","utf8");
 const print=fs.readFileSync("app/(employee)/pos/receipt/[id]/direct-print-button.tsx","utf8");
 const kitchen=fs.readFileSync("app/(employee)/pos/orders/auto-kitchen-print.tsx","utf8");
 assert.ok(hub.includes("eq(posOrders.mode,\"LIVE\")"));
@@ -44,3 +45,20 @@ assert.ok(client.includes("if(!healthy)"),"No reservar trabajo si el puente est�
 const banner=fs.readFileSync("components/print-station-health-banner.tsx","utf8");
 assert.ok(banner.includes("getPrintStationHealth"),"Alerta en dispositivos remotos");
 assert.ok(banner.includes('role="alert"'),"Alerta accesible");
+
+
+// La impresora no debe desaparecer del segundo plano por una sola caída
+// de sesión o red durante la carga inicial de configuración.
+assert.match(background,/const loadTemplate=async\(\)=>/);
+assert.match(background,/const settings=await getPrintStationTemplate\(\)/);
+assert.match(background,/retryTimer=window\.setTimeout/);
+assert.match(background,/retryDelay=Math\.min\(retryDelay\*2,30000\)/);
+assert.match(background,/window\.addEventListener\("online",retryOnWake\)/);
+assert.match(background,/document\.addEventListener\("visibilitychange",retryOnVisible\)/);
+assert.doesNotMatch(background,/\.catch\(\(\)=>\{if\(alive\)setEnabled\(false\)\}/,
+  "Una falla temporal no debe deshabilitar la estación hasta reiniciar OPS");
+assert.match(background,/return \(\)=>\{\s*alive=false;/,
+  "La reconexión debe limpiarse al desmontar el worker");
+assert.match(client,/claimPrintStationJob\(job\.key,state\.stationId\)/,
+  "Conservar la deduplicación y el bloqueo de cada trabajo");
+console.log("Print Hub: recuperación automática tras error de sesión, sin reimpresión duplicada PASS");
