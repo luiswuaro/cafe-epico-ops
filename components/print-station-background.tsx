@@ -23,11 +23,60 @@ export function PrintStationBackground(){
   };
  },[]);
  useEffect(()=>{
-  if(!enabled)return;
+  if(!enabled){
+    // Detener un trabajador que se desactivó explícitamente desde Configuración.
+    setTemplate(null);
+    return;
+  }
   let alive=true;
-  void getPrintStationTemplate().then(settings=>{if(alive)setTemplate(settings)})
-   .catch(()=>{if(alive)setEnabled(false)});
-  return ()=>{alive=false};
+  let loading=false;
+  let ready=false;
+  let retryTimer:number|null=null;
+  let retryDelay=10000;
+  const loadTemplate=async()=>{
+    if(!alive||loading||ready)return;
+    loading=true;
+    try{
+      const settings=await getPrintStationTemplate();
+      if(!alive)return;
+      ready=true;
+      retryDelay=10000;
+      setTemplate(settings);
+    }catch{
+      if(!alive)return;
+      // Fallos transitorios de sesión, Vercel o red no desactivan la estación.
+      // Antes el primer error hacía setEnabled(false) y el trabajador quedaba
+      // detenido indefinidamente hasta recargar la aplicación.
+      setTemplate(null);
+      const delay=retryDelay;
+      retryDelay=Math.min(retryDelay*2,30000);
+      retryTimer=window.setTimeout(()=>{
+        retryTimer=null;
+        void loadTemplate();
+      },delay);
+    }finally{
+      loading=false;
+    }
+  };
+  const retryOnWake=()=>{
+    if(!alive||ready||loading)return;
+    if(retryTimer!==null){window.clearTimeout(retryTimer);retryTimer=null;}
+    void loadTemplate();
+  };
+  const retryOnVisible=()=>{
+    if(document.visibilityState==="visible")retryOnWake();
+  };
+  void loadTemplate();
+  window.addEventListener("online",retryOnWake);
+  window.addEventListener("focus",retryOnWake);
+  document.addEventListener("visibilitychange",retryOnVisible);
+  return ()=>{
+    alive=false;
+    if(retryTimer!==null)window.clearTimeout(retryTimer);
+    window.removeEventListener("online",retryOnWake);
+    window.removeEventListener("focus",retryOnWake);
+    document.removeEventListener("visibilitychange",retryOnVisible);
+  };
  },[enabled]);
  if(!enabled||!template)return null;
  return <PrintStation template={template} preview={false} hiddenMode/>;
