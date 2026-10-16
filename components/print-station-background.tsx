@@ -12,7 +12,8 @@ export function PrintStationBackground(){
   const sync=()=>{
    try{const config=JSON.parse(window.localStorage.getItem(KEY)||"null") as {enabled?:boolean}|null;
     setEnabled(config?.enabled===true);
-   }catch{setEnabled(false)}
+    if(config?.enabled!==true)setTemplate(null);
+   }catch{setEnabled(false);setTemplate(null)}
   };
   const frame=window.requestAnimationFrame(sync);
   window.addEventListener("storage",sync);
@@ -23,11 +24,7 @@ export function PrintStationBackground(){
   };
  },[]);
  useEffect(()=>{
-  if(!enabled){
-    // Detener un trabajador que se desactivó explícitamente desde Configuración.
-    setTemplate(null);
-    return;
-  }
+  if(!enabled)return;
   let alive=true;
   let loading=false;
   let ready=false;
