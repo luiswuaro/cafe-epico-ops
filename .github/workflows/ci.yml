@@ -31,3 +31,50 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run build
+
+  local-qa-postgres:
+    # Este ensayo sólo usa un PostgreSQL efímero dentro de GitHub Actions.
+    # No invoca ni conoce Supabase/Vercel productivos.
+    if: startsWith(github.head_ref || github.ref_name, 'feat/local-')
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: ci_qa_password_only
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:ci_qa_password_only@127.0.0.1:5432/postgres
+      OPS_LOCAL_FIRST: "true"
+      OPS_QA_MODE: "true"
+      OPS_CI_DB_TEST: "true"
+      POS_LIVE_ENABLED: "false"
+      DEFAULT_ORGANIZATION_SLUG: cafe-epico-qa
+      DEFAULT_STORE_CODE: QA-TEPEXI
+      NEXT_PUBLIC_SUPABASE_URL: https://192.168.1.100:8443
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: sb_publishable_ci_test_only
+      APP_ORIGIN: https://192.168.1.100:8443
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - name: Preparar auth.users y roles ficticios
+        run: node scripts/local/prepare-ci-postgres.mjs
+      - name: Aplicar esquema y seed QA
+        run: node scripts/local/apply-qa-schema.mjs --seed-qa
+      - name: Verificar integridad de datos QA
+        run: node scripts/local/qa-smoke.mjs --db-only
+      - name: Repetir migrador para comprobar idempotencia
+        run: node scripts/local/apply-qa-schema.mjs --seed-qa
+      - name: Confirmar integridad después de repetir
+        run: node scripts/local/qa-smoke.mjs --db-only
