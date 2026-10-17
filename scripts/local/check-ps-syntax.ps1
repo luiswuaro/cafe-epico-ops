@@ -6,7 +6,8 @@ $files = @(
   'scripts/local/start-qa.ps1',
   'scripts/local/bootstrap-selfhost-qa.ps1',
   'scripts/local/start-selfhost-qa.ps1',
-  'scripts/local/start-qa-gateway.ps1'
+  'scripts/local/start-qa-gateway.ps1',
+  'tools/print-bridge/Instalar-EstacionOPS.ps1'
 )
 foreach($file in $files){
   $tokens = $null
