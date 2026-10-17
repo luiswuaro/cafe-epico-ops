@@ -45,3 +45,19 @@ test("rechaza comanda vacía y tipo inesperado",()=>{
  assert.throws(()=>printAgentPayload({kind:"KITCHEN",slip:{lines:[]}}));
  assert.throws(()=>printAgentPayload({kind:"UNKNOWN"}));
 });
+
+test("logo existente de OPS viaja como raster antes del ticket en el mismo trabajo",()=>{
+ const logo=Buffer.from([0x80,0x40]).toString("base64");
+ const job={kind:"RECEIPT",ticket:{folio:"QA-LOGO",date:"hoy",
+   employee:"QA",service:"Aquí",items:[],total:"$0",payment:"Prueba",
+   status:"PAID"}};
+ const out=printAgentPayload(job,{showLogo:true,logoRasterBase64:logo,
+   logoWidthPx:8,logoHeightPx:2,logoAlign:"center"});
+ assert.deepEqual(out.logo,{dataBase64:logo,width:8,height:2,align:"center"});
+ const corrupted=printAgentPayload(job,{showLogo:true,logoRasterBase64:"AAAAAA",
+   logoWidthPx:8,logoHeightPx:2});
+ assert.equal(corrupted.logo,null);
+ const hidden=printAgentPayload(job,{showLogo:false,logoRasterBase64:logo,
+   logoWidthPx:8,logoHeightPx:2});
+ assert.equal(hidden.logo,null);
+});
