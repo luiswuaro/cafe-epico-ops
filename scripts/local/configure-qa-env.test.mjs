@@ -45,7 +45,10 @@ test("Sincroniza las claves oficiales y origen local, mantiene Auth público des
  assert.equal(s.COMPOSE_FILE,"docker-compose.yml");
  assert.ok(inspectQaSecrets(a,s).ok);
  assert.ok(validateLocalQaConfig(a).ok);
- assert.doesNotMatch(app,/REEMPLAZAR|192\.168\.1\.100/);
+ assert.doesNotMatch(a.DATABASE_URL,/REEMPLAZAR|192\.168\.1\.100/);
+ assert.doesNotMatch(a.NEXT_PUBLIC_SUPABASE_URL,/REEMPLAZAR|192\.168\.1\.100/);
+ // Los tokens opcionales del agente de impresora quedan pendientes a propósito.
+ assert.match(a.OPS_LOCAL_PRINT_AGENT_TOKEN??"REEMPLAZAR","REEMPLAZAR");
  assert.equal(app.match(/NEXT_PUBLIC_SUPABASE_ANON_KEY=/g)?.length,1);
 });
 
