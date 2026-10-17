@@ -96,12 +96,17 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\local\install-prin
 
 ## Limitaciones antes de producción
 
-- Esta primera versión imprime mediante **texto ESC/POS** y **logo raster**
-  opcional guardado en OPS, ambos en el mismo trabajo de Windows. Conserva
-  folios, notas, modos de servicio, importes, método de cobro, cliente y
-  puntos, pero el cuerpo del ticket todavía NO tiene el diseño raster
-  completo de la versión de navegador. Es una diferencia visual que deberá
-  resolverse o aprobarse expresamente.
+- Modo por defecto: **texto ESC/POS con logo raster** de OPS en el mismo
+  trabajo. Preserva notas, folios, importes, pagos y puntos.
+- Modo alternativo **QA Windows**: `OPS_LOCAL_PRINT_RASTER_ENABLED=true`.
+  `Render-PrintTicketRaster.ps1` dibuja todo el ticket (texto Unicode y logo)
+  a 384 px con GDI+ de Windows y lo envía al puente 1.3.0 como `raster`
+  bit-packed de un solo trabajo. Evita incompatibilidades de páginas de
+  código y mantiene el navegador cerrado. No utiliza fuentes externas ni
+  suscripciones; puede aumentar CPU/latencia.
+- Ambos modos necesitan revisión del resultado en papel; el raster GDI
+  todavía no es idéntico píxel por píxel al Canvas comercial y no está
+  aprobado para usar en producción.
 - La tarea requiere sesión Windows iniciada; todavía no es servicio NT
   independiente de inicio de sesión.
 - El token de agente está asociado a un empleado QA. Se debe diseñar una
@@ -147,3 +152,12 @@ navegador puede permanecer cerrado. El script verifica la organización
 y sucursal QA antes de insertar. Generar el pedido **después** de
 iniciar el agente: nunca recupera un lote de comandas antiguas sin
 confirmación manual.
+
+## Prueba adicional del raster completo
+
+Con el agente parado, establecer `OPS_LOCAL_PRINT_RASTER_ENABLED=true`,
+reiniciar el worker en QA y emitir una comanda ficticia. Comparar con el
+ticket gráfico actual: acentos, ñ, notas, letra, logo, anchos, separación y
+tiempos de impresión. Si hay caracteres convertidos en símbolos, líneas
+cortadas o franjas horizontales, detener el ensayo y conservar el modo
+manual. **No habilitar por defecto sin fotos de resultados físicos.**
