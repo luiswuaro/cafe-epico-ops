@@ -1,5 +1,6 @@
 @echo off
 setlocal
+chcp 65001 >nul
 cd /d "%~dp0"
 echo === CAFE EPICO OPS LOCAL - ENTORNO DE PRUEBAS ===
 echo SOLO inicia si Docker, secretos y PostgreSQL QA ya estan configurados.
