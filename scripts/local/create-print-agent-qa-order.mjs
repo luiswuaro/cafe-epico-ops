@@ -23,8 +23,9 @@ async function main(){
    const orderId=randomUUID();
    const clientOrderId="local-agent-qa-"+orderId;
    const folio="QA-"+orderId.slice(0,8);
-   const date=new Intl.DateTimeFormat("en-CA",{timeZone:"America/Mexico_City",
-     year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
+   const parts=Object.fromEntries(new Intl.DateTimeFormat("en-US",{timeZone:"America/Mexico_City",
+     year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date()).map(x=>[x.type,x.value]));
+   const date=parts.year+"-"+parts.month+"-"+parts.day;
    await db.begin(async tx=>{
      await tx`insert into public.pos_orders (
        id,organization_id,store_id,client_order_id,folio,
