@@ -30,7 +30,8 @@ function gate(){
    throw Error("Sólo usar la base PostgreSQL temporal de CI.");
 }
 function proc(command,args,{env=process.env,stdio=["ignore","pipe","pipe"]}={}){
- const child=spawn(command,args,{env,stdio,windowsHide:true});
+ const child=spawn(command,args,{env,stdio,windowsHide:true,
+   signal:AbortSignal.timeout(45000)});
  const finished=new Promise((resolve,reject)=>{
    child.once("error",reject);
    child.once("close",c=>c===0?resolve():reject(Error(command+" falló con salida "+c)));
@@ -127,6 +128,10 @@ async function assertForeignKeys(db){
  assert.deepEqual(data,{orphan_payments:0,orphan_lines:0,orphan_points:0});
 }
 let stage="inicializar";
+function checkpoint(next){
+ stage=next;
+ console.log("CI recuperación: "+next);
+}
 async function main(){
  gate();
  const mainDb=postgres(process.env.DATABASE_URL,{max:1,prepare:false});
@@ -137,17 +142,17 @@ async function main(){
  restoreUrl.pathname="/ci_restore";
  let restorationStarted=false;
  try{
-   stage="crear_muestra";
+   checkpoint("crear_muestra");
    await recordFixture(mainDb);
    const original=await snapshot(mainDb);
-   stage="crear_claves_efimeras";
+   checkpoint("crear_claves_efimeras");
    const identity=await execute("age-keygen",["-o",keyPath]);
    void identity;
    const publicKey=await execute("age-keygen",["-y",keyPath]);
    assert.match(publicKey,/^age1[a-z0-9]{30,}$/);
    const env={...process.env,OPS_BACKUP_AGE_RECIPIENT:publicKey,
      OPS_BACKUP_DESTINATION:archiveDir};
-   stage="cifrar_pg_dump";
+   checkpoint("cifrar_pg_dump");
    await execute(process.execPath,["scripts/local/backup-ops-local.mjs"],{env});
    const archives=readdirSync(archiveDir).filter(name=>name.endsWith(".pgcustom.age"));
    assert.equal(archives.length,1,"Debe existir exactamente un archivo cifrado.");
@@ -156,18 +161,18 @@ async function main(){
    assert.match(manifest,/restore_tested=no/);
    const size=(await stat(file)).size;
    assert.ok(size>256,"Backup age vacío.");
-   stage="inspeccionar_age_toc";
+   checkpoint("inspeccionar_age_toc");
    await execute(process.execPath,["scripts/local/inspect-ops-local-backup.mjs"],{
      env:{...env,OPS_BACKUP_ARCHIVE:file,OPS_BACKUP_AGE_IDENTITY:keyPath},
    });
    const [exists]=await mainDb`select 1 from pg_database where datname='ci_restore'`;
    assert.equal(exists,undefined,"Nunca sobrescribir la DB de restauración.");
-   stage="crear_base_destino";
+   checkpoint("crear_base_destino");
    await mainDb.unsafe("create database ci_restore");
    restorationStarted=true;
    // Pasamos flujo desencriptado directamente a pg_restore, sin dump claro
    // en el disco. ci_restore es otra DB del contenedor desechable de CI.
-   stage="restaurar_pg_restore";
+   checkpoint("restaurar_pg_restore");
    const age=proc("age",["--decrypt","--identity",keyPath,file]);
    const restore=proc("pg_restore",[
      "--clean","--if-exists","--no-owner","--no-acl","--exit-on-error",
@@ -179,7 +184,7 @@ async function main(){
    assert.ok(outcomes.every(x=>x.status==="fulfilled"),"pg_restore no terminó correctamente.");
    const secondary=postgres(restoreUrl.href,{max:1,prepare:false});
    try{
-     stage="conciliar_datos";
+     checkpoint("conciliar_datos");
      const recovered=await snapshot(secondary);
      assert.deepEqual(recovered,original,
        "Los importes, puntos, movimientos o usuarios difieren tras restaurar.");
