@@ -62,3 +62,23 @@
  .ops-preview-products{grid-template-columns:repeat(2,minmax(0,1fr))}
  .ops-preview-warning{font-size:.67rem}
 }
+
+/* Contraste fijo y explícito, independiente de la apariencia global.
+   Vista de entrenamiento: botones y tarjetas NO heredan texto blanco. */
+.ops-preview{color:#191816;background:#f4f0e8;min-height:100dvh}
+.ops-preview .card{background:#fffdf8;color:#191816}
+.ops-preview :is(h1,h2,h3,strong,.ops-preview-unit,.ops-preview-products strong,
+ .ops-preview-products span,.ops-preview-total,.ops-preview-clients){color:#191816}
+.ops-preview .muted,.ops-preview-products small{color:#554d45}
+.ops-preview input::placeholder{color:#5d554d;opacity:1}
+.ops-preview :is(input,select,textarea){color:#191816;background:#fff;border-color:#aaa094}
+.ops-preview-products button{color:#191816!important;background:#fbf8f2!important}
+.ops-preview-products button:focus-visible{outline:3px solid #9b6414;outline-offset:2px}
+.ops-preview .ops-preview-nav button:not(.selected){
+ color:#302820!important;background:#e9e1d7!important}
+.ops-preview .ops-preview-primary:not(:disabled),
+.ops-preview .ops-preview-nav button.selected{
+ color:#fff!important;background:#191816!important}
+.ops-preview button:disabled{opacity:1;color:#625c55!important;
+ background:#e5dfd7!important;cursor:not-allowed;border:1px solid #bcb3a7}
+.ops-preview .ops-preview-notice{color:#215c40;background:#e1eee5}
