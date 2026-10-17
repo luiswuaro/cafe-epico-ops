@@ -10,10 +10,15 @@ let serialize=Promise.resolve();
 
 function startRenderer(){
  if(renderer)return renderer;
+ // El renderer solo dibuja: no necesita las claves Auth, DB ni impresoras.
+ // Crear un entorno hijo mínimo para no heredar secretos del OPS.
+ const inherited=["SystemRoot","WINDIR","TEMP","TMP","PATH","PATHEXT","USERPROFILE"];
+ const safeEnv=Object.fromEntries(inherited.filter(key=>process.env[key])
+   .map(key=>[key,process.env[key]]));
  const child=spawn("powershell.exe",[
    "-NoProfile","-NonInteractive","-ExecutionPolicy","Bypass",
    "-File",script,"-Stream",
- ],{stdio:["pipe","pipe","pipe"],windowsHide:true});
+ ],{stdio:["pipe","pipe","pipe"],windowsHide:true,env:safeEnv});
  const state={child,pending:null,closed:false};
  renderer=state;
  // STDERR is deliberately discarded; it may contain customer data.
