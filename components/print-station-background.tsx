@@ -24,7 +24,7 @@ export function PrintStationBackground(){
   };
  },[]);
  useEffect(()=>{
-  if(!enabled)return;
+  if(!enabled||process.env.NEXT_PUBLIC_OPS_LOCAL_PRINT_AGENT_ENABLED==="true")return;
   let alive=true;
   let loading=false;
   let ready=false;
@@ -75,6 +75,6 @@ export function PrintStationBackground(){
     document.removeEventListener("visibilitychange",retryOnVisible);
   };
  },[enabled]);
- if(!enabled||!template)return null;
+ if(!enabled||!template||process.env.NEXT_PUBLIC_OPS_LOCAL_PRINT_AGENT_ENABLED==="true")return null;
  return <PrintStation template={template} preview={false} hiddenMode/>;
 }
