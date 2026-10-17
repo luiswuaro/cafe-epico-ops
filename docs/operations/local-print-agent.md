@@ -101,9 +101,11 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\local\install-prin
 - Modo alternativo **QA Windows**: `OPS_LOCAL_PRINT_RASTER_ENABLED=true`.
   `Render-PrintTicketRaster.ps1` dibuja todo el ticket (texto Unicode y logo)
   a 384 px con GDI+ de Windows y lo envía al puente 1.3.0 como `raster`
-  bit-packed de un solo trabajo. Evita incompatibilidades de páginas de
-  código y mantiene el navegador cerrado. No utiliza fuentes externas ni
-  suscripciones; puede aumentar CPU/latencia.
+  bit-packed de un solo trabajo. El agente mantiene un proceso gráfico
+  abierto durante el turno y compila su conversión de píxeles una sola vez;
+  si el render falla, no adquiere el trabajo de impresión. Evita problemas
+  de páginas de código y mantiene el navegador cerrado. No utiliza fuentes
+  externas ni suscripciones. Medir latencia y CPU antes de elegir este modo.
 - Ambos modos necesitan revisión del resultado en papel; el raster GDI
   todavía no es idéntico píxel por píxel al Canvas comercial y no está
   aprobado para usar en producción.
