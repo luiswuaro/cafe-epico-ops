@@ -33,7 +33,7 @@ const DIAGNOSTIC_CLIENT = [
   "  button.disabled=false;",
   "});",
   "})();"
-].join("\\n");
+].join("\n");
 
 const DEFAULT_PORT=47835;
 const MAX_RUNTIME_MS=15*60*1000;
