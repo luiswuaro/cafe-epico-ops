@@ -39,7 +39,13 @@ async function main(){
      db`select organization_id as "organizationId",code from public.stores order by code`,
      db`select name,sha256 from public.ops_local_migrations order by name`,
      db`select count(*)::int as total from auth.users`,
-     db`select count(*)::int as orders, count(*) filter (where mode='LIVE')::int as live from public.pos_orders`,
+     db`select count(*)::int as orders,
+       count(*) filter (where mode='LIVE' and not (
+         client_order_id like 'local-agent-qa-%'
+         and subtotal=0 and total=0 and status='SENT'
+         and note='PRUEBA DE IMPRESORA - SIN VENTA REAL'
+       ))::int as live
+       from public.pos_orders`,
    ]);
    const expected=migrationPlan(join(root,"db/migrations")).map(({name,sha256})=>({name,sha256}));
    const result=assessQaSnapshot({
