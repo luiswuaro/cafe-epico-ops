@@ -105,6 +105,35 @@ APP_ORIGIN=https://IP_PRIVADA_PC:8443
 El validador prohíbe claves demo, habilitar altas públicas o divergencia entre
 el origen de la aplicación y la API de Auth. Si falla, **no se inicia** la pila.
 
+### Enlace automatizado de secretos (sin copiar contraseñas)
+
+Una vez ejecutados `sh utils/generate-keys.sh --update-env` y
+`sh utils/add-new-auth-keys.sh --update-env`, **desde la raíz del repositorio**
+ejecutar el siguiente comando, cambiando la IP por la que figura en la
+prueba LAN:
+
+```powershell
+node scripts/local/configure-qa-env.mjs --ip 192.168.0.172
+```
+
+Se crea `.env.local` por primera vez y se actualiza
+`.local/supabase-qa/.env` sin revelar contraseñas en consola. La herramienta
+impide sobrescribir un `.env.local` existente, rechaza configuraciones
+que apunten a la nube, y deshabilita el registro público de Auth QA.
+`OPS_LOCAL_CA_FILE` se prepara con una ruta candidata de Caddy basada en
+`%APPDATA%`; se debe **verificar su existencia y contenido** una vez
+instalado/ejecutado Caddy. Este paso NO arranca los servicios ni
+autoriza el acceso desde móviles.
+
+En caso de que ya exista `.env.local`, no borrar el archivo por costumbre:
+revisar la configuración con el operador para no perder secretos existentes.
+
+**Precaución:** la versión oficial de los scripts de claves puede dejar
+respaldos `.env.old` con secretos temporales en
+`.local/supabase-qa/`. Mantener toda la carpeta privada y excluida de Git,
+y destruir las copias obsoletas solo después de comprobar la configuración
+actual. Nunca enviar el contenido de ningún `.env` por chat.
+
 ## 3. Arrancar la pila QA con acceso sólo desde la PC
 
 ```powershell
