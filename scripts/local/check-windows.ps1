@@ -26,7 +26,7 @@ $ram=[math]::Round([double]$os.TotalVisibleMemorySize/1MB,1)
 Write-Host ('RAM total: '+$ram+' GB (mínimo oficial Supabase self-host: 4 GB, recomendado 8+ GB)')
 $processor=(Get-CimInstance Win32_Processor | Measure-Object NumberOfLogicalProcessors -Sum).Sum
 Write-Host ('CPU lógicas: '+$processor)
-$drive=Get-PSDrive -Name $env:SystemDrive.TrimEnd(':') -ErrorAction SilentlyContinue
+$drive=Get-PSDrive -Name ($env:SystemDrive.TrimEnd(':')) -ErrorAction SilentlyContinue
 if($drive){
   $free=[math]::Round($drive.Free/1GB,1)
   Write-Host ('Disco libre en '+$env:SystemDrive+': '+$free+' GB (recomendado 80 GB para pila Supabase completa)')
