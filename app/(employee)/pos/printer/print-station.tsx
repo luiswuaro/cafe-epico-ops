@@ -186,9 +186,13 @@ export function PrintStation({template,preview,hiddenMode=false}:{
     <span className={enabled?"status-ok":"muted"}>{enabled?"ACTIVA":"APAGADA"}</span>
    </div>
    {HEADLESS_AGENT&&<p className="status-ok" role="status">Agente local independiente del navegador configurado. La impresión automática de esta pestaña está deshabilitada. Comprueba que la tarea Windows QA esté en ejecución.</p>}
-   <p>Esta computadora recibe las comandas y los tickets enviados desde celular o PC.
-    Puedes regresar al POS, tueste o finanzas: la estación funciona en segundo plano
-    mientras OPS permanezca abierto en este equipo.</p>
+   {HEADLESS_AGENT
+    ?<p>El agente Windows de impresión consulta OPS aunque el navegador de la PC
+       esté cerrado. Consulta el estado de la tarea del agente y del puente ESC/POS.
+       Si se interrumpe, revisa manualmente las comandas pendientes.</p>
+    :<p>Esta computadora recibe las comandas y los tickets enviados desde celular o PC.
+       Puedes regresar al POS, tueste o finanzas: la estación funciona en segundo plano
+       mientras OPS permanezca abierto en este equipo.</p>}
    <div className="pos-print-cut-settings">
     <label htmlFor="pos-print-cut-gap"><strong>Corte de papel entre impresiones</strong></label>
     <select id="pos-print-cut-gap" value={cutGap}
