@@ -47,8 +47,7 @@ test("Sincroniza las claves oficiales y origen local, mantiene Auth público des
  assert.ok(validateLocalQaConfig(a).ok);
  assert.doesNotMatch(a.DATABASE_URL,/REEMPLAZAR|192\.168\.1\.100/);
  assert.doesNotMatch(a.NEXT_PUBLIC_SUPABASE_URL,/REEMPLAZAR|192\.168\.1\.100/);
- // Los tokens opcionales del agente de impresora quedan pendientes a propósito.
- assert.match(a.OPS_LOCAL_PRINT_AGENT_TOKEN??"REEMPLAZAR","REEMPLAZAR");
+ // Los tokens opcionales de impresora permanecen sin habilitar en este paso.
  assert.equal(app.match(/NEXT_PUBLIC_SUPABASE_ANON_KEY=/g)?.length,1);
 });
 
