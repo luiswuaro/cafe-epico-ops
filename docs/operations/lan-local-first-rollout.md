@@ -46,6 +46,23 @@ Supabase recomienda **Docker Desktop Windows** y documenta mínimos 4 GB RAM, 2 
 
 NO ejecutar `docker compose down -v`, `reset.sh` ni copiar `DATABASE_URL` productiva a la réplica. El respaldo real cifrado sigue pendiente de ejecutar y ensayar.
 
+### Protección automática de la réplica QA (ya incluida en código)
+
+- `.env.local-first.example`: plantilla de variables (sin secretos), apuntando solo a PostgreSQL loopback y Auth HTTPS de una IP privada; cambiar valores tras instalar el stack autoalojado.
+- `scripts/local/guard-qa-config.mjs`: verifica antes de arrancar que DB es LOCAL, Auth no es Supabase.com, HTTPS en la LAN, `cafe-epico-qa` y `POS_LIVE_ENABLED=false`. No imprime credenciales ni permite iniciar contra la nube.
+- `scripts/local/start-qa.ps1`: valida configuración y **solo levanta Next.js en 127.0.0.1:3000**, detrás de un futuro proxy HTTPS; jamás lo expone por HTTP a los celulares.
+
+Una vez instalado el stack local oficial, configurado Caddy HTTPS y los secretos locales:
+
+```powershell
+Copy-Item .env.local-first.example .env.local
+# Editar .env.local SOLO con credenciales de la réplica local y su IP/certificado HTTPS.
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\local\start-qa.ps1
+```
+
+**Este comando NO funciona todavía sin instalar Docker Supabase, restaurar QA y crear HTTPS.**
+No representa migración final ni debe usarse para ingresar ventas reales.
+
 **Pruebas de salida:** login de dueño/barista, revocación de acceso, 2 POS simultáneos, cobranza dividida, puntos, inventario, comandas e impresión, corte de caja, facturación de métricas, persistencia tras reiniciar PC, corte total de WAN, recuperación de copia y reconciliación. Todos con datos ficticios primero.
 
 ## Fase 3: métricas y comandas en vivo sin polling masivo
@@ -85,6 +102,7 @@ Candidato: **Cloudflare Tunnel + Access** (Free para equipos pequeños bajo cuot
 - [x] Prueba LAN independiente del POS y autoexpirable.
 - [x] Diagnóstico Windows/Docker de solo lectura.
 - [x] Pruebas automáticas que garantizan rutas de solo lectura.
+- [x] Inicio QA bloqueado si toca nube, organización productiva o ventas LIVE.
 - [ ] **Prueba física** con celular de la cafetería, enviada por usuario.
 - [ ] Replica oficial de Supabase en Windows instalada, autenticación y datos de QA restaurados.
 - [ ] Certificados HTTPS confiables y acceso LAN desde todos los dispositivos.
