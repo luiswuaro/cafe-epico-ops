@@ -2,7 +2,7 @@
 # Renderiza Unicode a 384 px bit-packed para puente ESC/POS 1.3.
 # JSON entra por STDIN; solo JSON sale por STDOUT. Windows GDI+.
 [CmdletBinding()]
-param()
+param([switch]$Stream)
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 Add-Type -AssemblyName System.Drawing
@@ -48,7 +48,7 @@ public static class CafeEpicoRasterPacker {
 '@ -ReferencedAssemblies 'System.Drawing'
 [Console]::InputEncoding=New-Object System.Text.UTF8Encoding($false)
 [Console]::OutputEncoding=New-Object System.Text.UTF8Encoding($false)
-$payload=[Console]::In.ReadToEnd() | ConvertFrom-Json
+function Render-One([object]$payload){
 if($null -eq $payload -or @($payload.lines).Count -lt 1 -or
    @($payload.lines).Count -gt 240){throw 'Cantidad de lineas fuera de rango'}
 $width=384
@@ -137,11 +137,31 @@ try {
     feed=[int][Math]::Max(1,[Math]::Min(8,[int]$payload.feed))
     cut=($payload.cut -eq $true)
   }
-  [Console]::Out.Write(($result | ConvertTo-Json -Compress -Depth 5))
+  return ($result | ConvertTo-Json -Compress -Depth 5)
 } finally {
   $normal.Dispose()
   $bold.Dispose()
   $big.Dispose()
   $graphics.Dispose()
   $bmp.Dispose()
+}
+
+}
+if($Stream){
+  # Una única compilación GDI+ por inicio Windows. Cada solicitud JSON ocupa
+  # una línea; las respuestas son JSON por línea, sin datos personales en logs.
+  while($true){
+    $line=[Console]::ReadLine()
+    if($null -eq $line){break}
+    try{
+      $output=Render-One ($line | ConvertFrom-Json)
+      [Console]::Out.WriteLine($output)
+    }catch{
+      [Console]::Out.WriteLine('{"error":"RENDER_FAILED"}')
+    }
+    [Console]::Out.Flush()
+  }
+}else{
+  $payload=[Console]::In.ReadToEnd() | ConvertFrom-Json
+  [Console]::Out.Write((Render-One $payload))
 }
