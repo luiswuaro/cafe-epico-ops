@@ -10,7 +10,7 @@
 - 2 registros en `auth.users`, 4 `employees`, 189 ventas cuando se auditó la base.
 - 0 objetos en `storage.objects` durante la auditoría. Revalidar inmediatamente antes del corte.
 - Extensiones existentes: `pg_cron`, `pg_net`, `pg_stat_statements`, `pgcrypto`, `supabase_vault`, `uuid-ossp`.
-- Ya existen `organizations`, `stores`, `store_id` en ventas, caja, movimientos, saldos, auditoría y estaciones de impresión.
+- Ya existen `organizations`, `stores`, `store_id` en ventas, caja, movimientos, saldos, auditoría y estaciones de impresión. Hay una sucursal productiva (`TEPEXI`) y una organización QA (`QA-TEPEXI`); no se han validado dos sucursales comerciales simultáneas.
 - `pos_customers` y `pos_loyalty_entries` tienen alcance de organización: puntos compartidos entre sucursales **por diseño**, sujeto a aprobación operativa.
 - Precios/productos, partes de impresora y empleados requieren pruebas de aislamiento multi-sucursal.
 - Hoy `DEFAULT_STORE_CODE` elige la sucursal del servidor; **no habilitar segundo local sin selector de sucursal autorizado en la sesión**.
@@ -32,7 +32,9 @@ En una computadora o runner privado controlado: PostgreSQL 17 `pg_dump`/`pg_rest
 3. Ejecutar en entorno seguro:
 
 ```bash
-export OPS_BACKUP_DATABASE_URL='<URI privada del Session Pooler>'
+read -rsp 'URI privada del Session Pooler (oculta): ' OPS_BACKUP_DATABASE_URL
+printf '\\n'
+export OPS_BACKUP_DATABASE_URL
 export OPS_BACKUP_AGE_RECIPIENT='age1...'
 export OPS_BACKUP_DESTINATION='/ruta-privada/ops-backups'
 bash scripts/backup/backup-ops.sh
