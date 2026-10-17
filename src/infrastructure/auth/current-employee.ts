@@ -1,5 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import {cache} from "react";
+import {localPrintAgentIdentity} from "./local-print-agent-context";
 import { redirect } from "next/navigation";
 import { getDb } from "@/src/infrastructure/db/client";
 import { employees, organizations } from "@/src/infrastructure/db/schema";
@@ -10,6 +11,8 @@ import { ensureBootstrapBaristaLink } from "./bootstrap-barista";
 // Cache exclusivo del request React; jamás comparte permisos entre usuarios ni turnos.
 // La autorización continúa validándose en cada solicitud/acción del servidor.
 export const getCurrentEmployee=cache(async function getCurrentEmployee() {
+  const device=localPrintAgentIdentity();
+  if(device)return device; // Sólo la ruta local autenticada crea este contexto.
   const supabase = await createSupabaseServerClient();
   // La firma ES256 de Supabase se verifica localmente con JWKS cacheado.
   // Evita una petición /auth/v1/user por cada refresco y acción de impresión.
