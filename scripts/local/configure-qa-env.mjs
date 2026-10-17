@@ -57,7 +57,7 @@ export function prepareQaEnv({stackText,appTemplate,ip,caPath}){
   COMPOSE_FILE:"docker-compose.yml",POOLER_TENANT_ID:tenant,
   SUPABASE_PUBLIC_URL:origin,API_EXTERNAL_URL:origin+"/auth/v1",
   SITE_URL:origin,ADDITIONAL_REDIRECT_URLS:origin,
-  DISABLE_SIGNUP:"true",ENABLE_EMAIL_SIGNUP:"false",
+  DISABLE_SIGNUP:"true",ENABLE_EMAIL_SIGNUP:"true",
   ENABLE_PHONE_SIGNUP:"false",ENABLE_ANONYMOUS_USERS:"false",
  };
  for(const [key,value] of Object.entries(config))stack=setEnv(stack,key,value);
