@@ -10,7 +10,8 @@ $files = @(
   'tools/print-bridge/Instalar-EstacionOPS.ps1',
   'scripts/local/install-print-agent.ps1',
   'scripts/local/Render-PrintTicketRaster.ps1',
-  'scripts/local/launch-qa.ps1'
+  'scripts/local/launch-qa.ps1',
+  'scripts/local/check-qa-printer.ps1'
 )
 foreach($file in $files){
   $tokens = $null
