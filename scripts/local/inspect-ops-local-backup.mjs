@@ -39,7 +39,7 @@ async function inspect(){
  const age=spawn("age",["--decrypt","--identity",resolve(key),file],{
    stdio:["ignore","pipe","ignore"],windowsHide:true,
  });
- const restore=spawn("pg_restore",["--list","-"],{
+ const restore=spawn("pg_restore",["--list"],{
    stdio:["pipe","pipe","ignore"],windowsHide:true,
  });
  let toc="";
