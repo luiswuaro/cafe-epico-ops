@@ -56,3 +56,28 @@ test("GDI Windows rechaza render excesivo sin producir papel ni JSON válido",()
    encoding:"utf8",timeout:20000,maxBuffer:2_500_000,windowsHide:true});
  assert.notEqual(child.status,0);
 });
+
+test("GDI persistente procesa dos tickets en un mismo proceso Windows",()=>{
+ const ticket={lines:[
+   {text:"Café Épico",align:"center",bold:true,size:"double"},
+   {text:"Latte español",align:"left",bold:false,size:"normal"},
+   {text:"Puntos 2.50",align:"right",bold:true,size:"normal"},
+ ],feed:2,cut:false};
+ const input=JSON.stringify(ticket)+"\n"+JSON.stringify(ticket)+"\n";
+ const started=performance.now();
+ const child=spawnSync("powershell.exe",[
+   "-NoProfile","-NonInteractive","-ExecutionPolicy","Bypass",
+   "-File",renderer,"-Stream",
+ ],{input,encoding:"utf8",timeout:45000,
+   maxBuffer:2_500_000,windowsHide:true});
+ assert.equal(child.status,0,child.stderr?.slice(0,1000));
+ const lines=child.stdout.trim().split(/\r?\n/);
+ assert.equal(lines.length,2,"Un JSON de salida por cada ticket");
+ for(const json of lines){
+   const response=JSON.parse(json);
+   assert.equal(response.raster.width,384);
+   assert.equal(Buffer.from(response.raster.dataBase64,"base64").length,
+     48*response.raster.height);
+ }
+ console.log("GDI stream 2 tickets ms:",Math.round(performance.now()-started));
+});
