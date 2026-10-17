@@ -79,6 +79,10 @@ reales. Son preparativos explícitos previos para evitar riesgos.
 
 ## Impresión local en espejo
 
+0. Para comprobar la conexión del puente sin gastar papel, hacer
+   doble clic en `CafeEpico-QA-VerImpresora.cmd`. Únicamente consulta
+   `GET /status` de cada puerto 127.0.0.1 con su token QA; no dispara
+   ninguna impresión ni muestra credenciales.
 1. Ejecutar el puente ESC/POS ya previsto en
    `docs/operations/local-print-agent.md`, ligado solo a
    `127.0.0.1`. Usar únicamente la impresora de pruebas o una
