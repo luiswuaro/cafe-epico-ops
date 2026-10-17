@@ -111,3 +111,22 @@ test("comanda malformada se rechaza antes de tocar la cola",async()=>{
    jobs:[{...kitchen,slip:{lines:[]}}]}),/Comanda sin líneas/);
  assert.equal(h.operations.length,0);assert.equal(h.sent.length,0);
 });
+
+test("si falla el render raster no se reclama ni imprime papel",async()=>{
+ const h=harness();
+ await assert.rejects(runPrintJobs({...h.options,jobs:[kitchen],
+   format:async()=>{throw Error("GDI no disponible")}}),/GDI no disponible/);
+ assert.equal(h.operations.length,0);
+ assert.equal(h.sent.length,0);
+});
+test("bitmap Unicode se entrega al puente como un único trabajo físico",async()=>{
+ const h=harness();
+ const bitmap={raster:{dataBase64:Buffer.alloc(48*40).toString("base64"),
+   width:384,height:40,align:"center"},feed:2,cut:false};
+ const result=await runPrintJobs({...h.options,jobs:[kitchen],
+   format:async()=>bitmap});
+ assert.equal(result[0].status,"DONE");
+ assert.equal(h.sent.length,1);
+ assert.deepEqual(h.sent[0].payload,bitmap);
+ assert.equal(h.operations.filter(x=>x.op==="CLAIM").length,1);
+});
