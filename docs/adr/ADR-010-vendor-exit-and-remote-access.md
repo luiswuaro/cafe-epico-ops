@@ -14,6 +14,13 @@ previsto como proxy de operaciones del POS. El plan gratuito Hobby de Vercel
 financiera asumiendo que Vercel Hobby es un backend comercial gratuito:
 https://vercel.com/docs/limits/fair-use-guidelines
 
+Desde la rama QA se agregó `vercel.json` con
+`git.deploymentEnabled["feat/local-*"]=false` para evitar builds de preview
+de las ramas de desarrollo local. **No desactiva `main` ni retira el
+despliegue comercial actual**. Es una regla versionada, no una modificación
+de las credenciales o de la base productiva. Documentación oficial:
+https://vercel.com/docs/project-configuration/git-configuration
+
 Tailscale Personal gratuito también se declara solo para uso **no comercial**;
 no recomendarlo como túnel gratuito del negocio:
 https://tailscale.com/pricing
