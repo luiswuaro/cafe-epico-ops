@@ -107,15 +107,17 @@ test("trabajo vencido no se reclama y no se imprime",async()=>{
 });
 test("comanda malformada se rechaza antes de tocar la cola",async()=>{
  const h=harness();
- await assert.rejects(runPrintJobs({...h.options,
-   jobs:[{...kitchen,slip:{lines:[]}}]}),/Comanda sin líneas/);
+ const result=await runPrintJobs({...h.options,
+   jobs:[{...kitchen,slip:{lines:[]}}]});
+ assert.deepEqual(result.map(x=>x.status),["INVALID_PAYLOAD"]);
  assert.equal(h.operations.length,0);assert.equal(h.sent.length,0);
 });
 
 test("si falla el render raster no se reclama ni imprime papel",async()=>{
  const h=harness();
- await assert.rejects(runPrintJobs({...h.options,jobs:[kitchen],
-   format:async()=>{throw Error("GDI no disponible")}}),/GDI no disponible/);
+ const result=await runPrintJobs({...h.options,jobs:[kitchen],
+   format:async()=>{throw Error("GDI no disponible")}});
+ assert.deepEqual(result.map(x=>x.status),["INVALID_PAYLOAD"]);
  assert.equal(h.operations.length,0);
  assert.equal(h.sent.length,0);
 });
@@ -128,5 +130,15 @@ test("bitmap Unicode se entrega al puente como un único trabajo físico",async(
  assert.equal(result[0].status,"DONE");
  assert.equal(h.sent.length,1);
  assert.deepEqual(h.sent[0].payload,bitmap);
+ assert.equal(h.operations.filter(x=>x.op==="CLAIM").length,1);
+});
+
+test("ticket defectuoso no detiene comanda válida del siguiente cliente",async()=>{
+ const h=harness();
+ const jobs=[{...ticket,ticket:{items:null}},kitchen];
+ const result=await runPrintJobs({...h.options,jobs});
+ assert.deepEqual(result.map(x=>x.status),["INVALID_PAYLOAD","DONE"]);
+ assert.equal(h.sent.length,1);
+ assert.equal(h.sent[0].port,9138);
  assert.equal(h.operations.filter(x=>x.op==="CLAIM").length,1);
 });
