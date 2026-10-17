@@ -11,6 +11,9 @@ export const CRITICAL_QA_TABLES=[
   "public.pos_loyalty_entries","public.audit_events",
   "public.pos_print_station_status",
   "public.ops_local_migrations",
+  "public.financial_budgets",
+  "public.operational_inventory_balances",
+  "public.operational_inventory_movements",
 ];
 export function assessQaSnapshot({presentTables=[],expectedMigrations=[],appliedMigrations=[],
   organizations=[],stores=[],authUsers=0,orders=0,liveOrders=0}={}){
