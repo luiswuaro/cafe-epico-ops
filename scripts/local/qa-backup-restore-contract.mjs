@@ -176,8 +176,15 @@ async function main(){
    const age=proc("age",["--decrypt","--identity",keyPath,file]);
    const restore=proc("pg_restore",[
      "--clean","--if-exists","--no-owner","--no-acl","--exit-on-error",
-     "--dbname="+restoreUrl.href,
-   ],{stdio:["pipe","ignore","pipe"]});
+     "--dbname=ci_restore",
+   ],{stdio:["pipe","ignore","pipe"],env:{
+     ...process.env,
+     PGHOST:"127.0.0.1",
+     PGPORT:restoreUrl.port||"5432",
+     PGUSER:decodeURIComponent(restoreUrl.username),
+     PGPASSWORD:decodeURIComponent(restoreUrl.password),
+     PGDATABASE:"ci_restore",
+   }});
    const outcomes=await Promise.allSettled([
      age.finished,restore.finished,pipeline(age.child.stdout,restore.child.stdin),
    ]);
@@ -187,11 +194,11 @@ async function main(){
        (item.status==="fulfilled"?"OK":
          (item.reason?.name==="AbortError"?"TIMEOUT":
            (item.reason?.code||item.reason?.name||"ERROR"))));
-     const restoreError=restore.getDiagnostic().split(/\\r?\\n/)
+     const restoreError=restore.getDiagnostic().split(/\r?\n/)
        .find(line=>/^pg_restore: error:/.test(line.trim()));
      // CI usa datos sintéticos. No imprimir URLs ni parámetros de conexión.
      console.error("CI restauración: "+states.join(", ")+
-       (restoreError?"; "+restoreError.replace(/postgres(?:ql)?:\\/\\/[^\\s]+/ig,"[DB]").slice(0,140):""));
+       (restoreError?"; "+restoreError.replace(/postgres(?:ql)?:\/\/[^\s]+/ig,"[DB]").slice(0,140):""));
      throw Error("pg_restore no terminó correctamente.");
    }
    const secondary=postgres(restoreUrl.href,{max:1,prepare:false});
