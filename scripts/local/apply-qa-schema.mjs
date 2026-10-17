@@ -49,7 +49,7 @@ async function main(){
         continue;
       }
       await db.begin(async tx=>{
-        await tx.unsafe(f.content);
+        await tx.unsafe(f.content).simple();
         await tx`insert into public.ops_local_migrations(name,sha256)
           values(${f.name},${f.sha256})`;
       });
@@ -57,7 +57,7 @@ async function main(){
     }
     if(process.argv.includes("--seed-qa") && !applied.has(seedName)){
       await db.begin(async tx=>{
-        await tx.unsafe(seed);
+        await tx.unsafe(seed).simple();
         await tx`insert into public.ops_local_migrations(name,sha256)
           values(${seedName},${seedHash})`;
       });
