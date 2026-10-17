@@ -224,3 +224,23 @@ Caddy no está confiada por Node, configurar `OPS_LOCAL_CA_FILE` como ruta al
 certificado **público** raíz local; no usar `NODE_TLS_REJECT_UNAUTHORIZED=0`.
 Solo tras terminar estas pruebas estructurales comenzarán las pruebas con
 cobros y papel físicos. Este comando **no crea ventas**.
+
+## Estación Windows para QA local (sin cambiar producción)
+
+La estación actual de caja y puente de impresión utiliza
+`tools/print-bridge/Instalar-EstacionOPS.ps1`. Antes apuntaba
+obligatoriamente a Vercel. En esta rama acepta explícitamente el HTTPS
+privado de la PC, con validación para rechazar dominios arbitrarios.
+
+**Sólo en una PC de pruebas o durante un corte autorizado**, ejecutar:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\print-bridge\Instalar-EstacionOPS.ps1 -OpsUrl "https://IP_PRIVADA_PC:8443/pos"
+```
+
+La tarea de Windows conservará esa URL al reiniciar e intentará abrirla
+una vez al iniciar sesión. La impresora y los tokens no se modifican en la
+instalación de la estación. El navegador aún es una dependencia del
+procesamiento automático: esto NO implementa un worker de impresión
+independiente. Para pruebas QA no usar la PC que actualmente cobra en
+producción, porque esta tarea reemplaza la estación instalada de Windows.
