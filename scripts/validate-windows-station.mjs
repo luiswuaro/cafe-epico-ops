@@ -3,6 +3,14 @@ import fs from "node:fs";
 const installer=fs.readFileSync("tools/print-bridge/Instalar-EstacionOPS.ps1","utf8");
 const worker=fs.readFileSync("app/(employee)/pos/printer/print-station.tsx","utf8");
 assert.match(installer,/New-ScheduledTaskTrigger -AtLogOn/);
+assert.match(installer,/\[string\]\$OpsUrl=/,
+ "La estación acepta el origen HTTPS local explícito de QA");
+assert.match(installer,/\$isPrivate/,
+ "Rechazar estaciones externas no autorizadas");
+assert.match(installer,/\[regex\]::Escape\(\$url\)/,
+ "Detectar el navegador del origen OPS elegido, no sólo Vercel");
+assert.match(installer,/-OpsUrl /,
+ "La tarea de Windows debe conservar el origen local tras reiniciar");
 assert.match(installer,/\$selectedBrowser=ResolveBrowser \$Browser/);
 // PowerShell variable names are case-insensitive: $Browser and $browser are the SAME variable.
 // Assigning the returned hashtable to it causes ValidateSetFailure at installation.
