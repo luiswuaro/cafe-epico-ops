@@ -36,6 +36,10 @@ async function main(){
     const existing=await db`select name,sha256 from public.ops_local_migrations`;
     const applied=new Map(existing.map(x=>[x.name,x.sha256.trim()]));
     const seedName="qa-seed-v1";
+    const seed=qaSeed(readFileSync(join(root,"db/seed.sql"),"utf8"));
+    const seedHash=checksum(seed);
+    if (applied.has(seedName) && applied.get(seedName)!==seedHash)
+      fail("El seed QA ya aplicado cambió de contenido. Revisar antes de continuar.");
     if(applied.has(seedName) && files.some(f=>!applied.has(f.name)))
       fail("Seed QA ya existe pero hay migraciones sin aplicar. Revisar plan antes de continuar.");
     for (const f of files){
@@ -52,12 +56,10 @@ async function main(){
       console.log("Aplicada: "+f.name);
     }
     if(process.argv.includes("--seed-qa") && !applied.has(seedName)){
-      const seed=qaSeed(readFileSync(join(root,"db/seed.sql"),"utf8"));
-      const hash=checksum(seed);
       await db.begin(async tx=>{
         await tx.unsafe(seed);
         await tx`insert into public.ops_local_migrations(name,sha256)
-          values(${seedName},${hash})`;
+          values(${seedName},${seedHash})`;
       });
       console.log("Aplicado seed sintético QA; no se insertaron ventas de producción.");
     }
