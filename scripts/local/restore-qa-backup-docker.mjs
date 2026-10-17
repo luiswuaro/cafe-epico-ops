@@ -145,6 +145,28 @@ async function verifyArchive(){
  assert(audit.includes("PASS: SHA-256"),"Inspector no aprobó el respaldo.");
  return {file,identity};
 }
+// Sólo tras verificar imagen, volumen, red, origen, archivo íntegro y base vacía.
+// PostgreSQL 17 crea el esquema public incluso con TEMPLATE template0.
+// El dump contiene CREATE SCHEMA public, que fallaría con 42P06 si ya existe.
+// RESTRICT prohíbe eliminar objetos dependientes; jamás usar CASCADE.
+async function prepareDefaultPublicSchema(){
+ const found=await query(TARGET,DATABASE,
+  "select count(*)::int from pg_namespace where nspname='public'");
+ assert(found==="0"||found==="1","Esquema public ambiguo: detener.");
+ if(found==="0"){
+   console.log("QA RESTORE: public ya está ausente; esquema lo creará pg_restore.");
+   return;
+ }
+ const publicObjects=await query(TARGET,DATABASE,
+  "select (select count(*) from pg_class where relnamespace='public'::regnamespace) + "+
+  "(select count(*) from pg_proc where pronamespace='public'::regnamespace) + "+
+  "(select count(*) from pg_type where typnamespace='public'::regnamespace)");
+ assert.equal(publicObjects,"0","public no está vacío: detener sin modificar.");
+ await query(TARGET,DATABASE,"DROP SCHEMA public RESTRICT");
+ assert.equal(await query(TARGET,DATABASE,
+  "select count(*)::int from pg_namespace where nspname='public'"),"0");
+ console.log("QA RESTORE: public predeterminado vacío retirado sólo en "+DATABASE+".");
+}
 async function restore(archive){
  const age=run("age",["--decrypt","--identity",archive.identity,archive.file],{capture:false});
  // La base destino YA fue comprobada vacía: --clean provocaba DROP de
@@ -169,6 +191,14 @@ async function main(){
  const archive=await verifyArchive();
  const original=JSON.parse(await query(SOURCE,"postgres",snapshotSQL));
  console.log("PASS: destino aislado, origen QA y respaldo íntegro.");
+ // Exigir explícitamente los CREATE SCHEMA del archivo antes de quitar public.
+ const archiveToc=await cmd(process.execPath,
+  ["scripts/local/inspect-ops-local-backup.mjs","--show-schemas"]);
+ for(const name of ["public","auth","storage"]){
+   assert(archiveToc.includes("schema="+name+"; CREATE_SCHEMA=SI"),
+     "El respaldo no creará el esquema "+name+". Bloqueado.");
+ }
+ await prepareDefaultPublicSchema();
  console.log("QA RESTORE: restaurando en "+DATABASE+"...");
  await restore(archive);
  console.log("QA RESTORE: comparando saldos y conteos...");
