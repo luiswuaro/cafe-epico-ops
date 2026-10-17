@@ -121,3 +121,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\local\install-prin
   manual para reimpresión.
 - Verificar descuentos, cuentas divididas, notas, acentos, barra separada,
   puntos y recibos fiscales no-CFDI.
+
+El tiempo de separación de papel es configurable con `OPS_LOCAL_PRINT_GAP_SECONDS`
+(0–30 segundos). Para la POS-58 sin guillotina se mantiene 12 segundos
+hasta medir el flujo real; con autocorte puede utilizarse 0.
