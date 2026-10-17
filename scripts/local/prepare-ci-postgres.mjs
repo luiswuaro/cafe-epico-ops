@@ -21,6 +21,7 @@ async function main(){
     if(check.name!=="postgres"||check.existing)
       throw Error("El contenedor CI no está vacío: ejecución detenida.");
     await db.unsafe("create schema if not exists auth");
+    await db.unsafe("create schema if not exists storage");
     await db.unsafe(`create table auth.users (
       id uuid primary key default gen_random_uuid()
     )`);
