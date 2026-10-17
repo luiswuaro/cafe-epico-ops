@@ -62,6 +62,7 @@ export function AppNavClient({canAdmin,canPos,canCash,enableClosingQa=false}:{
       ...(canPos?[entry("Punto de venta","/pos","pos"),entry("Comandas y mesas","/pos/orders","orders")]:[]),
       ...(canCash?[entry("Caja","/pos/cash","cash")]:[]),
       entry("Checklist","/checklists","tasks"),entry("Entrega de turno","/handoff","handoff"),
+      ...(enableClosingQa?[entry("Cierre QA","/closing","tasks")]:[]),
     ]},
     {title:"Control",items:[
       entry("Inventario","/inventory","inventory"),
