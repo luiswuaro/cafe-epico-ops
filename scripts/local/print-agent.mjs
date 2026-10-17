@@ -74,8 +74,12 @@ async function main(){
      !env.OPS_LOCAL_KITCHEN_PRINTER_TOKEN.includes("REEMPLAZAR")
        ?env.OPS_LOCAL_KITCHEN_PRINTER_TOKEN:ticketToken;
    const ticketPort=Number(env.OPS_LOCAL_TICKET_PRINTER_PORT||9137);
-   const kitchenPort=kitchenToken===ticketToken?ticketPort:
-     Number(env.OPS_LOCAL_KITCHEN_PRINTER_PORT||9138);
+   // Una impresora secundaria puede compartir token con la principal.
+   // El puerto elegido, no la igualdad del token, decide el destino.
+   const separatePort=env.OPS_LOCAL_KITCHEN_PRINTER_PORT;
+   const kitchenPort=separatePort
+     ?Number(separatePort)
+     :(kitchenToken===ticketToken?ticketPort:9138);
    if(![ticketPort,kitchenPort].every(n=>Number.isInteger(n)&&n>=1024&&n<=65535))
      throw Error("Puertos de impresora inválidos.");
    const availability=new Map();
