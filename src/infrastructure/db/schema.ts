@@ -1247,6 +1247,14 @@ export const posPayments = pgTable("pos_payments", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   index("pos_payments_order_idx").on(t.orderId),
+  // Permitir POINTS + pago real en la misma cuenta, pero impedir que dos
+  // dispositivos dupliquen cada componente del cobro dividido.
+  uniqueIndex("pos_payments_split_points_once_uidx").on(t.splitId)
+    .where(sql`${t.splitId} IS NOT NULL AND ${t.method} = 'POINTS'`),
+  uniqueIndex("pos_payments_split_monetary_once_uidx").on(t.splitId)
+    .where(sql`${t.splitId} IS NOT NULL AND ${t.method} <> 'POINTS'`),
+  index("pos_payments_split_lookup_idx").on(t.splitId)
+    .where(sql`${t.splitId} IS NOT NULL`),
 ]);
 
 
