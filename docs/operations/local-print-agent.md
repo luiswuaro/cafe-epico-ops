@@ -96,14 +96,18 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\local\install-prin
 
 ## Limitaciones antes de producción
 
-- Esta primera versión imprime mediante **texto ESC/POS**, no Canvas raster.
-  Conserva folios, notas, modos de servicio, importes, método de cobro, cliente
-  y puntos, pero NO imprime el logo o el mismo diseño gráfico de tickets.
-  Es una diferencia funcional que deberá resolver o aprobarse expresamente.
+- Esta primera versión imprime mediante **texto ESC/POS** y **logo raster**
+  opcional guardado en OPS, ambos en el mismo trabajo de Windows. Conserva
+  folios, notas, modos de servicio, importes, método de cobro, cliente y
+  puntos, pero el cuerpo del ticket todavía NO tiene el diseño raster
+  completo de la versión de navegador. Es una diferencia visual que deberá
+  resolverse o aprobarse expresamente.
 - La tarea requiere sesión Windows iniciada; todavía no es servicio NT
   independiente de inicio de sesión.
 - El token de agente está asociado a un empleado QA. Se debe diseñar una
   cuenta de dispositivo con RBAC más restringido antes de producción.
+- El puente 1.3.0 acepta los campos `lines` y `logo` en el mismo trabajo.
+  Las pruebas de flujo simulan los acuses del puente, no la salida física.
 - No existe prueba física con POS-58 ni prueba de corte de luz/WAN.
 - Si se usa una sola impresora sin cortador, aplica una pausa de 12 segundos
   entre documentos; medir para optimizar.
