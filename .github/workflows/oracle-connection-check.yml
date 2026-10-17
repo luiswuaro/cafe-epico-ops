@@ -1,0 +1,79 @@
+name: Oracle Cloud - prueba de conexión SOLO LECTURA
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cafe-epico-oci-readonly-connection
+  cancel-in-progress: false
+
+jobs:
+  inspect-oracle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      OCI_TENANCY_OCID: ${{ secrets.OCI_TENANCY_OCID }}
+      OCI_USER_OCID: ${{ secrets.OCI_USER_OCID }}
+      OCI_FINGERPRINT: ${{ secrets.OCI_KEY_FINGERPRINT }}
+      OCI_REGION: ${{ secrets.OCI_REGION }}
+      TF_VAR_tenancy_ocid: ${{ secrets.OCI_TENANCY_OCID }}
+    steps:
+      - name: Descargar configuración auditada
+        uses: actions/checkout@v4
+
+      - name: Comprobar autorización sin imprimir secretos
+        env:
+          OCI_API_PRIVATE_KEY: ${{ secrets.OCI_API_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in OCI_TENANCY_OCID OCI_USER_OCID OCI_FINGERPRINT OCI_REGION OCI_API_PRIVATE_KEY; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "::error::Falta configuración de conexión OCI en GitHub Secrets"
+              exit 1
+            fi
+          done
+          key_path="$RUNNER_TEMP/oci_readonly_api_key.pem"
+          (umask 077; printf '%s\n' "$OCI_API_PRIVATE_KEY" > "$key_path")
+          echo "OCI_PRIVATE_KEY_PATH=$key_path" >> "$GITHUB_ENV"
+
+      - name: Instalar Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+          terraform_wrapper: false
+
+      - name: Validar configuración local (sin conexión remota)
+        run: |
+          set -euo pipefail
+          terraform -chdir=infra/oracle/probe init -backend=false -input=false -no-color
+          terraform -chdir=infra/oracle/probe validate -no-color
+
+      - name: Consultar la cuenta (lectura, nunca APPLY)
+        run: |
+          set -euo pipefail
+          terraform -chdir=infra/oracle/probe plan \
+            -input=false -lock=false -refresh=true -no-color \
+            -out="$RUNNER_TEMP/oci-readonly.tfplan" > "$RUNNER_TEMP/oci-plan.log"
+          terraform show -json "$RUNNER_TEMP/oci-readonly.tfplan" > "$RUNNER_TEMP/oci-plan.json"
+          python3 - "$RUNNER_TEMP/oci-plan.json" <<'PY'
+          import json,sys
+          with open(sys.argv[1],encoding="utf-8") as handle:
+              plan=json.load(handle)
+          changes=plan.get("resource_changes") or []
+          writes=[
+              change for change in changes
+              if change.get("mode")=="managed" and
+                 (change.get("change") or {}).get("actions")!=["no-op"]
+          ]
+          if writes:
+              raise SystemExit("ERROR: La prueba contiene cambios de recursos administrados; abortado")
+          outputs=(plan.get("planned_values") or {}).get("outputs") or {}
+          count=(outputs.get("availability_domain_count") or {}).get("value")
+          if not isinstance(count,int) or count<1:
+              raise SystemExit("ERROR: Oracle no devolvió dominios de disponibilidad")
+          print(f"OCI READ-ONLY PASS: autenticación válida, {count} dominio(s) disponible(s), 0 recursos creados.")
+          PY
