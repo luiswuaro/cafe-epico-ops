@@ -9,7 +9,7 @@ import {createReadStream,createWriteStream,existsSync} from "node:fs";
 import {mkdir,rename,rm,realpath,stat,writeFile} from "node:fs/promises";
 import {pipeline} from "node:stream/promises";
 import {createHash,randomUUID} from "node:crypto";
-import {dirname,join,resolve,sep} from "node:path";
+import {join,resolve,sep} from "node:path";
 import {fileURLToPath} from "node:url";
 import {assessLocalBackup} from "./local-backup-policy.mjs";
 
