@@ -16,6 +16,11 @@ https://{$OPS_LAN_HOST}:8443 {
         reverse_proxy 127.0.0.1:8000
     }
 
+    # El agente corre en la misma PC. Nunca admitir este endpoint desde móviles.
+    handle /api/local-print-agent* {
+        respond "Forbidden" 403
+    }
+
     handle {
         reverse_proxy 127.0.0.1:3000
     }
