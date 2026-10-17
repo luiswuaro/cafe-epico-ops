@@ -27,7 +27,7 @@ const allocationSchema = z.array(
   }),
 );
 
-const paymentSchema = z.enum(["CASH", "CARD", "TRANSFER"]);
+const paymentSchema = z.enum(["CASH", "CARD", "TRANSFER", "POINTS"]);
 
 async function saveOrderSplitUnsafe(formData: FormData) {
   assertNoPreviewMutation();
@@ -232,6 +232,11 @@ async function payOrderSplitUnsafe(formData: FormData) {
   const paymentMethod = paymentSchema.parse(
     String(formData.get("paymentMethod") ?? ""),
   );
+  const pointsRaw=String(formData.get("redeemPoints")??"0").trim()||"0";
+  const redeemPoints=Number(pointsRaw);
+  if(!Number.isFinite(redeemPoints)||redeemPoints<0||
+     !/^(?:\\d+)(?:\\.\\d{0,2})?$/.test(pointsRaw))
+    throw new Error("Cantidad de puntos inválida.");
   const db = getDb();
 
   const [split] = await db
@@ -283,11 +288,14 @@ async function payOrderSplitUnsafe(formData: FormData) {
       existingOrderId:order.id,existingSplitId:split.id,clientOrderId:order.clientOrderId,
       cart,serviceMode:order.serviceMode as "DINE_IN"|"TAKEAWAY",
       paymentMethod,tenderedAmount:paymentMethod==="CASH"?(tenderedRaw===""?null:Number(tenderedRaw)):null,
-      customerId,tableLabel:order.tableLabel,note:order.note,
+      customerId,redeemPoints,tableLabel:order.tableLabel,note:order.note,
     });
     return "/pos/receipt/"+result.id+"?split="+split.id;
   }
 
+
+  if(paymentMethod==="POINTS"||redeemPoints!==0)
+    throw new Error("Los canjes de puntos sólo están disponibles en el POS LIVE.");
 
   const cashSession =
     paymentMethod === "CASH"
