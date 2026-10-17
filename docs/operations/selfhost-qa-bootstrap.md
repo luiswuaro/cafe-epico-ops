@@ -169,7 +169,12 @@ La plantilla `infra/local/Caddyfile.example` enruta por la **misma** URL TLS:
    ```
 2. Confiar en la CA local pública de Caddy en los dispositivos propios (jamás
    copiar la clave privada de la CA). No usar HTTP para cobros en el hotel.
-3. Iniciar Next.js con `scripts/local/start-qa.ps1`.
+3. Iniciar Next.js con `scripts/local/start-qa.ps1`. Antes, configurar
+   `OPS_LOCAL_CA_FILE` en `.env.local` con la ruta del certificado público
+   raíz `root.crt` que generó Caddy. El script carga esa CA mediante
+   `NODE_EXTRA_CA_CERTS`, sin desactivar la verificación TLS. Iniciar Caddy
+   al menos una vez para generar el certificado y asegurarse de que la
+   CA pública esté confiada en el sistema y terminales propias.
 4. Exponer en el firewall solo el puerto HTTPS seleccionado hacia equipos
    permitidos de la LAN. Si el Wi-Fi del hotel aísla clientes, disponer de una
    red privada administrada por la cafetería.
