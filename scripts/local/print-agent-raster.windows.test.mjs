@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {test} from "node:test";
+import {printAgentRasterPayload,closePrintAgentRaster} from "./print-agent-raster.mjs";
 import {spawnSync} from "node:child_process";
 import {resolve} from "node:path";
 import {fileURLToPath} from "node:url";
@@ -80,4 +81,26 @@ test("GDI persistente procesa dos tickets en un mismo proceso Windows",()=>{
      48*response.raster.height);
  }
  console.log("GDI stream 2 tickets ms:",Math.round(performance.now()-started));
+});
+
+test("cliente Node usa el renderizador Windows persistente en paralelo y lo cierra",async()=>{
+ const fixture={kind:"KITCHEN",slip:{
+   folio:"QA-RASTER-001",table:"MESA QA",
+   lines:[{quantity:1,name:"Café español",note:"Piña sin azúcar",
+     serviceMode:"TAKEAWAY"}],
+ }};
+ try{
+   const [one,two]=await Promise.all([
+     printAgentRasterPayload(fixture,{}),
+     printAgentRasterPayload(fixture,{}),
+   ]);
+   for(const result of [one,two]){
+     assert.equal(result.raster.width,384);
+     assert.equal(Buffer.from(result.raster.dataBase64,"base64").length,
+       48*result.raster.height);
+     assert.equal(result.cut,false);
+   }
+ } finally {
+   closePrintAgentRaster();
+ }
 });
