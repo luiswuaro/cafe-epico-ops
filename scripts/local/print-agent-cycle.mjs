@@ -8,7 +8,7 @@ import {printAgentPayload} from "./print-agent-format.mjs";
  */
 export async function runPrintJobs({
  jobs,template,stationId,printer,availability,api,bridge,sleep,
- now=()=>Date.now(),cutGap=12,log=()=>{},
+ now=()=>Date.now(),cutGap=12,log=()=>{},format=printAgentPayload,
 }){
  if(!Array.isArray(jobs))throw Error("Invalid print feed.");
  const statuses=[];
@@ -30,7 +30,7 @@ export async function runPrintJobs({
    }
    // Render BEFORE obtaining a claim. Malformed jobs do not consume an
    // immutable printing lease, so they can be reviewed without losing paper.
-   const payload=printAgentPayload(job,template);
+   const payload=await format(job,template);
    const claim=await api("CLAIM",{jobKey:job.key,stationId});
    if(claim?.claimed!==true){
      statuses.push({key:job.key,status:"ALREADY_CLAIMED"});
