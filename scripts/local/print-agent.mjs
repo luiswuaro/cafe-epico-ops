@@ -14,6 +14,8 @@ function guard(){
  if(!env.OPS_LOCAL_PRINT_AGENT_TOKEN||env.OPS_LOCAL_PRINT_AGENT_TOKEN.length<32||
     env.OPS_LOCAL_PRINT_AGENT_TOKEN.includes("REEMPLAZAR"))
    throw Error("Falta token local del agente (32+ caracteres).");
+ if(!/^[0-9a-f-]{36}$/i.test(env.OPS_LOCAL_PRINT_AGENT_USER_ID??""))
+   throw Error("Falta UUID del usuario Auth exclusivo del agente QA.");
  if(!env.OPS_LOCAL_TICKET_PRINTER_TOKEN||
     env.OPS_LOCAL_TICKET_PRINTER_TOKEN.includes("REEMPLAZAR"))
    throw Error("Falta token local de la impresora.");
