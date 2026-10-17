@@ -48,6 +48,21 @@ async function main(){
        from public.pos_orders`,
    ]);
    const expected=migrationPlan(join(root,"db/migrations")).map(({name,sha256})=>({name,sha256}));
+   const snapshots=await db`
+     select jsonb_array_length(items) as items_count,
+       jsonb_array_length(variants) as variants_count,
+       jsonb_array_length(categories) as categories_count
+     from public.ops_catalog_archive_snapshots
+     where organization_id=${org[0]?.id ?? "00000000-0000-0000-0000-000000000000"}
+   `;
+   assert(snapshots.length===1,
+     "Falta la copia del catálogo QA; ejecutar repair-qa-catalog-snapshot.mjs.");
+   const [catalogCount]=await db`
+     select count(*)::int as total from public.pos_manual_products
+     where organization_id=${org[0].id} and is_active=true
+   `;
+   if(snapshots[0].items_count===0 && catalogCount.total===0)
+     console.log("PENDIENTE: catálogo QA estructural vacío; aún no hay menú utilizable.");
    const result=assessQaSnapshot({
      presentTables:present.map(x=>"public."+x.tablename),
      expectedMigrations:expected,appliedMigrations:migrations,
