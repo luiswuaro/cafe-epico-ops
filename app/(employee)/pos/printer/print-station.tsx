@@ -8,6 +8,7 @@ import {acknowledgeKitchenPrint} from "../orders/print-timing-actions";
 import {printReceiptWithBridge,type DirectReceiptTemplate} from "../receipt/[id]/direct-print-button";
 const STORAGE="cafe-epico-print-hub-pc-v1";
 const TICKET_CONFIG="cafe-epico-printer-bridge-v1";
+const HEADLESS_AGENT=process.env.NEXT_PUBLIC_OPS_LOCAL_PRINT_AGENT_ENABLED==="true";
 type HubState={enabled:boolean;since:string;stationId:string};
 /** Comprueba el puente físico antes de reportar la estación como saludable. */
 async function printerBridgeReady():Promise<boolean>{
@@ -50,7 +51,7 @@ export function PrintStation({template,preview,hiddenMode=false}:{
   window.dispatchEvent(new Event("ops-print-hub-config-changed"));
  };
  function start(){
-  if(preview)return;
+  if(preview||HEADLESS_AGENT)return;
   if(!window.localStorage.getItem(TICKET_CONFIG)){
     setStatus("Configura primero la impresora de tickets y verifica el puente local.");
     return;
@@ -68,7 +69,7 @@ export function PrintStation({template,preview,hiddenMode=false}:{
   setStatus("Estación pausada. Las siguientes impresiones quedarán pendientes.");
  }
  useEffect(()=>{
-  if(!state?.enabled||preview||!hiddenMode)return;
+  if(!state?.enabled||preview||!hiddenMode||HEADLESS_AGENT)return;
   let alive=true;
   // Una reactivación/cambio de estación fuerza una lectura completa inicial.
   lastFeedVersion.current=null;
@@ -176,7 +177,7 @@ export function PrintStation({template,preview,hiddenMode=false}:{
     document.removeEventListener("visibilitychange",wake);
   };
  },[state?.enabled,state?.since,state?.stationId,preview,template,hiddenMode]);
- const enabled=Boolean(state?.enabled)&&!preview;
+ const enabled=Boolean(state?.enabled)&&!preview&&!HEADLESS_AGENT;
  if(hiddenMode)return null;
  return <section className="card stack pos-print-station">
    <div className="section-heading"><div>
@@ -184,6 +185,7 @@ export function PrintStation({template,preview,hiddenMode=false}:{
     <h2>Imprimir pedidos enviados desde el celular</h2></div>
     <span className={enabled?"status-ok":"muted"}>{enabled?"ACTIVA":"APAGADA"}</span>
    </div>
+   {HEADLESS_AGENT&&<p className="status-ok" role="status">Agente local independiente del navegador configurado. La impresión automática de esta pestaña está deshabilitada. Comprueba que la tarea Windows QA esté en ejecución.</p>}
    <p>Esta computadora recibe las comandas y los tickets enviados desde celular o PC.
     Puedes regresar al POS, tueste o finanzas: la estación funciona en segundo plano
     mientras OPS permanezca abierto en este equipo.</p>
@@ -203,9 +205,9 @@ export function PrintStation({template,preview,hiddenMode=false}:{
     </small>
    </div>
    <div className="pos-result-actions">
-    <button type="button" onClick={start} disabled={enabled||preview}>
+    <button type="button" onClick={start} disabled={enabled||preview||HEADLESS_AGENT}>
      Activar estación de caja</button>
-    <button type="button" className="button" onClick={stop} disabled={!enabled}>
+    <button type="button" className="button" onClick={stop} disabled={!enabled||HEADLESS_AGENT}>
      Pausar estación</button>
    </div>
    {preview&&<p className="status-warn">Preview de solo lectura: la estación real se
