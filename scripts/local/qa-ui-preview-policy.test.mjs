@@ -48,6 +48,8 @@ test("local QA branches never request Vercel Git deployments",()=>{
 
 test("UI is responsive and has no external CSS, image or font fetch",()=>{
  assert.match(css,/@media\(max-width:850px\)/);
+ assert.match(css,/\.ops-preview-products button\{color:#191816!important/);
+ assert.match(css,/\.ops-preview button:disabled\{opacity:1/);
  assert.match(css,/@media\(max-width:620px\)/);
  assert.doesNotMatch(css,/@import|url\s*\(/i);
  assert.match(client,/aria-label="Buscar producto"/);
