@@ -11,7 +11,8 @@ $files = @(
   'scripts/local/install-print-agent.ps1',
   'scripts/local/Render-PrintTicketRaster.ps1',
   'scripts/local/launch-qa.ps1',
-  'scripts/local/check-qa-printer.ps1'
+  'scripts/local/check-qa-printer.ps1',
+  'scripts/local/repair-qa-transaction-port.ps1'
 )
 foreach($file in $files){
   $tokens = $null
