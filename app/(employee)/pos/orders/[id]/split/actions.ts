@@ -235,7 +235,7 @@ async function payOrderSplitUnsafe(formData: FormData) {
   const pointsRaw=String(formData.get("redeemPoints")??"0").trim()||"0";
   const redeemPoints=Number(pointsRaw);
   if(!Number.isFinite(redeemPoints)||redeemPoints<0||
-     !/^(?:\\d+)(?:\\.\\d{0,2})?$/.test(pointsRaw))
+     !/^(?:\d+)(?:\.\d{0,2})?$/.test(pointsRaw))
     throw new Error("Cantidad de puntos inválida.");
   const db = getDb();
 
