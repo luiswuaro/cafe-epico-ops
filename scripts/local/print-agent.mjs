@@ -50,6 +50,9 @@ const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function main(){
  guard();
  const stationId=randomUUID();
+ const cutGap=Number(env.OPS_LOCAL_PRINT_GAP_SECONDS??12);
+ if(!Number.isInteger(cutGap)||cutGap<0||cutGap>30)
+   throw Error("OPS_LOCAL_PRINT_GAP_SECONDS debe ser entero de 0 a 30.");
  const since=new Date().toISOString(); // No reimprime trabajos anteriores al arranque.
  let lastVersion="";
  let lastHeartbeat=0;
@@ -112,7 +115,7 @@ async function main(){
          }
        }
        console.log("Enviada: "+job.kind+" "+job.key.slice(0,22));
-       await sleep(12000); // POS-58: tiempo para separar el papel sin guillotina.
+       if(cutGap)await sleep(cutGap*1000); // Pausa física POS-58 configurable.
      }catch{
        // El spooler puede haber aceptado el trabajo antes del timeout. Nunca
        // reenviar automáticamente. Si FINISH falla, CLAIM persiste sin reintento.
