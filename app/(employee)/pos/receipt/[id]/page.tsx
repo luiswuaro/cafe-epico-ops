@@ -221,6 +221,13 @@ export default async function ReceiptPage({
     ?money.format(cashPayments.reduce((cents,payment)=>
       cents+Math.round(Number(payment.changeAmount)*100),0)/100)
     :null;
+  const [splitCustomer]=split?.customerId
+    ?await db.select({name:posCustomers.name,pointsBalance:posCustomers.pointsBalance})
+      .from(posCustomers).where(and(
+        eq(posCustomers.id,split.customerId),
+        eq(posCustomers.organizationId,employee.organizationId),
+      )).limit(1)
+    :[];
   const loyalty=await db.select({
     customerId:posLoyaltyEntries.customerId,
     name:posCustomers.name,
@@ -238,7 +245,12 @@ export default async function ReceiptPage({
     fallbackCustomer:order.customerName,fallbackBalance:order.customerPoints,
     cancelled:order.order.status==="CANCELLED",
   });
-  const {customer:receiptCustomer,pointsEarned,pointsBalance}=loyaltyView;
+  const {customer:creditedCustomer,pointsEarned,pointsBalance:creditedBalance}=loyaltyView;
+  // Para una cuenta pagada la identidad fiable es la FK del split. Funciona
+  // incluso si el pago fue 100 % con puntos y no hubo EARN.
+  const receiptCustomer=splitCustomer?.name??creditedCustomer;
+  const pointsBalance=splitCustomer
+    ?Number(splitCustomer.pointsBalance).toFixed(2):creditedBalance;
 
   const extraEvents=order.order.mode==="LIVE"&&order.order.status==="PAID"&&!split
     ?await db.select({data:auditEvents.afterData}).from(auditEvents).where(and(
