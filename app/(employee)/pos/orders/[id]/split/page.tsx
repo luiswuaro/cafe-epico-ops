@@ -144,18 +144,9 @@ export default async function SplitOrderPage({
                     total={Number(split.total)}
                     cashOpen={Boolean(cash.session)}
                     live={state.order.mode==="LIVE"}
+                    customers={customers}
+                    defaultCustomerId={state.order.customerId}
                   />
-                  {state.order.mode==="LIVE" && <>
-                    <label>Cliente que recibe los puntos (5%)
-                      <select name="customerId" defaultValue={state.order.customerId??""}>
-                        <option value="">Sin cliente · no acreditar puntos</option>
-                        {customers.map(customer=><option key={customer.id} value={customer.id}>
-                          {customer.name} · {Number(customer.pointsBalance).toFixed(2)} pts
-                        </option>)}
-                      </select>
-                    </label>
-
-                  </>}
                   <button type="submit">
                     Cobrar {money.format(Number(split.total))}
                   </button>
