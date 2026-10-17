@@ -17,7 +17,18 @@ export async function POST(request:NextRequest){
  // Sólo el proceso Node de la PC, nunca Cloud/Vercel. Nada de mutaciones LIVE
  // en el piloto. Desplegar en producción requiere autorización posterior.
  if(process.env.OPS_LOCAL_FIRST!=="true"||process.env.OPS_QA_MODE!=="true"||
+    process.env.POS_LIVE_ENABLED==="true"||
+    process.env.DEFAULT_ORGANIZATION_SLUG!=="cafe-epico-qa"||
+    process.env.DEFAULT_STORE_CODE!=="QA-TEPEXI"||
     process.env.VERCEL||process.env.VERCEL_ENV)return denied();
+ // La validación de identidad QA no basta si alguien apunta la URL de DB
+ // por error a Supabase comercial. Fail closed ANTES de consultar cualquier
+ // tabla, incluso si el token es correcto.
+ let dbUrl:URL;
+ try{dbUrl=new URL(process.env.DATABASE_URL??"");}catch{return denied();}
+ if(!["postgres:","postgresql:"].includes(dbUrl.protocol)||
+    !["127.0.0.1","localhost","[::1]"].includes(dbUrl.hostname))
+    return denied();
  const host=request.headers.get("host")??"";
  if(!/^((127\.0\.0\.1)|(localhost)):3000$/i.test(host) ||
     request.headers.has("origin"))return denied();
