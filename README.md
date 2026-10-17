@@ -60,6 +60,8 @@ como requisito para cobrar por LAN.
    y seed sintético de prueba.
 4. `scripts/local/start-qa.ps1`: arranca Next.js QA en loopback.
 5. `scripts/local/start-qa-gateway.ps1`: valida la IP local e inicia Caddy HTTPS.
+   Para Next.js debe configurarse `OPS_LOCAL_CA_FILE` con la CA pública
+   `root.crt`; la verificación TLS se conserva habilitada.
 6. `scripts/local/qa-smoke.mjs`: auditoría de DB/HTTPS de solo lectura.
 
 **Instalación completa:**
