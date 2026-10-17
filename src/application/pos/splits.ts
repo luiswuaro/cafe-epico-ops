@@ -60,11 +60,17 @@ export async function getOrderSplitState(
   return {
     order,
     lines,
-    splits: splits.map((split) => ({
-      ...split,
-      lines: splitLines.filter((line) => line.splitId === split.id),
-      payment:
-        payments.find((payment) => payment.splitId === split.id) ?? null,
-    })),
+    splits: splits.map((split) => {
+      const splitPayments=payments.filter(payment=>payment.splitId===split.id);
+      return {
+        ...split,
+        lines:splitLines.filter(line=>line.splitId===split.id),
+        // Un split puede tener un canje POINTS y un pago monetario.
+        // Conservar ambos: no ocultar el segundo por usar Array.find().
+        payments:splitPayments,
+        payment:splitPayments.find(payment=>payment.method!=="POINTS")
+          ??splitPayments[0]??null,
+      };
+    }),
   };
 }

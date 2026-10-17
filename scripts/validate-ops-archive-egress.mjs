@@ -44,10 +44,12 @@ assert.match(files.employee,/claims\.role\s*!==\s*"authenticated"/,
  "Los JWT sin rol autenticado no deben permitir acceso");
 assert.match(files.employee,/eq\(employees\.isActive, true\)/,
  "La revocación de acceso al personal debe seguir consultándose en PostgreSQL");
-assert.match(files.client,/max: 2/,
- "Hasta dos conexiones simultáneas por instancia, no una conexión por consulta");
-assert.match(files.client,/idle_timeout: 90/,
- "Reutilizar conexiones entre polls cortos sin mantenerlas permanentemente");
+assert.match(files.client,/process\.env\.OPS_LOCAL_FIRST==="true"/,
+ "El pool local requiere activación explícita y no cambia Vercel");
+assert.match(files.client,/max:\s*localServer\s*\?\s*8\s*:\s*2/,
+ "Cloud debe conservar máximo dos conexiones; la PC local puede usar ocho");
+assert.match(files.client,/idle_timeout:\s*localServer\s*\?\s*30\s*:\s*90/,
+ "Cloud conserva reutilización de conexiones y local cierra las inactivas");
 assert.match(files.client,/prepare: false/,
  "El pooler de transacciones exige evitar sentencias preparadas");
 assert.match(files.board,/document\.visibilityState==="visible"/);

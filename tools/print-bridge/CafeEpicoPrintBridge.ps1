@@ -198,7 +198,7 @@ Write-Host ""
 Write-Host "Cafe Epico Print Bridge" -ForegroundColor Cyan
 Write-Host "Impresora: $PrinterName"
 Write-Host "URL local : http://127.0.0.1:$Port"
-Write-Host "Token     : $Token" -ForegroundColor Yellow
+Write-Host "Token     : [OCULTO; se configura de forma privada]" -ForegroundColor Yellow
 Write-Host ""
 
 try {
