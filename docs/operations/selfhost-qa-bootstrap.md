@@ -71,6 +71,7 @@ Editar ese **único archivo local**:
 
 ```dotenv
 COMPOSE_FILE=docker-compose.yml
+POOLER_TENANT_ID=cafe-epico-qa
 SUPABASE_PUBLIC_URL=https://IP_PRIVADA_PC:8443
 API_EXTERNAL_URL=https://IP_PRIVADA_PC:8443/auth/v1
 SITE_URL=https://IP_PRIVADA_PC:8443
