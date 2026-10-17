@@ -11,6 +11,8 @@ function guard(){
  if(env.OPS_LOCAL_FIRST!=="true"||env.OPS_QA_MODE!=="true"||
     env.POS_LIVE_ENABLED==="true"||env.VERCEL||env.VERCEL_ENV)
    throw Error("El agente sólo se permite en OPS local QA.");
+ if(env.NEXT_PUBLIC_OPS_LOCAL_PRINT_AGENT_ENABLED!=="true")
+   throw Error("Debes habilitar explícitamente el modo de agente sin navegador.");
  if(!env.OPS_LOCAL_PRINT_AGENT_TOKEN||env.OPS_LOCAL_PRINT_AGENT_TOKEN.length<32||
     env.OPS_LOCAL_PRINT_AGENT_TOKEN.includes("REEMPLAZAR"))
    throw Error("Falta token local del agente (32+ caracteres).");
