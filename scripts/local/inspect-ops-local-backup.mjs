@@ -7,7 +7,7 @@ import {spawn} from "node:child_process";
 import {createHash} from "node:crypto";
 import {createReadStream} from "node:fs";
 import {readFile} from "node:fs/promises";
-import {pipeline} from "node:stream/promises";
+
 import {resolve} from "node:path";
 
 function finished(process){
@@ -47,13 +47,52 @@ async function inspect(){
  restore.stdout.on("data",chunk=>{
    if(toc.length<2_000_000)toc+=chunk;
  });
- const [ageCode,restoreCode,pipe]=await Promise.allSettled([
-   finished(age),finished(restore),pipeline(age.stdout,restore.stdin),
+ // pg_restore --list necesita leer el índice, pero puede cerrar stdin
+ // ANTES de consumir el archivo completo. No es un error de integridad.
+ // Debemos seguir drenando TODO age.stdout hasta EOF para comprobar el tag
+ // de autenticación del respaldo cifrado; jamás escribimos texto plano.
+ let writerOpen=true;
+ let writerError=null;
+ restore.stdin.on("error",error=>{
+   if(error?.code!=="EPIPE"&&error?.code!=="ERR_STREAM_DESTROYED")
+     writerError=error;
+   writerOpen=false;
+ });
+ restore.stdin.on("close",()=>{writerOpen=false});
+ async function consumeEntireArchive(){
+   for await (const block of age.stdout){
+     if(!writerOpen)continue;
+     try{
+       if(!restore.stdin.write(block)){
+         await new Promise(resolveDone=>{
+           const done=()=>{
+             restore.stdin.off("drain",done);
+             restore.stdin.off("close",done);
+             resolveDone();
+           };
+           restore.stdin.once("drain",done);
+           restore.stdin.once("close",done);
+           if(!writerOpen)done();
+         });
+       }
+     }catch(error){
+       if(error?.code!=="EPIPE"&&error?.code!=="ERR_STREAM_DESTROYED")
+         writerError=error;
+       writerOpen=false;
+     }
+   }
+   if(writerOpen)restore.stdin.end();
+ }
+ const [ageCode,restoreCode,drained]=await Promise.allSettled([
+   finished(age),finished(restore),consumeEntireArchive(),
  ]);
  if(ageCode.status!=="fulfilled"||ageCode.value!==0||
     restoreCode.status!=="fulfilled"||restoreCode.value!==0||
-    pipe.status!=="fulfilled")
-   throw Error("No se pudo descifrar e inspeccionar el archivo custom de PostgreSQL.");
+    drained.status!=="fulfilled"||writerError)
+   throw Error("Falló verificación age/pg_restore: age="+
+     (ageCode.status==="fulfilled"?ageCode.value:"error")+
+     ", restore="+(restoreCode.status==="fulfilled"?restoreCode.value:"error")+
+     ", flujo="+drained.status+", tubería="+(writerError?"error":"ok"));
  for(const table of [
    "TABLE public organizations",
    "TABLE public pos_orders",
