@@ -97,6 +97,9 @@ Variables necesarias documentadas en `.env.example`. Nunca añadir archivos
   extraer un respaldo cifrado y validarlo, sin afectar producción.
 - `docs/operations/lan-local-first-rollout.md`: pruebas LAN/Windows y
   restricciones de red del hotel.
+- `docs/operations/antenna-integration-2026-10-18.md`: guion para probar la
+  antena Wi-Fi desde dos celulares sin tocar el POS comercial, y el orden
+  seguro de instalación QA, certificados, impresora y prueba sin WAN.
 - La conservación de ventas históricas y sesiones Auth requiere restauración
   aislada y verificación. Compilar el proyecto no equivale a trasladar los datos.
 
