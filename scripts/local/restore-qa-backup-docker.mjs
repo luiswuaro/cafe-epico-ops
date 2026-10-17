@@ -58,14 +58,21 @@ function run(command,args,options={}){
  const child=spawn(command,args,{windowsHide:true,stdio:[input,output,"pipe"]});
  let stdout="",stderr="";
  if(capture)child.stdout?.on("data",bytes=>{if(stdout.length<120000) stdout+=String(bytes);});
- child.stderr?.on("data",bytes=>{if(stderr.length<4000) stderr+=String(bytes);});
+ child.stderr?.on("data",bytes=>{stderr=(stderr+String(bytes)).slice(-24000);});
  const done=new Promise((ok,bad)=>{
    child.once("error",bad);
    child.once("close",code=>{
      if(code===0){ok(stdout.trim());return;}
-     const line=stderr.split(/\r?\n/).find(x=>/^(?:pg_restore: error:|ERROR:|Error:)/i.test(x.trim()));
+     const lines=stderr.split(/\r?\n/).map(x=>x.trim());
+     const line=lines.find(x=>/^(?:pg_restore: error:|ERROR:|Error:)/i.test(x));
+     // Sólo nombres de objetos y clase de error; no imprimir SQL, URLs o datos.
+     const operations=lines.filter(x=>/^pg_restore: (?:creating|processing|restoring|executing|dropping) /i.test(x));
+     const lastOperation=operations.at(-1);
+     const detail=lines.find(x=>/^ERROR:\s+(?:schema|relation|type|function|permission|role|extension|duplicate|could not|invalid)/i.test(x));
      bad(Error(command+" terminó con código "+code+
-       (line?": "+line.slice(0,180):"")));
+       (lastOperation?"; objeto="+lastOperation.slice(0,130):"")+
+       (detail?"; detalle="+detail.slice(0,150):"")+
+       (line?"; "+line.slice(0,100):"")));
    });
  });
  return {child,done};
@@ -145,7 +152,7 @@ async function restore(archive){
  // Restaurar sin limpieza; --single-transaction revierte cualquier fallo.
  const pg=run("docker",["exec","-i",TARGET,"pg_restore",
   "--no-owner","--no-acl",
-  "--single-transaction","--exit-on-error",
+  "--single-transaction","--exit-on-error","--verbose",
   "--username=postgres","--dbname="+DATABASE],{input:"pipe",output:"ignore"});
  const outcomes=await Promise.allSettled([
   age.done,pg.done,pipeline(age.child.stdout,pg.child.stdin)
