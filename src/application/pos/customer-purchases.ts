@@ -20,6 +20,8 @@ type Favorite = {
 export type Purchase = {
   source: "LOYVERSE" | "OPS";
   receipt_id: string;
+  order_id: string | null;
+  split_id: string | null;
   folio: string;
   occurred_at: Date;
   total: number | string;
@@ -67,10 +69,13 @@ export async function getCustomerPurchaseProfile(input: {
   // Tickets sin cliente asignado NO se adjudican a nadie por nombre.
   // Sólo contamos pagos LIVE de OPS si no están reflejados por Loyverse.
   const receiptCustomerId = customer.sourceExternalId ?? "";
+  // A cada cliente sólo se le atribuyen las unidades de SU cuenta pagada.
+  // No inferir identidad desde nombres, mesa o texto de puntos.
   const base = sql`
     with purchased as (
       select 'LOYVERSE'::text as source,
         r.external_id::text as receipt_id,
+        null::uuid as order_id,null::uuid as split_id,
         r.receipt_date as occurred_at,
         coalesce(r.total_money,0)::numeric as total
       from loyverse_receipts r
@@ -78,9 +83,12 @@ export async function getCustomerPurchaseProfile(input: {
         and r.payload->>'customer_id'=${receiptCustomerId}
         and r.receipt_type='SALE'
         and coalesce(r.payload->>'cancelled_at','')=''
+
       union all
+
       select 'OPS'::text as source,
         o.id::text as receipt_id,
+        o.id as order_id,null::uuid as split_id,
         coalesce(o.paid_at,o.created_at) as occurred_at,
         o.total::numeric as total
       from pos_orders o
@@ -88,6 +96,27 @@ export async function getCustomerPurchaseProfile(input: {
         and o.store_id=${input.storeId}::uuid
         and o.customer_id=${input.customerId}::uuid
         and o.mode='LIVE' and o.status='PAID'
+        and not exists (select 1 from pos_order_splits s where s.order_id=o.id)
+        and not exists (
+          select 1 from loyverse_receipts r
+          where r.organization_id=o.organization_id
+            and r.external_id=o.matched_external_receipt_id
+        )
+
+      union all
+
+      select 'OPS'::text as source,
+        s.id::text as receipt_id,
+        o.id as order_id,s.id as split_id,
+        coalesce(s.paid_at,o.paid_at,o.created_at) as occurred_at,
+        s.total::numeric as total
+      from pos_order_splits s
+      join pos_orders o on o.id=s.order_id and o.organization_id=s.organization_id
+      where s.organization_id=${input.organizationId}::uuid
+        and o.store_id=${input.storeId}::uuid
+        and s.customer_id=${input.customerId}::uuid
+        and s.status='PAID'
+        and o.mode='LIVE' and o.status in ('PAID','PARTIALLY_PAID')
         and not exists (
           select 1 from loyverse_receipts r
           where r.organization_id=o.organization_id
@@ -107,32 +136,15 @@ export async function getCustomerPurchaseProfile(input: {
       from purchased
     `),
     db.execute(sql<Favorite>`
-      with purchases as (
-        select 'LOYVERSE'::text as source, r.external_id::text as receipt_id
-        from loyverse_receipts r
-        where r.organization_id=${input.organizationId}::uuid
-          and r.payload->>'customer_id'=${receiptCustomerId}
-          and r.receipt_type='SALE'
-          and coalesce(r.payload->>'cancelled_at','')=''
-        union all
-        select 'OPS'::text as source, o.id::text as receipt_id
-        from pos_orders o
-        where o.organization_id=${input.organizationId}::uuid
-          and o.store_id=${input.storeId}::uuid
-          and o.customer_id=${input.customerId}::uuid
-          and o.mode='LIVE' and o.status='PAID'
-          and not exists (
-            select 1 from loyverse_receipts r
-            where r.organization_id=o.organization_id and r.external_id=o.matched_external_receipt_id
-          )
-      ), beverage_lines as (
+      ${base},
+      beverage_lines as (
         select upper(btrim(li.payload->>'item_name'))::text as name,
           coalesce(c.name,'')::text as category,
           li.quantity::numeric as units,
-          r.external_id::text as receipt_id
-        from purchases p
-        join loyverse_receipts r on p.source='LOYVERSE' and r.external_id=p.receipt_id
-          and r.organization_id=${input.organizationId}::uuid
+          p.receipt_id
+        from purchased p
+        join loyverse_receipts r on p.source='LOYVERSE'
+          and r.external_id=p.receipt_id and r.organization_id=${input.organizationId}::uuid
         join loyverse_receipt_lines li on li.organization_id=r.organization_id
           and li.receipt_external_id=r.external_id
         left join loyverse_items i on i.organization_id=r.organization_id
@@ -147,11 +159,24 @@ export async function getCustomerPurchaseProfile(input: {
         select upper(btrim(l.name_snapshot))::text as name,
           l.category_snapshot::text as category,
           l.quantity::numeric as units,
-          o.id::text as receipt_id
-        from purchases p
-        join pos_orders o on p.source='OPS' and o.id::text=p.receipt_id
-        join pos_order_lines l on l.order_id=o.id and l.organization_id=o.organization_id
-        where l.category_snapshot in ('CALIENTES','FRÍAS')
+          p.receipt_id
+        from purchased p
+        join pos_order_lines l on l.order_id=p.order_id
+          and l.organization_id=${input.organizationId}::uuid
+        where p.source='OPS' and p.split_id is null
+          and l.category_snapshot in ('CALIENTES','FRÍAS')
+        union all
+        select upper(btrim(l.name_snapshot))::text as name,
+          l.category_snapshot::text as category,
+          sl.quantity::numeric as units,
+          p.receipt_id
+        from purchased p
+        join pos_order_split_lines sl on sl.split_id=p.split_id
+          and sl.organization_id=${input.organizationId}::uuid
+        join pos_order_lines l on l.id=sl.order_line_id
+          and l.organization_id=${input.organizationId}::uuid
+        where p.source='OPS' and p.split_id is not null
+          and l.category_snapshot in ('CALIENTES','FRÍAS')
       )
       select name, min(category) as category,
         sum(units)::numeric as units,
@@ -168,26 +193,37 @@ export async function getCustomerPurchaseProfile(input: {
   const historyRows = await db.execute(sql<Purchase>`
     ${base}
     select
-      p.source, p.receipt_id,
+      p.source,p.receipt_id,
+      p.order_id::text as order_id,p.split_id::text as split_id,
       case when p.source='LOYVERSE'
         then coalesce(r.payload->>'receipt_number',p.receipt_id)
+        when p.split_id is not null then o.folio || ' · ' || s.label
         else o.folio end as folio,
       p.occurred_at,p.total,
       case when p.source='LOYVERSE'
         then r.payload->>'dining_option' else o.service_mode end as service,
       case when p.source='LOYVERSE'
         then coalesce(r.payload->'line_items','[]'::jsonb)
+        when p.split_id is not null
+        then coalesce((select jsonb_agg(jsonb_build_object(
+          'item_name',l.name_snapshot,'quantity',sl.quantity,
+          'total_money',sl.line_total
+        ) order by sl.created_at)
+          from pos_order_split_lines sl
+          join pos_order_lines l on l.id=sl.order_line_id
+          where sl.split_id=p.split_id), '[]'::jsonb)
         else coalesce((select jsonb_agg(jsonb_build_object(
           'item_name',l.name_snapshot,'quantity',l.quantity,
           'total_money',l.line_total
-        )) from pos_order_lines l where l.order_id=o.id),'[]'::jsonb)
+        ) order by l.created_at)
+          from pos_order_lines l where l.order_id=p.order_id), '[]'::jsonb)
       end as lines
     from purchased p
     left join loyverse_receipts r on p.source='LOYVERSE'
-      and r.organization_id=${input.organizationId}::uuid
-      and r.external_id=p.receipt_id
-    left join pos_orders o on p.source='OPS' and o.id::text=p.receipt_id
-    order by p.occurred_at desc nulls last, p.receipt_id desc
+      and r.organization_id=${input.organizationId}::uuid and r.external_id=p.receipt_id
+    left join pos_orders o on p.source='OPS' and o.id=p.order_id
+    left join pos_order_splits s on s.id=p.split_id
+    order by p.occurred_at desc nulls last,p.receipt_id desc
     limit ${take + 1} offset ${(page-1)*take}
   `);
 
