@@ -10,11 +10,11 @@ let serialize=Promise.resolve();
 
 function startRenderer(){
  if(renderer)return renderer;
- // El renderer solo dibuja: no necesita las claves Auth, DB ni impresoras.
- // Crear un entorno hijo mínimo para no heredar secretos del OPS.
- const inherited=["SystemRoot","WINDIR","TEMP","TMP","PATH","PATHEXT","USERPROFILE"];
- const safeEnv=Object.fromEntries(inherited.filter(key=>process.env[key])
-   .map(key=>[key,process.env[key]]));
+ // Powershell necesita las variables estándar de Windows para inicializar
+ // su subsistema .NET. Conservarlas pero PURGAR todas las claves del OPS.
+ const denied=/^(OPS_|DATABASE_URL$|PGPASSWORD$|PGUSER$|PGHOST$|PGDATABASE$|POSTGRES_|NEXT_PUBLIC_SUPABASE_|SUPABASE_|JWT_|SERVICE_ROLE_|ANON_KEY$)/i;
+ const safeEnv=Object.fromEntries(Object.entries(process.env)
+   .filter(([key])=>!denied.test(key)));
  const child=spawn("powershell.exe",[
    "-NoProfile","-NonInteractive","-ExecutionPolicy","Bypass",
    "-File",script,"-Stream",
