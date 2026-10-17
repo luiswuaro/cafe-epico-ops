@@ -6,6 +6,46 @@ param()
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 Add-Type -AssemblyName System.Drawing
+Add-Type -TypeDefinition @'
+using System;
+using System.Drawing;
+using System.Drawing.Imaging;
+using System.Runtime.InteropServices;
+
+public static class CafeEpicoRasterPacker {
+  // Convert 32-bit pixels to ESC/POS horizontal 1-bit bands in native code,
+  // rather than calling Bitmap.GetPixel 600,000+ times from PowerShell.
+  public static byte[] Pack(Bitmap source, int width, int height) {
+    if (width != 384 || height < 40 || height > 5000)
+      throw new ArgumentOutOfRangeException("height");
+    var area = new Rectangle(0,0,width,height);
+    var bitmap = source.LockBits(area,ImageLockMode.ReadOnly,
+      PixelFormat.Format32bppArgb);
+    try {
+      var stride = bitmap.Stride;
+      var pitch = Math.Abs(stride);
+      if (pitch < width*4 || stride <= 0)
+        throw new InvalidOperationException("Bitmap stride no compatible");
+      var raw = new byte[pitch*height];
+      Marshal.Copy(bitmap.Scan0,raw,0,raw.Length);
+      var packed = new byte[(width/8)*height];
+      for (int row=0;row<height;row++) {
+        int from = row*pitch;
+        int to = row*(width/8);
+        for (int col=0;col<width;col++) {
+          int offset = from+col*4;
+          int b=raw[offset],g=raw[offset+1],r=raw[offset+2];
+          if ((21*r+72*g+7*b)<19000)
+            packed[to+col/8]|=(byte)(0x80>>(col%8));
+        }
+      }
+      return packed;
+    } finally {
+      source.UnlockBits(bitmap);
+    }
+  }
+}
+'@ -ReferencedAssemblies 'System.Drawing'
 [Console]::InputEncoding=New-Object System.Text.UTF8Encoding($false)
 [Console]::OutputEncoding=New-Object System.Text.UTF8Encoding($false)
 $payload=[Console]::In.ReadToEnd() | ConvertFrom-Json
@@ -90,18 +130,7 @@ try {
   $y+=22
   if($y -lt 40){throw 'Raster incompleto'}
   $height=[int][Math]::Ceiling($y)
-  $stride=48
-  $packed=New-Object byte[] ($stride*$height)
-  for($r=0;$r -lt $height;$r++){
-    for($col=0;$col -lt $width;$col++){
-      $color=$bmp.GetPixel($col,$r)
-      $lum=0.2126*$color.R+0.7152*$color.G+0.0722*$color.B
-      if($lum -lt 190){
-        $ix=$r*$stride+[int][Math]::Floor($col/8)
-        $packed[$ix]=[byte]($packed[$ix] -bor (128 -shr ($col%8)))
-      }
-    }
-  }
+  $packed=[CafeEpicoRasterPacker]::Pack($bmp,$width,$height)
   $result=@{
     raster=@{dataBase64=[Convert]::ToBase64String($packed);
       width=$width;height=$height;align='center'}
