@@ -54,10 +54,10 @@ const orphanSQL=[
 ].join(" ");
 
 function run(command,args,options={}){
- const {input="ignore",output="pipe"}=options;
+ const {input="ignore",output="pipe",capture=true}=options;
  const child=spawn(command,args,{windowsHide:true,stdio:[input,output,"pipe"]});
  let stdout="",stderr="";
- child.stdout?.on("data",bytes=>{if(stdout.length<120000) stdout+=String(bytes);});
+ if(capture)child.stdout?.on("data",bytes=>{if(stdout.length<120000) stdout+=String(bytes);});
  child.stderr?.on("data",bytes=>{if(stderr.length<4000) stderr+=String(bytes);});
  const done=new Promise((ok,bad)=>{
    child.once("error",bad);
@@ -139,7 +139,7 @@ async function verifyArchive(){
  return {file,identity};
 }
 async function restore(archive){
- const age=run("age",["--decrypt","--identity",archive.identity,archive.file]);
+ const age=run("age",["--decrypt","--identity",archive.identity,archive.file],{capture:false});
  const pg=run("docker",["exec","-i",TARGET,"pg_restore",
   "--clean","--if-exists","--no-owner","--no-acl",
   "--single-transaction","--exit-on-error",
