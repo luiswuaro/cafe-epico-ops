@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {test} from "node:test";
 import {once} from "node:events";
+import {Script} from "node:vm";
 import {createLanProbeServer,isPrivateLanIp} from "./lan-probe.mjs";
 
 test("LAN probe serves public health without credentials or POS data",async()=>{
@@ -15,7 +16,18 @@ test("LAN probe serves public health without credentials or POS data",async()=>{
     assert.equal(html.status,200);
     assert.equal(html.headers.get("cache-control"),"no-store, private");
     assert.equal(html.headers.get("x-frame-options"),"DENY");
-    assert.match(await html.text(),/CONEXIÓN LOCAL CONFIRMADA/);
+    const htmlPage=await html.text();
+    assert.match(htmlPage,/CONEXIÓN LOCAL CONFIRMADA/);
+    assert.match(htmlPage,/Medir estabilidad LAN/);
+    assert.match(htmlPage,/src="\/client.js"/);
+    assert.match(html.headers.get("content-security-policy"),/script-src 'self'/);
+    const script=await fetch(root+"/client.js");
+    assert.equal(script.status,200);
+    assert.match(script.headers.get("content-type"),/application\/javascript/);
+    const javascript=await script.text();
+    assert.doesNotThrow(()=>new Script(javascript));
+    assert.match(javascript,/12 respuestas/);
+    assert.doesNotMatch(javascript,/https?:\/\/|supabase|vercel|DATABASE_URL/i);
 
     const health=await fetch(root+"/health");
     assert.equal(health.status,200);
