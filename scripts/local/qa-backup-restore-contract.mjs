@@ -35,14 +35,23 @@ function proc(command,args,{env=process.env,stdio=["ignore","pipe","pipe"]}={}){
    child.once("error",reject);
    child.once("close",c=>c===0?resolve():reject(Error(command+" falló con salida "+c)));
  });
- child.stderr?.resume();
- return {child,finished};
+ let diagnostic="";
+ child.stderr?.on("data",chunk=>{
+   // Deliberately cap stderr. Never print arbitrary SQL or secrets.
+   if(diagnostic.length<1200)diagnostic+=String(chunk).slice(0,1200);
+ });
+ return {child,finished,getDiagnostic:()=>diagnostic};
 }
 async function execute(command,args,{env=process.env}={}){
- const {child,finished}=proc(command,args,{env});
+ const {child,finished,getDiagnostic}=proc(command,args,{env});
  let value="";
  child.stdout?.on("data",c=>{value+=c;if(value.length>20000)child.kill();});
- await finished;
+ try{await finished;}catch{
+   const safe=getDiagnostic().split(/\r?\n/)
+     .find(line=>/^BLOQUEADO:|^ERROR:|^pg_restore: error:|^age: error:/i.test(line.trim()));
+   throw Error((command===process.execPath?"node":"subproceso")+
+     " terminó sin éxito"+(safe?": "+safe.slice(0,180):""));
+ }
  return value.trim();
 }
 async function recordFixture(db){
@@ -190,6 +199,7 @@ async function main(){
 main().catch(error=>{
  // No imprimir URLs, contraseñas ni trazas. Sólo fase y código PostgreSQL.
  const code=typeof error?.code==="string"?error.code.slice(0,12):"sin_codigo";
- console.error("ERROR: recuperación QA bloqueada en "+stage+" ("+code+").");
+ const reason=String(error?.message??"").replace(/postgres(?:ql)?:\/\/[^\s]+/ig,"[DB]").slice(0,220);
+ console.error("ERROR: recuperación QA bloqueada en "+stage+" ("+code+"): "+reason);
  process.exitCode=1;
 });
