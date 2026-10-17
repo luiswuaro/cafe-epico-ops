@@ -83,6 +83,8 @@ jobs:
         run: node scripts/local/qa-smoke.mjs --db-only
       - name: Comprobar restricciones POS y transacciones
         run: node scripts/local/qa-database-contracts.mjs
+      - name: Dos cuentas con distintos clientes y pago mixto sin duplicados
+        run: node scripts/local/qa-pos-split-payments.mjs
       - name: Repetir migrador para comprobar idempotencia
         run: node scripts/local/apply-qa-schema.mjs --seed-qa
       - name: Confirmar integridad después de repetir
