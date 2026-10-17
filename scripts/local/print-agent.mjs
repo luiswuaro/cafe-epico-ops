@@ -97,7 +97,7 @@ async function main(){
      Date.now()-24*60*60*1000)).toISOString();
    if(Date.now()-lastHeartbeat>=20000){
      await api("HEARTBEAT",{stationId,since:pollSince,
-       bridgeReady:[...availability.values()].some(Boolean)});
+       bridgeReady:[...availability.values()].every(Boolean)});
      lastHeartbeat=Date.now();
    }
    const result=await api("POLL",{since:pollSince,lastVersion});
