@@ -35,10 +35,8 @@ async function main(){
         return "EXISTING";
       }
       await tx`
-        insert into public.ops_catalog_archive_snapshots
-          (organization_id,items,variants,categories,settings,popularity)
-        values (${orgs[0].id},'[]'::jsonb,'[]'::jsonb,'[]'::jsonb,'[]'::jsonb,
-          '[]'::jsonb,'[]'::jsonb)
+        insert into public.ops_catalog_archive_snapshots (organization_id)
+        values (${orgs[0].id})
         on conflict (organization_id) do nothing
       `;
       return "CREATED";
