@@ -91,6 +91,8 @@ Variables necesarias documentadas en `.env.example`. Nunca añadir archivos
 - PostgreSQL es la fuente transaccional de órdenes, movimientos de
   inventario, caja, puntos y auditorías.
 - Versionado de recetas/SOPs y movimientos contables históricos.
+- `docs/operations/local-backup-runbook.md`: respaldo cifrado continuo a archivo
+  (copia manual por ejecución), verificación de integridad y ensayo de recuperación.
 - `docs/operations/backup-and-multistore-readiness.md`: política para
   extraer un respaldo cifrado y validarlo, sin afectar producción.
 - `docs/operations/lan-local-first-rollout.md`: pruebas LAN/Windows y
