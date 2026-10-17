@@ -1,0 +1,16 @@
+# Copiar fuera de Git e indicar la IP PRIVADA REAL de la PC.
+# Ejemplo: OPS_LAN_HOST=192.168.1.100 (nunca una IP pública).
+# Requiere confiar explícitamente en la CA local de Caddy en cada terminal.
+https://{$OPS_LAN_HOST}:8443 {
+    tls internal
+    encode zstd gzip
+
+    @supabase path /auth/v1/* /rest/v1/* /storage/v1/* /realtime/v1/* /functions/v1/*
+    handle @supabase {
+        reverse_proxy 127.0.0.1:8000
+    }
+
+    handle {
+        reverse_proxy 127.0.0.1:3000
+    }
+}
