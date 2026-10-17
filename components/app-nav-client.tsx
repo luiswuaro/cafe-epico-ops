@@ -41,8 +41,8 @@ function Glyph({name}:{name:IconName}){
   return <svg aria-hidden="true" viewBox="0 0 24 24" width="21" height="21" {...common}>{content}</svg>;
 }
 
-export function AppNavClient({canAdmin,canPos,canCash}:{
-  canAdmin:boolean;canPos:boolean;canCash:boolean;
+export function AppNavClient({canAdmin,canPos,canCash,enableClosingQa=false}:{
+  canAdmin:boolean;canPos:boolean;canCash:boolean;enableClosingQa?:boolean;
 }){
   const [open,setOpen]=useState(false);
   const hasDOM=useHasDOM();
