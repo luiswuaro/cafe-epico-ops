@@ -24,5 +24,6 @@ export async function AppNav() {
   const canPos=grants.has("pos.sell");
   const canCash=grants.has("pos.cash.manage");
 
-  return <AppNavClient canAdmin={canAdmin} canPos={canPos} canCash={canCash}/>;
+  const enableClosingQa=process.env.OPS_QA_MODE==="true" && process.env.OPS_LOCAL_FIRST==="true" && process.env.DEFAULT_ORGANIZATION_SLUG==="cafe-epico-qa";
+  return <AppNavClient canAdmin={canAdmin} canPos={canPos} canCash={canCash} enableClosingQa={enableClosingQa}/>;
 }
