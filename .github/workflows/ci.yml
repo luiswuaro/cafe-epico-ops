@@ -81,3 +81,16 @@ jobs:
         run: node scripts/local/apply-qa-schema.mjs --seed-qa
       - name: Confirmar integridad después de repetir
         run: node scripts/local/qa-smoke.mjs --db-only
+
+  print-raster-windows:
+    # Ejecuta el renderer con GDI de Windows. Sin base comercial, ni POS-58.
+    if: startsWith(github.head_ref || github.ref_name, 'feat/local-')
+    runs-on: windows-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Renderer real GDI, Unicode y bandas ESC/POS
+        run: node --test scripts/local/print-agent-raster.windows.test.mjs
