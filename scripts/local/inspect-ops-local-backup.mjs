@@ -104,6 +104,16 @@ async function inspect(){
  ]){
    if(!toc.includes(table))throw Error("Backup incompleto; falta "+table);
  }
+ if(process.argv.includes("--show-schemas")) {
+   // Muestra solo existencia de estructuras del TOC, nunca datos ni claves.
+   const lines=toc.split(/\r?\n/).filter(v=>v && !v.startsWith(";"));
+   for(const schema of ["public","auth","storage"]) {
+     const match=lines.some(v=>new RegExp("\\bSCHEMA\\s+-\\s+"+schema+"(?:\\s|$)","i").test(v));
+     const objects=lines.filter(v=>new RegExp("\\b(?:TABLE|VIEW|SEQUENCE|FUNCTION)\\s+"+schema+"\\s","i").test(v)).length;
+     console.log("DIAGNOSTICO TOC: schema="+schema+"; CREATE_SCHEMA="+
+       (match?"SI":"NO")+"; objetos="+objects);
+   }
+ }
  console.log("PASS: SHA-256, age y pg_restore TOC: tablas críticas presentes.");
  console.log("PENDIENTE: restaurar en segundo PostgreSQL aislado y cotejar datos/usuarios.");
 }
