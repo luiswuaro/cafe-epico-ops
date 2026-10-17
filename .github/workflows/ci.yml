@@ -84,7 +84,13 @@ jobs:
       - name: Preparar herramientas de cifrado age y PostgreSQL 17
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y age postgresql-client-17
+          sudo apt-get install -y age ca-certificates curl
+          sudo install -d -m 0755 /usr/share/postgresql-common/pgdg
+          sudo curl --fail --silent --show-error -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          . /etc/os-release
+          printf 'Types: deb\\nURIs: https://apt.postgresql.org/pub/repos/apt\\nSuites: %s-pgdg\\nComponents: main\\nSigned-By: /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc\\n' "$VERSION_CODENAME" | sudo tee /etc/apt/sources.list.d/pgdg.sources > /dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client-17
           if test -x /usr/lib/postgresql/17/bin/pg_dump; then
             echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
             export PATH="/usr/lib/postgresql/17/bin:$PATH"
