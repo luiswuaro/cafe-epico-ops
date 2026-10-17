@@ -26,11 +26,19 @@ if [[ -f "$manifest" ]]; then
 fi
 workdir="$(mktemp -d)"
 trap 'rm -rf -- "$workdir"' EXIT
-# age verifica autenticidad/integridad criptografica del stream al descifrar.
-# El TOC generado tiene nombres de objetos, NO filas ni contraseñas.
-if ! age --decrypt --identity "$OPS_BACKUP_AGE_IDENTITY" "$archive" | \
-     pg_restore --list > "$workdir/toc.txt"; then
-  echo "Fallo al descifrar o inspeccionar pg_dump" >&2; exit 1
+# Descifrar el archivo COMPLETO valida el tag de integridad.
+# UNICAMENTE en esta inspeccion local, en directorio 0700 temporal;
+# jamas se sube el dump sin cifrar a un servicio.
+if ! age --decrypt --identity "$OPS_BACKUP_AGE_IDENTITY" \
+     --output "$workdir/archive.custom" "$archive"; then
+  echo "Fallo de autenticidad o integridad age" >&2; exit 1
+fi
+if ! pg_restore --list "$workdir/archive.custom" > "$workdir/toc.txt"; then
+  echo "Fallo al inspeccionar el formato de pg_dump" >&2; exit 1
+fi
+# Lee y descomprime todo el dump; no ejecuta SQL ni guarda su salida.
+if ! pg_restore --file /dev/null "$workdir/archive.custom"; then
+  echo "Fallo al leer completamente el archivo de respaldo" >&2; exit 1
 fi
 
 required=(
