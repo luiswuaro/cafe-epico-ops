@@ -1211,6 +1211,7 @@ export const posOrderSplits = pgTable("pos_order_splits", {
   id: uuid("id").primaryKey().defaultRandom(),
   organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
   orderId: uuid("order_id").notNull().references(() => posOrders.id, { onDelete: "cascade" }),
+  customerId: uuid("customer_id").references(() => posCustomers.id, { onDelete: "set null" }),
   label: text("label").notNull(),
   status: varchar("status", { length: 20 }).notNull().default("OPEN"),
   total: numeric("total", { precision: 14, scale: 2 }).notNull(),
@@ -1219,6 +1220,8 @@ export const posOrderSplits = pgTable("pos_order_splits", {
 }, (t) => [
   uniqueIndex("pos_order_splits_label_uidx").on(t.orderId, t.label),
   index("pos_order_splits_order_idx").on(t.orderId, t.status),
+  index("pos_order_splits_customer_paid_idx").on(t.customerId,t.paidAt)
+    .where(sql`${t.customerId} IS NOT NULL AND ${t.status} = 'PAID'`),
 ]);
 
 export const posOrderSplitLines = pgTable("pos_order_split_lines", {
