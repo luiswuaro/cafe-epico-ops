@@ -33,7 +33,7 @@ async function main(){
  try {
    const names=CRITICAL_QA_TABLES.map(x=>x.replace(/^public\./,""));
    const present=await db`select tablename from pg_tables
-     where schemaname='public' and tablename in ${db(names)}`;
+     where schemaname='public' and tablename = any(${names}::text[])`;
    const [org,store,migrations,users,counts]=await Promise.all([
      db`select id,slug from public.organizations order by slug`,
      db`select organization_id as "organizationId",code from public.stores order by code`,
