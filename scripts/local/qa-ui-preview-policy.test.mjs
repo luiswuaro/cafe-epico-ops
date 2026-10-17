@@ -39,6 +39,13 @@ test("browser mock is local-only: no networking, persistence, server actions or 
  assert.match(client,/Math\.round\(paid\*5\)\/100/);
 });
 
+test("local QA branches never request Vercel Git deployments",()=>{
+ const vercel=JSON.parse(readFileSync("vercel.json","utf8"));
+ assert.equal(vercel.git?.deploymentEnabled?.["feat/local-*"],false);
+ assert.notEqual(vercel.git?.deploymentEnabled?.main,false);
+ assert.notEqual(vercel.git?.deploymentEnabled?.production,false);
+});
+
 test("UI is responsive and has no external CSS, image or font fetch",()=>{
  assert.match(css,/@media\(max-width:850px\)/);
  assert.match(css,/@media\(max-width:620px\)/);
