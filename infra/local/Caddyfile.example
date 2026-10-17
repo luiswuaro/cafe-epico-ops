@@ -1,3 +1,8 @@
+{
+    # Evitar listener HTTP/80 creado automáticamente para redirecciones.
+    auto_https disable_redirects
+}
+
 # Copiar fuera de Git e indicar la IP PRIVADA REAL de la PC.
 # Ejemplo: OPS_LAN_HOST=192.168.1.100 (nunca una IP pública).
 # Requiere confiar explícitamente en la CA local de Caddy en cada terminal.
