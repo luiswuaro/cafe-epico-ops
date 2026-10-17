@@ -16,6 +16,12 @@ const valid = () => ({
 test("acepta sólo gateway y pooler QA por loopback", () => {
   assert.deepEqual(inspectQaCompose(valid()), {ok: true, errors: []});
 });
+test("acepta sólo loopback incluso cuando el puerto host 16543 difiere de 6543 interno", () => {
+  const c=valid();c.services.supavisor.ports[1].published="16543";
+  assert.equal(inspectQaCompose(c).ok,true);
+  c.services.supavisor.ports[1].host_ip="0.0.0.0";
+  assert.equal(inspectQaCompose(c).ok,false);
+});
 test("rechaza exposición pública de Auth/API", () => {
   const c=valid();c.services["api-gw"].ports[0].host_ip="0.0.0.0";
   assert.equal(inspectQaCompose(c).ok,false);
