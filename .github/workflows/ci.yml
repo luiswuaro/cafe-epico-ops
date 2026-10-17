@@ -24,6 +24,8 @@ jobs:
       - run: npm install --no-audit --no-fund
       - run: bash -n scripts/backup/backup-ops.sh scripts/backup/inspect-ops-backup.sh && node scripts/backup/validate-backup-safety.mjs
       - run: node --test scripts/local/lan-probe.test.mjs scripts/local/guard-qa-config.test.mjs
+      - shell: pwsh
+        run: ./scripts/local/check-ps-syntax.ps1
       - run: node scripts/validate-oracle-readonly.mjs
       - run: npm run validate:structure
       - run: npm run typecheck
