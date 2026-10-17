@@ -158,8 +158,15 @@ empleado activo y RBAC desde PostgreSQL.
 La plantilla `infra/local/Caddyfile.example` enruta por la **misma** URL TLS:
 `/auth/v1/*` → API de Auth en loopback; el resto → Next.js en loopback.
 
-1. Instalar Caddy de forma local, configurar `OPS_LAN_HOST` a la IP privada
-   fija de la PC y revisar el archivo Caddyfile antes de arrancar.
+1. Instalar Caddy de forma local y revisar el archivo Caddyfile.
+   `scripts/local/start-qa-gateway.ps1` obtiene la IP directamente de
+   `APP_ORIGIN` y comprueba que exista en una interfaz IPv4 activa de la PC.
+   Caddy `bind` escucha sólo en esa IP, no en todas las interfaces.
+   Iniciar desde otra consola PowerShell:
+
+   ```powershell
+   powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\local\start-qa-gateway.ps1
+   ```
 2. Confiar en la CA local pública de Caddy en los dispositivos propios (jamás
    copiar la clave privada de la CA). No usar HTTP para cobros en el hotel.
 3. Iniciar Next.js con `scripts/local/start-qa.ps1`.
@@ -186,3 +193,28 @@ No se ha ejecutado este conjunto de pruebas físicamente. Hasta completarlo,
 - https://supabase.com/docs/guides/self-hosting/docker
 - https://supabase.com/docs/guides/self-hosting/accessing-postgres
 - https://docs.docker.com/reference/compose-file/merge/
+
+## Auditoría de funcionamiento QA
+
+Con la réplica encendida y el esquema cargado, ejecutar:
+
+```powershell
+node --env-file=.env.local scripts/local/qa-smoke.mjs --db-only
+```
+
+Examina sin modificar: integridad SHA-256 de las migraciones, tablas críticas,
+única organización `cafe-epico-qa`, sucursal `QA-TEPEXI`, usuarios de Auth,
+ausencia de ventas LIVE y existencia de pedidos de ensayo. Si la base se
+contaminó con tablas ajenas o ventas reales, detiene la validación.
+
+Con Caddy y Next.js iniciados, volver a ejecutar **sin** `--db-only`:
+
+```powershell
+node --env-file=.env.local scripts/local/qa-smoke.mjs
+```
+
+Además prueba con TLS real `/api/health` y `/auth/v1/health`. Si la CA de
+Caddy no está confiada por Node, configurar `OPS_LOCAL_CA_FILE` como ruta al
+certificado **público** raíz local; no usar `NODE_TLS_REJECT_UNAUTHORIZED=0`.
+Solo tras terminar estas pruebas estructurales comenzarán las pruebas con
+cobros y papel físicos. Este comando **no crea ventas**.
