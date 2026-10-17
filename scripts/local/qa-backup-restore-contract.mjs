@@ -117,6 +117,7 @@ async function assertForeignKeys(db){
  `;
  assert.deepEqual(data,{orphan_payments:0,orphan_lines:0,orphan_points:0});
 }
+let stage="inicializar";
 async function main(){
  gate();
  const mainDb=postgres(process.env.DATABASE_URL,{max:1,prepare:false});
@@ -127,14 +128,17 @@ async function main(){
  restoreUrl.pathname="/ci_restore";
  let restorationStarted=false;
  try{
+   stage="crear_muestra";
    await recordFixture(mainDb);
    const original=await snapshot(mainDb);
+   stage="crear_claves_efimeras";
    const identity=await execute("age-keygen",["-o",keyPath]);
    void identity;
    const publicKey=await execute("age-keygen",["-y",keyPath]);
    assert.match(publicKey,/^age1[a-z0-9]{30,}$/);
    const env={...process.env,OPS_BACKUP_AGE_RECIPIENT:publicKey,
      OPS_BACKUP_DESTINATION:archiveDir};
+   stage="cifrar_pg_dump";
    await execute(process.execPath,["scripts/local/backup-ops-local.mjs"],{env});
    const archives=readdirSync(archiveDir).filter(name=>name.endsWith(".pgcustom.age"));
    assert.equal(archives.length,1,"Debe existir exactamente un archivo cifrado.");
@@ -143,15 +147,18 @@ async function main(){
    assert.match(manifest,/restore_tested=no/);
    const size=(await stat(file)).size;
    assert.ok(size>256,"Backup age vacío.");
+   stage="inspeccionar_age_toc";
    await execute(process.execPath,["scripts/local/inspect-ops-local-backup.mjs"],{
      env:{...env,OPS_BACKUP_ARCHIVE:file,OPS_BACKUP_AGE_IDENTITY:keyPath},
    });
    const [exists]=await mainDb`select 1 from pg_database where datname='ci_restore'`;
    assert.equal(exists,undefined,"Nunca sobrescribir la DB de restauración.");
+   stage="crear_base_destino";
    await mainDb.unsafe("create database ci_restore");
    restorationStarted=true;
    // Pasamos flujo desencriptado directamente a pg_restore, sin dump claro
    // en el disco. ci_restore es otra DB del contenedor desechable de CI.
+   stage="restaurar_pg_restore";
    const age=proc("age",["--decrypt","--identity",keyPath,file]);
    const restore=proc("pg_restore",[
      "--clean","--if-exists","--no-owner","--no-acl","--exit-on-error",
@@ -163,6 +170,7 @@ async function main(){
    assert.ok(outcomes.every(x=>x.status==="fulfilled"),"pg_restore no terminó correctamente.");
    const secondary=postgres(restoreUrl.href,{max:1,prepare:false});
    try{
+     stage="conciliar_datos";
      const recovered=await snapshot(secondary);
      assert.deepEqual(recovered,original,
        "Los importes, puntos, movimientos o usuarios difieren tras restaurar.");
@@ -179,7 +187,9 @@ async function main(){
    await rm(root,{recursive:true,force:true});
  }
 }
-main().catch(()=>{
- console.error("ERROR: ensayo cifrado de recuperación local QA no superado.");
+main().catch(error=>{
+ // No imprimir URLs, contraseñas ni trazas. Sólo fase y código PostgreSQL.
+ const code=typeof error?.code==="string"?error.code.slice(0,12):"sin_codigo";
+ console.error("ERROR: recuperación QA bloqueada en "+stage+" ("+code+").");
  process.exitCode=1;
 });
