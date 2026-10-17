@@ -224,6 +224,36 @@ node --env-file=.env.local scripts/local/apply-qa-schema.mjs --seed-qa
 `auth`, `storage` y `public` requiere un respaldo cifrado íntegro y prueba
 de restauración independiente.
 
+### Reparación QA: falta la copia del catálogo OPS
+
+La migración 0028 crea el snapshot para organizaciones ya existentes, pero
+el seed `--seed-qa` agrega `cafe-epico-qa` después. En el primer inicio
+de sesión se detecta la ausencia de snapshot y `/today` falla con
+«Falta la copia del catálogo en OPS».
+
+Desde la raíz QA, después de `git pull --ff-only`, ejecutar:
+
+```powershell
+node --env-file=.env.local scripts/local/repair-qa-catalog-snapshot.mjs
+node --env-file=.env.local scripts/local/qa-smoke.mjs --db-only
+```
+
+Este reparador valida aislamiento QA, ventas LIVE deshabilitadas y base
+sin organizaciones comerciales. Inserta una sola fila estructural
+de archivo vacío sin borrar, copiar ni sobrescribir datos comerciales.
+**No carga productos ni habilita ventas**: el menú QA sigue pendiente.
+Si ya existe la fila con JSON válido, no la sobrescribe.
+
+Para liberar el flujo `/today` después de la reparación, reiniciar
+Next.js únicamente si persiste el error debido a caché. Conservar Caddy,
+Docker, Auth, migraciones y datos QA.
+
+Antes de simular operaciones POS, cargar un catálogo de ensayo nativo,
+validar recetas/empaques/stock y comprobar modo QA sin ventas LIVE.
+Para sustituir la operación comercial es imprescindible migrar
+catálogo y datos reales mediante respaldo cifrado, restauración
+independiente y una ventana de corte autorizada.
+
 ## 5. Crear usuario Auth local y vincular al empleado QA
 
 En Studio autoalojado accesible **únicamente desde la PC**, crear un usuario
