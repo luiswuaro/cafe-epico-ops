@@ -81,12 +81,17 @@ async function main(){
      try{availability.set(key,await bridge(port,token,null))}
      catch{availability.set(key,null)}
    }
+   // Ventana móvil como la estación del navegador: el servidor rechaza
+   // cursores de más de 72 h, aunque la PC permanezca encendida semanas.
+   // Nunca bajar el cursor por debajo de la activación actual del agente.
+   const pollSince=new Date(Math.max(new Date(since).getTime(),
+     Date.now()-24*60*60*1000)).toISOString();
    if(Date.now()-lastHeartbeat>=20000){
-     await api("HEARTBEAT",{stationId,since,
+     await api("HEARTBEAT",{stationId,since:pollSince,
        bridgeReady:[...availability.values()].some(Boolean)});
      lastHeartbeat=Date.now();
    }
-   const result=await api("POLL",{since,lastVersion});
+   const result=await api("POLL",{since:pollSince,lastVersion});
    const jobs=Array.isArray(result.jobs)?result.jobs:[];
    // Sólo saltar feed cuando el servidor confirmó cero trabajos.
    lastVersion=jobs.length?"":
