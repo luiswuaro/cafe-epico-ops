@@ -19,7 +19,7 @@ const stack={
   REALTIME_DB_ENC_KEY:"1234567890abcdef",VAULT_ENC_KEY:"1234567890abcdef1234567890abcdef",
   PG_META_CRYPTO_KEY:"abcdef1234567890abcdef1234567890",
   POOLER_TENANT_ID:"cafe-epico-qa",
-  DISABLE_SIGNUP:"true",ENABLE_EMAIL_SIGNUP:"false",
+  DISABLE_SIGNUP:"true",ENABLE_EMAIL_SIGNUP:"true",
   ENABLE_PHONE_SIGNUP:"false",ENABLE_ANONYMOUS_USERS:"false",
   SUPABASE_PUBLIC_URL:origin,SITE_URL:origin,
   API_EXTERNAL_URL:origin+"/auth/v1",COMPOSE_FILE:"docker-compose.yml",
@@ -30,7 +30,9 @@ test("valida configuración local con secretos distintos del ejemplo",()=>{
 test("rechaza secretos de demostración",()=>{
   assert.equal(inspectQaSecrets(app,{...stack,POSTGRES_PASSWORD:"your-super-secret"}).ok,false);
 });
-test("rechaza auto-registro expuesto",()=>{
+test("permite login por correo sólo cuando las altas públicas están bloqueadas",()=>{
+  assert.equal(inspectQaSecrets(app,{...stack,ENABLE_EMAIL_SIGNUP:"true",DISABLE_SIGNUP:"true"}).ok,true);
+  assert.equal(inspectQaSecrets(app,{...stack,ENABLE_EMAIL_SIGNUP:"false"}).ok,false);
   assert.equal(inspectQaSecrets(app,{...stack,DISABLE_SIGNUP:"false"}).ok,false);
 });
 test("rechaza divergencia de origen, claves y Compose",()=>{
