@@ -1,5 +1,4 @@
 import {resolve,sep} from "node:path";
-import {isIP} from "node:net";
 
 /** Prevents accidental cloud dumps, plaintext repository artifacts or demo keys. */
 export function assessLocalBackup(env,repoRoot){
