@@ -30,7 +30,15 @@ export async function runPrintJobs({
    }
    // Render BEFORE obtaining a claim. Malformed jobs do not consume an
    // immutable printing lease, so they can be reviewed without losing paper.
-   const payload=await format(job,template);
+   let payload;
+   try{payload=await format(job,template);}
+   catch{
+     // Una orden malformada no debe detener la impresión de otras mesas.
+     // Nunca reclamar una orden que no se pudo convertir a papel.
+     statuses.push({key:job.key,status:"INVALID_PAYLOAD"});
+     log("Comanda sin formato imprimible. Revisar manualmente el pedido.");
+     continue;
+   }
    const claim=await api("CLAIM",{jobKey:job.key,stationId});
    if(claim?.claimed!==true){
      statuses.push({key:job.key,status:"ALREADY_CLAIMED"});
