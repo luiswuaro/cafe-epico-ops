@@ -1,0 +1,11 @@
+# Sólo para la réplica QA local. Requiere Docker Compose >= 2.24.4.
+# !override reemplaza TODOS los puertos base, no los concatena.
+# El servidor Next.js y el proxy HTTPS se ejecutan por separado.
+services:
+  api-gw:
+    ports: !override
+      - "127.0.0.1:${API_GW_HTTP_PORT:-${KONG_HTTP_PORT:-8000}}:8000/tcp"
+  supavisor:
+    ports: !override
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432/tcp"
+      - "127.0.0.1:${POOLER_PROXY_PORT_TRANSACTION:-6543}:6543/tcp"
