@@ -244,3 +244,12 @@ instalación de la estación. El navegador aún es una dependencia del
 procesamiento automático: esto NO implementa un worker de impresión
 independiente. Para pruebas QA no usar la PC que actualmente cobra en
 producción, porque esta tarea reemplaza la estación instalada de Windows.
+
+## Respaldo local Windows antes de producción
+
+`scripts/local/backup-ops-local.mjs` crea un archivo age cifrado
+directamente desde `pg_dump`, sin volcar una copia sin cifrar al disco.
+`scripts/local/inspect-ops-local-backup.mjs` verifica SHA-256, age y TOC
+con pg_restore, pero **no reemplaza** la prueba de restauración en una
+segunda instancia. Instalar pg_dump/pg_restore 17 y age en Windows.
+Ver `docs/operations/local-backup-runbook.md`.
