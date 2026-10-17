@@ -224,6 +224,10 @@ async function main(){
  }finally{await db.end({timeout:3});}
 }
 main().catch(error=>{
- console.error("BLOQUEADO: contrato de pagos divididos QA "+(error?.code||"no válido"));
+ const type=typeof error?.name==="string"?error.name.slice(0,40):"unknown";
+ const reason=String(error?.message??"Sin detalle")
+   .replace(/postgres(?:ql)?:\/\/[^\s]+/ig,"[DB]")
+   .replace(/[\r\n]+/g," ").slice(0,220);
+ console.error("BLOQUEADO: contrato QA "+type+" ("+(error?.code||"-")+"): "+reason);
  process.exitCode=1;
 });
