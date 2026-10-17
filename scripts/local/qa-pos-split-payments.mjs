@@ -6,6 +6,42 @@
  */
 import assert from "node:assert/strict";
 import postgres from "postgres";
+import {readFileSync} from "node:fs";
+import {runInNewContext} from "node:vm";
+import {createRequire} from "node:module";
+import ts from "typescript";
+import {drizzle} from "drizzle-orm/postgres-js";
+import {pgTable,uuid,text as pgText,jsonb,numeric} from "drizzle-orm/pg-core";
+const nodeRequire=createRequire(import.meta.url);
+
+function actualCustomerProfileReader(connection){
+  const schema={
+    posCustomers:pgTable("pos_customers",{
+      id:uuid("id"),organizationId:uuid("organization_id"),
+      sourceExternalId:pgText("source_external_id"),
+      name:pgText("name"),pointsBalance:numeric("points_balance"),
+    }),
+    loyverseCustomers:pgTable("loyverse_customers",{
+      organizationId:uuid("organization_id"),
+      externalId:pgText("external_id"),payload:jsonb("payload"),
+    }),
+  };
+  const filename="src/application/pos/customer-purchases.ts";
+  const typescript=readFileSync(filename,"utf8");
+  const compiled=ts.transpileModule(typescript,{fileName:filename,
+    compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
+  const exports={};
+  runInNewContext(compiled,{exports,console,require(name){
+    if(name==="drizzle-orm")return nodeRequire("drizzle-orm");
+    if(name==="@/src/infrastructure/db/client")
+      return {getDb:()=>drizzle(connection)};
+    if(name==="@/src/infrastructure/db/schema")return schema;
+    throw Error("Import no permitido en prueba perfil QA.");
+  }});
+  assert.equal(typeof exports.getCustomerPurchaseProfile,"function");
+  return exports.getCustomerPurchaseProfile;
+}
+
 import {validateLocalQaConfig} from "./guard-qa-config.mjs";
 
 function gate(){
@@ -38,7 +74,7 @@ async function main(){
          (organization_id,store_id,client_order_id,folio,mode,status,
           service_mode,business_date,subtotal,total,customer_id)
          values (${org.id},${store.id},'qa-contract-split',
-           'QA-SPLIT-TEST','SHADOW','SENT','DINE_IN',
+           'QA-SPLIT-TEST','LIVE','SENT','DINE_IN',
            '2026-10-17',130,130,null) returning id`;
        const line1=await tx`insert into public.pos_order_lines
          (organization_id,order_id,catalog_external_id,name_snapshot,
@@ -136,6 +172,29 @@ async function main(){
          from public.pos_order_splits where order_id=${order.id}
          and customer_id is null`;
        assert.equal(unassigned.n,0);
+       // Ejecutar la función real del perfil (SQL y favoritos reales),
+       // no una consulta inventada para la prueba.
+       const getProfile=actualCustomerProfileReader(tx);
+       const aProfile=await getProfile({
+         organizationId:org.id,storeId:store.id,customerId:alice.id,page:1,
+       });
+       const bProfile=await getProfile({
+         organizationId:org.id,storeId:store.id,customerId:bob.id,page:1,
+       });
+       assert.equal(aProfile.summary.tickets,1);
+       assert.equal(aProfile.summary.spent,70);
+       assert.equal(aProfile.history[0].split_id,splitA.id);
+       assert.equal(aProfile.history[0].order_id,order.id);
+       assert.deepEqual(aProfile.history[0].lines.map(l=>l.item_name),
+         ["Latte español QA"]);
+       assert.equal(aProfile.favoriteBeverages[0].name,"LATTE ESPAÑOL QA");
+       assert.equal(bProfile.summary.tickets,1);
+       assert.equal(bProfile.summary.spent,60);
+       assert.equal(bProfile.history[0].split_id,splitB.id);
+       assert.deepEqual(bProfile.history[0].lines.map(l=>l.item_name),
+         ["Matcha QA"]);
+       assert.equal(bProfile.favoriteBeverages[0].name,"MATCHA QA");
+       console.log("PASS: perfil SQL REAL individual, importes y bebidas por cuenta.");
        // Duplicados se ignoran por índices ÚNICOS reales, no por la UI.
        const duplicateMoney=await tx`insert into public.pos_payments
          (organization_id,order_id,split_id,method,amount)
