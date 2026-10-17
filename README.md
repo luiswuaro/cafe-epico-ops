@@ -70,6 +70,17 @@ como requisito para cobrar por LAN.
 **Criterios para autorizar el corte:**
 [docs/operations/local-qa-acceptance.md](docs/operations/local-qa-acceptance.md)
 
+**Vista previa del POS sin datos comerciales:**
+en PC QA local abrir `/qa/pos-preview`; navegación y flujo de cobro
+**simulados**, no reemplazan al POS real. Instrucciones:
+[docs/operations/qa-ui-preview.md](docs/operations/qa-ui-preview.md).
+
+**Estrategia de salida de Vercel y acceso remoto:**
+[docs/adr/ADR-010-vendor-exit-and-remote-access.md](docs/adr/ADR-010-vendor-exit-and-remote-access.md).
+Vercel Hobby y Tailscale Personal no son vías comerciales gratuitas.
+Cloudflare Zero Trust Free se evalúa para uso remoto empresarial, después
+de las pruebas LAN y de seguridad.
+
 Las pruebas y certificados son obligatorios; no abrir PostgreSQL,
 la estación ESC/POS ni Supabase Studio directamente a la Wi-Fi del hotel.
 
