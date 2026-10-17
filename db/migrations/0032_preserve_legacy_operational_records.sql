@@ -6,7 +6,7 @@
 --   financial_budgets: 0 registros
 -- Se crean sólo en réplicas nuevas. NO importar sus filas desde producción
 -- sin respaldo cifrado y validación de FK/restauración.
-CREATE TABLE IF NOT EXISTS public.financial_budgets (
+CREATE TABLE IF NOT EXISTS financial_budgets (
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
  organization_id uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
  expenses jsonb NOT NULL DEFAULT '[]'::jsonb
@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS public.financial_budgets (
  CONSTRAINT financial_budgets_org_uidx UNIQUE (organization_id)
 );
 
-CREATE TABLE IF NOT EXISTS public.operational_inventory_balances (
+CREATE TABLE IF NOT EXISTS operational_inventory_balances (
  organization_id uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
  store_id uuid NOT NULL REFERENCES public.stores(id) ON DELETE CASCADE,
  loyverse_store_external_id text NOT NULL,
@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS public.operational_inventory_balances (
 CREATE INDEX IF NOT EXISTS operational_inventory_balances_variant_idx
  ON public.operational_inventory_balances(organization_id,variant_external_id);
 
-CREATE TABLE IF NOT EXISTS public.operational_inventory_movements (
+CREATE TABLE IF NOT EXISTS operational_inventory_movements (
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
  organization_id uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
  store_id uuid NOT NULL REFERENCES public.stores(id) ON DELETE CASCADE,
