@@ -72,8 +72,10 @@ debe figurar en `public.employees.user_id` y contar con permiso
 
 1. Dejar Next.js QA escuchando **solo en** `127.0.0.1:3000`.
 2. Arrancar el puente con `Install-CafeEpicoPrintBridge.ps1`.
-3. **Pausar la estación automática en la pestaña OPS QA**, para evitar
-   competencias entre trabajadores durante las pruebas.
+3. Configurar en `.env.local` `NEXT_PUBLIC_OPS_LOCAL_PRINT_AGENT_ENABLED=true` y
+   reiniciar/reconstruir Next.js QA. Se desactiva el polling del navegador;
+   si el agente deja de funcionar no se reactiva solo la pestaña. El equipo
+   necesita intervención para evitar impresiones duplicadas.
 4. Iniciar en PowerShell:
 
 ```powershell
