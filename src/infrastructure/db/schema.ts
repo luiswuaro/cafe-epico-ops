@@ -1220,7 +1220,7 @@ export const posOrderSplits = pgTable("pos_order_splits", {
 }, (t) => [
   uniqueIndex("pos_order_splits_label_uidx").on(t.orderId, t.label),
   index("pos_order_splits_order_idx").on(t.orderId, t.status),
-  index("pos_order_splits_customer_paid_idx").on(t.customerId,t.paidAt)
+  index("pos_order_splits_customer_paid_idx").on(t.customerId,t.paidAt.desc())
     .where(sql`${t.customerId} IS NOT NULL AND ${t.status} = 'PAID'`),
 ]);
 
