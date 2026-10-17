@@ -8,7 +8,8 @@ $files = @(
   'scripts/local/start-selfhost-qa.ps1',
   'scripts/local/start-qa-gateway.ps1',
   'tools/print-bridge/Instalar-EstacionOPS.ps1',
-  'scripts/local/install-print-agent.ps1'
+  'scripts/local/install-print-agent.ps1',
+  'scripts/local/Render-PrintTicketRaster.ps1'
 )
 foreach($file in $files){
   $tokens = $null
