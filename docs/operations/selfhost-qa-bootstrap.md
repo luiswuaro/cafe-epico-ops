@@ -76,7 +76,7 @@ SUPABASE_PUBLIC_URL=https://IP_PRIVADA_PC:8443
 API_EXTERNAL_URL=https://IP_PRIVADA_PC:8443/auth/v1
 SITE_URL=https://IP_PRIVADA_PC:8443
 DISABLE_SIGNUP=true
-ENABLE_EMAIL_SIGNUP=false
+ENABLE_EMAIL_SIGNUP=true
 ENABLE_PHONE_SIGNUP=false
 ENABLE_ANONYMOUS_USERS=false
 ```
@@ -179,6 +179,29 @@ idempotente y levantará los contenedores existentes. Si 16543 también
 está ocupado, el reparador aborta sin cambios; primero identificar el
 conflicto y seleccionar un puerto alternativo con `-HostPort` explícito.
 No improvisar puertos en la URL de Auth/OPS.
+
+### Reparación puntual: «Email logins are disabled»
+
+En el release autoalojado, `ENABLE_EMAIL_SIGNUP=false` desactiva el proveedor
+de correo y también el inicio de sesión con contraseña, incluso de usuarios ya
+creados por Studio. QA debe tener `ENABLE_EMAIL_SIGNUP=true` **junto con**
+`DISABLE_SIGNUP=true`, de modo que Auth admita el login por email pero
+bloquee el autoregistro público. Se mantiene `ENABLE_PHONE_SIGNUP=false`
+y `ENABLE_ANONYMOUS_USERS=false`.
+
+Si esta QA fue configurada con la versión anterior, actualizar únicamente
+`ENABLE_EMAIL_SIGNUP` a `true` en `.local/supabase-qa/.env` (archivo
+privado ignorado por Git). Validar con
+`node scripts/local/inspect-qa-secrets.mjs .env.local .local/supabase-qa/.env`.
+Después, desde `.local/supabase-qa`, recrear **solo** el servicio Auth con
+los dos Compose del piloto:
+
+```powershell
+docker compose -f docker-compose.yml -f docker-compose.ops-qa.yml up -d --no-deps --force-recreate --wait auth
+```
+
+No recrear la base, no generar claves nuevas ni cambiar `DISABLE_SIGNUP`.
+Comprobar el inicio de sesión QA antes de migrar cualquier venta.
 
 ## 4. Crear el esquema OPS y los datos sintéticos de prueba
 
