@@ -1,4 +1,5 @@
 import http from "node:http";
+import net from "node:net";
 import {fileURLToPath} from "node:url";
 
 const DEFAULT_PORT=47835;
@@ -53,11 +54,20 @@ h1{font-size:24px}p{line-height:1.55}.ok{color:#80d9aa}.muted{color:#aaa;font-si
   });
 }
 
+export function isPrivateLanIp(host){
+ if(net.isIP(host)!==4)return false;
+ const [a,b]=host.split(".").map(Number);
+ return a===10||(a===172&&b>=16&&b<=31)||(a===192&&b===168);
+}
 const self=process.argv[1]&&fileURLToPath(import.meta.url)===process.argv[1];
 if(self){
   const port=Number(process.argv[2]||DEFAULT_PORT);
   if(!Number.isSafeInteger(port)||port<1024||port>65535){
     console.error("Puerto inválido");process.exit(2);
+  }
+  const bindHost=process.argv[3]||"127.0.0.1";
+  if(bindHost!=="127.0.0.1"&&!isPrivateLanIp(bindHost)){
+    console.error("IP no privada o no válida; no se abrirá el puerto.");process.exit(2);
   }
   const server=createLanProbeServer();
   const timer=setTimeout(()=>{
@@ -66,10 +76,10 @@ if(self){
   },MAX_RUNTIME_MS);
   timer.unref();
   server.on("error",error=>{console.error("No se pudo abrir el puerto:",error.message);process.exitCode=1});
-  server.listen(port,"0.0.0.0",()=>{
+  server.listen(port,bindHost,()=>{
     console.log("DIAGNÓSTICO, NO POS. Puerto "+port+" abierto en la PC por máximo 15 minutos.");
     console.log("Desde la PC: http://127.0.0.1:"+port+"/");
-    console.log("Desde el celular: http://<IP_LOCAL_PC>:"+port+"/");
+    console.log("Desde el celular: http://"+bindHost+":"+port+"/");
     console.log("Ctrl+C para detener inmediatamente.");
   });
 }
