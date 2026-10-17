@@ -14,7 +14,11 @@ import {drizzle} from "drizzle-orm/postgres-js";
 import {pgTable,uuid,text as pgText,jsonb,numeric} from "drizzle-orm/pg-core";
 const nodeRequire=createRequire(import.meta.url);
 
-function actualCustomerProfileReader(connection){
+function actualCustomerProfileReader(connection,rootClient){
+  // Postgres.js TransactionSql hereda unsafe/query pero no options.parsers,
+  // que el adaptador Drizzle sí necesita. Reutilizar sólo los parsers del
+  // cliente raíz; TODAS las consultas siguen ejecutándose sobre la tx.
+  if(!connection.options)connection.options=rootClient.options;
   const schema={
     posCustomers:pgTable("pos_customers",{
       id:uuid("id"),organizationId:uuid("organization_id"),
@@ -174,7 +178,7 @@ async function main(){
        assert.equal(unassigned.n,0);
        // Ejecutar la función real del perfil (SQL y favoritos reales),
        // no una consulta inventada para la prueba.
-       const getProfile=actualCustomerProfileReader(tx);
+       const getProfile=actualCustomerProfileReader(tx,db);
        const aProfile=await getProfile({
          organizationId:org.id,storeId:store.id,customerId:alice.id,page:1,
        });
