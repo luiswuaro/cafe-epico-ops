@@ -1,4 +1,4 @@
-#requires -Version 5.1
+﻿#requires -Version 5.1
 # Arranque QA aislado. Sin ventas reales ni cambios a producción.
 [CmdletBinding()]
 param(
@@ -13,10 +13,18 @@ Push-Location $root
 try{
  Write-Host '=== CAFÉ ÉPICO LOCAL / SOLO QA ===' -ForegroundColor Cyan
  & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'check-windows.ps1')
+ $preflightExit=$LASTEXITCODE
  if($Mode -eq 'Doctor'){
-   Write-Host 'Diagnóstico completo. No se arrancaron servidores.' -ForegroundColor Green
+   if($preflightExit -ne 0){
+     Write-Host 'Diagnostico terminado con REQUISITOS PENDIENTES. No iniciar servidores todavia.' -ForegroundColor Yellow
+     exit $preflightExit
+   }
+   Write-Host 'Herramientas detectadas; falta configurar QA para poder iniciar servicios.' -ForegroundColor Green
    Write-Host 'Para iniciar: .\scripts\local\launch-qa.ps1 -Mode Start'
    exit 0
+ }
+ if($preflightExit -ne 0){
+   throw 'No se iniciara QA: faltan herramientas o Docker Engine no funciona.'
  }
  if(!(Test-Path $envFile)){throw 'No existe .env.local QA; nunca copiar secretos comerciales.'}
  $node=(Get-Command node -ErrorAction Stop).Source
