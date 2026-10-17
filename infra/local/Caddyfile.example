@@ -2,6 +2,7 @@
 # Ejemplo: OPS_LAN_HOST=192.168.1.100 (nunca una IP pública).
 # Requiere confiar explícitamente en la CA local de Caddy en cada terminal.
 https://{$OPS_LAN_HOST}:8443 {
+    bind {$OPS_LAN_HOST}
     tls internal
     encode zstd gzip
 
