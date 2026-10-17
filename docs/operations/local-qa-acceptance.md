@@ -21,7 +21,7 @@
 | Tueste | Crear sesión y lote HiBean ficticio | Peso verde/tostado, merma, trazabilidad |
 | Sin Internet | Desconectar solamente WAN; mantener LAN | Login vigente, cobro y comanda sin dependencia externa |
 | Reinicio | Reiniciar servidor y volver a abrir | Persisten órdenes, saldos y estados impresos |
-| Respaldo | Restaurar en segunda réplica QA | Coinciden conteos, puntos, cobros, FK y usuarios |
+| Respaldo | `backup-ops-local.mjs` + `inspect-ops-local-backup.mjs` y restauración en otra réplica QA | Coinciden conteos, puntos, cobros, FK y usuarios; copia age SHA válida |
 
 Registrar cada caso con fecha, responsable, evidencia, resultado
 (PASA/FALLA) y observaciones. Si una fila crítica falla, no reemplazar el
