@@ -1,53 +1,78 @@
 import {spawn} from "node:child_process";
+import {createInterface} from "node:readline";
 import {fileURLToPath} from "node:url";
 import {resolve} from "node:path";
 import {printAgentPayload} from "./print-agent-format.mjs";
 
 const script=resolve(fileURLToPath(new URL("./Render-PrintTicketRaster.ps1",import.meta.url)));
+let renderer=null;
+let serialize=Promise.resolve();
 
-/** Render a full 384px Unicode bitmap with Windows GDI (no browser or fonts
- * shipped). This does not talk to the printer: claim remains in PostgreSQL.
- * Fail before claim if drawing fails; never silently fallback to text.
- */
-export async function printAgentRasterPayload(job,template={}){
- if(process.platform!=="win32")throw Error("Render raster requiere Windows.");
- const source=printAgentPayload(job,template);
- const worker=spawn("powershell.exe",[
+function startRenderer(){
+ if(renderer)return renderer;
+ const child=spawn("powershell.exe",[
    "-NoProfile","-NonInteractive","-ExecutionPolicy","Bypass",
-   "-File",script,
+   "-File",script,"-Stream",
  ],{stdio:["pipe","pipe","pipe"],windowsHide:true});
- let stdout="",stderr="";
- const limit=2_000_000;
- const done=new Promise((resolveDone,reject)=>{
-   worker.once("error",reject);
-   worker.once("close",code=>resolveDone(code));
+ const state={child,pending:null,closed:false};
+ renderer=state;
+ // STDERR is deliberately discarded; it may contain customer data.
+ child.stderr.resume();
+ child.stdin.on("error",()=>{
+   if(state.pending){state.pending.reject(Error("No se pudo comunicar con GDI."));state.pending=null;}
  });
- worker.stdout.setEncoding("utf8");
- worker.stdout.on("data",part=>{
-   stdout+=part;
-   if(stdout.length>limit)worker.kill();
+ const reader=createInterface({input:child.stdout,crlfDelay:Infinity});
+ reader.on("line",line=>{
+   const job=state.pending;
+   state.pending=null;
+   if(job)job.resolve(line);
  });
- worker.stderr.setEncoding("utf8");
- worker.stderr.on("data",part=>{
-   stderr+=part;
-   if(stderr.length>limit)worker.kill();
- });
- const timer=setTimeout(()=>worker.kill(),30000);
- try{
-   worker.stdin.end(JSON.stringify(source));
-   const exitCode=await done;
-   if(exitCode!==0||!stdout||stderr.length>limit||stdout.length>limit)
-     throw Error("Falló raster GDI del ticket. No se reclamó ni imprimió.");
-   let payload;
-   try{payload=JSON.parse(stdout)}catch{throw Error("Renderer GDI respondió JSON inválido.");}
-   const raster=payload?.raster;
-   if(!raster||raster.width!==384||!Number.isInteger(raster.height)||
-      raster.height<40||raster.height>5000||typeof raster.dataBase64!=="string"||
-      Buffer.from(raster.dataBase64,"base64").length!==48*raster.height)
-     throw Error("Renderer GDI devolvió un bitmap de tamaño incorrecto.");
-   return {
-     raster:{dataBase64:raster.dataBase64,width:384,height:raster.height,align:"center"},
-     feed:source.feed,cut:source.cut,
+ const stop=()=>{
+   state.closed=true;
+   if(state.pending){state.pending.reject(Error("El renderizador GDI se detuvo."));state.pending=null;}
+   if(renderer===state)renderer=null;
+ };
+ child.once("error",stop);
+ child.once("close",stop);
+ return state;
+}
+process.once("exit",()=>{if(renderer)renderer.child.kill();});
+
+async function renderOne(source){
+ const state=startRenderer();
+ if(state.closed||state.pending)throw Error("Proceso gráfico ocupado.");
+ const output=await new Promise((resolveOutput,rejectOutput)=>{
+   const timer=setTimeout(()=>{
+     state.child.kill();
+     if(state.pending){
+       state.pending=null;
+       rejectOutput(Error("GDI sin respuesta a los 30 segundos."));
+     }
+   },30000);
+   state.pending={
+     resolve:line=>{clearTimeout(timer);resolveOutput(line);},
+     reject:error=>{clearTimeout(timer);rejectOutput(error);},
    };
- }finally{clearTimeout(timer);}
+   state.child.stdin.write(JSON.stringify(source)+"\n");
+ });
+ let result;
+ try{result=JSON.parse(output);}catch{throw Error("Respuesta GDI inválida.");}
+ if(result?.error)throw Error("GDI no pudo dibujar el ticket.");
+ const raster=result?.raster;
+ if(!raster||raster.width!==384||!Number.isInteger(raster.height)||
+    raster.height<40||raster.height>5000||typeof raster.dataBase64!=="string"||
+    Buffer.from(raster.dataBase64,"base64").length!==48*raster.height)
+   throw Error("Bitmap GDI inválido.");
+ return {raster:{dataBase64:raster.dataBase64,width:384,
+   height:raster.height,align:"center"},feed:source.feed,cut:source.cut};
+}
+
+/** Mantener un proceso GDI+ por estación y secuenciar peticiones. El estado
+ * CLAIM de la BD no se toca hasta que el render haya finalizado con éxito. */
+export async function printAgentRasterPayload(job,template={}){
+ if(process.platform!=="win32")throw Error("El modo raster necesita Windows.");
+ const source=printAgentPayload(job,template);
+ const task=serialize.then(()=>renderOne(source));
+ serialize=task.catch(()=>{});
+ return task;
 }
