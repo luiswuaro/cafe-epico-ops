@@ -81,3 +81,8 @@ export async function printAgentRasterPayload(job,template={}){
  serialize=task.catch(()=>{});
  return task;
 }
+
+/** Cierre limpio (QA/test); la próxima solicitud puede reiniciar el proceso. */
+export function closePrintAgentRaster(){
+ if(renderer&&!renderer.closed)renderer.child.stdin.end();
+}
