@@ -177,11 +177,23 @@ async function main(){
    const restore=proc("pg_restore",[
      "--clean","--if-exists","--no-owner","--no-acl","--exit-on-error",
      "--dbname="+restoreUrl.href,
-   ]);
+   ],{stdio:["pipe","ignore","pipe"]});
    const outcomes=await Promise.allSettled([
      age.finished,restore.finished,pipeline(age.child.stdout,restore.child.stdin),
    ]);
-   assert.ok(outcomes.every(x=>x.status==="fulfilled"),"pg_restore no terminó correctamente.");
+   if(outcomes.some(x=>x.status!=="fulfilled")){
+     const names=["age","pg_restore","tubería"];
+     const states=outcomes.map((item,i)=>names[i]+":"+
+       (item.status==="fulfilled"?"OK":
+         (item.reason?.name==="AbortError"?"TIMEOUT":
+           (item.reason?.code||item.reason?.name||"ERROR"))));
+     const restoreError=restore.getDiagnostic().split(/\\r?\\n/)
+       .find(line=>/^pg_restore: error:/.test(line.trim()));
+     // CI usa datos sintéticos. No imprimir URLs ni parámetros de conexión.
+     console.error("CI restauración: "+states.join(", ")+
+       (restoreError?"; "+restoreError.replace(/postgres(?:ql)?:\\/\\/[^\\s]+/ig,"[DB]").slice(0,140):""));
+     throw Error("pg_restore no terminó correctamente.");
+   }
    const secondary=postgres(restoreUrl.href,{max:1,prepare:false});
    try{
      checkpoint("conciliar_datos");
