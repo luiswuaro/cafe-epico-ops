@@ -1,14 +1,18 @@
 "use client";
 import {useEffect,useState} from "react";
+import {usePathname} from "next/navigation";
 import {PrintStation} from "@/app/(employee)/pos/printer/print-station";
 import {getPrintStationTemplate} from "@/app/(employee)/pos/printer/hub-actions";
 import type {DirectReceiptTemplate} from "@/app/(employee)/pos/receipt/[id]/direct-print-button";
 const KEY="cafe-epico-print-hub-pc-v1";
 /** Un solo worker por pestaña OPS, sin ventana exclusiva. */
 export function PrintStationBackground(){
+ const pathname=usePathname();
+ const qaPreview=pathname==="/qa/pos-preview";
  const [enabled,setEnabled]=useState(false);
  const [template,setTemplate]=useState<DirectReceiptTemplate|null>(null);
  useEffect(()=>{
+  if(qaPreview)return;
   const sync=()=>{
    try{const config=JSON.parse(window.localStorage.getItem(KEY)||"null") as {enabled?:boolean}|null;
     setEnabled(config?.enabled===true);
@@ -22,9 +26,9 @@ export function PrintStationBackground(){
    window.removeEventListener("storage",sync);
    window.removeEventListener("ops-print-hub-config-changed",sync);
   };
- },[]);
+ },[qaPreview]);
  useEffect(()=>{
-  if(!enabled||process.env.NEXT_PUBLIC_OPS_LOCAL_PRINT_AGENT_ENABLED==="true")return;
+  if(qaPreview||!enabled||process.env.NEXT_PUBLIC_OPS_LOCAL_PRINT_AGENT_ENABLED==="true")return;
   let alive=true;
   let loading=false;
   let ready=false;
@@ -74,7 +78,7 @@ export function PrintStationBackground(){
     window.removeEventListener("focus",retryOnWake);
     document.removeEventListener("visibilitychange",retryOnVisible);
   };
- },[enabled]);
- if(!enabled||!template||process.env.NEXT_PUBLIC_OPS_LOCAL_PRINT_AGENT_ENABLED==="true")return null;
+ },[enabled,qaPreview]);
+ if(qaPreview||!enabled||!template||process.env.NEXT_PUBLIC_OPS_LOCAL_PRINT_AGENT_ENABLED==="true")return null;
  return <PrintStation template={template} preview={false} hiddenMode/>;
 }
