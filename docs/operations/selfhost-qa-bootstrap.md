@@ -152,6 +152,34 @@ El override usa `!override` para sustituir, no añadir, los puertos del
 archivo base (requiere Compose 2.24.4+). Docker Desktop no debe apuntar a un
 daemon remoto. Verificar `docker compose ps` antes de migrar.
 
+### Reparación puntual si Windows tiene ocupado `127.0.0.1:6543`
+
+En Windows, el primer `up --wait` puede iniciar PostgreSQL y otros servicios,
+pero fallar al publicar el puerto **host 6543** de Supavisor. **No ejecutar
+`docker compose down -v` ni detener procesos de Windows a ciegas**.
+
+El OPS se conecta al Supavisor modo sesión por `127.0.0.1:5432`;
+para transacciones remapeamos **solo** el puerto del host a `16543`,
+conservando el interno 6543. Para una instalación ya preparada antes de
+este cambio, tras `git pull --ff-only`, desde la raíz QA ejecutar:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File ".\\scripts\\local\\repair-qa-transaction-port.ps1"
+```
+
+El reparador sólo acepta el guard de QA local, comprueba por TCP que
+`127.0.0.1:16543` se pueda reservar, cambia únicamente el override
+ignorado por Git `.local/supabase-qa/docker-compose.ops-qa.yml`, verifica
+con `docker compose config` y `inspect-qa-compose.mjs` los puertos
+loopback y restaura el override original si la validación falla.
+**No cambia `.env.local`, claves, volúmenes, PostgreSQL ni puertos WAN**.
+
+Al recibir `PASS`, reintentar `start-selfhost-qa.ps1`, que será
+idempotente y levantará los contenedores existentes. Si 16543 también
+está ocupado, el reparador aborta sin cambios; primero identificar el
+conflicto y seleccionar un puerto alternativo con `-HostPort` explícito.
+No improvisar puertos en la URL de Auth/OPS.
+
 ## 4. Crear el esquema OPS y los datos sintéticos de prueba
 
 Con el servidor QA levantado, desde la raíz OPS:
