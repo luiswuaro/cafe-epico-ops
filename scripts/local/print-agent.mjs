@@ -4,7 +4,7 @@
  * La DB mantiene CLAIM/DONE/FAILED; NO se reenvía si el ACK es ambiguo.
  */
 import {randomUUID} from "node:crypto";
-import {printAgentPayload} from "./print-agent-format.mjs";
+import {runPrintJobs} from "./print-agent-cycle.mjs";
 
 const env=process.env;
 function guard(){
@@ -99,37 +99,20 @@ async function main(){
    lastVersion=jobs.length?"":
      typeof result.version==="string"?result.version:"";
    if(jobs.length&&!result.template)throw Error("Falta formato del ticket.");
-   for(const job of jobs){
-     const kitchen=job.kind==="KITCHEN"||job.kind==="VOID";
-     const port=kitchen?kitchenPort:ticketPort;
-     const token=kitchen?kitchenToken:ticketToken;
-     if(!availability.get(port+":"+token))continue;
-     const created=new Date(job.createdAt).getTime();
-     if(!Number.isFinite(created)||Date.now()-created>300000||
-        created>Date.now()+60000)continue;
-     const payload=printAgentPayload(job,result.template);
-     const claimed=await api("CLAIM",{jobKey:job.key,stationId});
-     if(claimed.claimed!==true)continue;
-     try{
-       const printer=await bridge(port,token,payload);
-       // Se marca DONE antes de cualquier métrica; un fallo de métrica
-       // no provoca una segunda impresión.
-       await api("FINISH",{jobKey:job.key,stationId,outcome:"DONE",details:printer});
-       if(kitchen&&job.kind==="KITCHEN"){
-         try{await api("ACK",{orderId:job.orderId,
-           roundId:job.roundId||"INITIAL",printer})}catch{
-           console.warn("Comanda enviada; métrica de impresión no registrada.");
-         }
-       }
-       console.log("Enviada: "+job.kind+" "+job.key.slice(0,22));
-       if(cutGap)await sleep(cutGap*1000); // Pausa física POS-58 configurable.
-     }catch{
-       // El spooler puede haber aceptado el trabajo antes del timeout. Nunca
-       // reenviar automáticamente. Si FINISH falla, CLAIM persiste sin reintento.
-       try{await api("FINISH",{jobKey:job.key,stationId,
-         outcome:"FAILED",details:"ACK no confirmado; revisar papel manualmente"})}
-       catch{console.warn("Trabajo reclamado; pendiente de conciliación manual.");}
-     }
+   const statuses=await runPrintJobs({
+     jobs,template:result.template??{},stationId,availability,
+     printer:{
+       kitchen:{port:kitchenPort,token:kitchenToken},
+       ticket:{port:ticketPort,token:ticketToken},
+     },
+     api,bridge,sleep,cutGap,
+     log:message=>console.warn(message),
+   });
+   for(const status of statuses){
+     if(status.status==="DONE")
+       console.log("Enviada: "+status.key.slice(0,32));
+     if(status.status==="UNKNOWN_OUTPUT")
+       console.warn("Resultado ambiguo; revisión manual: "+status.key.slice(0,32));
    }
    errors=0;delay=4000;
   }catch{
