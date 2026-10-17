@@ -97,6 +97,13 @@ export default async function SplitOrderPage({
               </strong>
               {split.status==="PAID"&&split.customerId&&
                 <p className="muted">Cliente: {customers.find(c=>c.id===split.customerId)?.name??"Cliente vinculado"}</p>}
+              {split.status==="PAID"&&split.payments.length>0&&
+                <p className="muted">Pagos: {split.payments.map(payment=>{
+                  const label=payment.method==="POINTS"?"Puntos":
+                    payment.method==="CASH"?"Efectivo":
+                    payment.method==="CARD"?"Tarjeta":"Transferencia";
+                  return label+" "+money.format(Number(payment.amount));
+                }).join(" + ")}</p>}
 
               <div className="split-mini-lines">
                 {split.lines.map((assignment) => {
