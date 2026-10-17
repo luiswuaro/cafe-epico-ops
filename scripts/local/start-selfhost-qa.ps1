@@ -18,6 +18,8 @@ Push-Location $root
 try {
   & node ("--env-file="+(Join-Path $root '.env.local')) 'scripts/local/guard-qa-config.mjs'
   if($LASTEXITCODE -ne 0){throw 'BLOQUEADO: variables OPS apuntan a producción o no son QA locales.'}
+  & node 'scripts/local/inspect-qa-secrets.mjs' (Join-Path $root '.env.local') (Join-Path $stack '.env')
+  if($LASTEXITCODE -ne 0){throw 'BLOQUEADO: secretos de ejemplo o configuración Auth/HTTPS incongruente.'}
   Push-Location $stack
   try {
     $compose=@('-f','docker-compose.yml','-f','docker-compose.ops-qa.yml')
