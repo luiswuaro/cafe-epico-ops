@@ -1,5 +1,6 @@
 @echo off
 setlocal
+chcp 65001 >nul
 cd /d "%~dp0"
 echo === CAFE EPICO: DIAGNOSTICO PUENTE DE IMPRESION LOCAL QA ===
 echo NO imprime papel, no envia comandas, no toca el POS comercial.
