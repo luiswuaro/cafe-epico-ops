@@ -5,6 +5,7 @@
  */
 import {randomUUID} from "node:crypto";
 import {runPrintJobs} from "./print-agent-cycle.mjs";
+import {printAgentRasterPayload} from "./print-agent-raster.mjs";
 
 const env=process.env;
 function guard(){
@@ -112,6 +113,7 @@ async function main(){
        ticket:{port:ticketPort,token:ticketToken},
      },
      api,bridge,sleep,cutGap,
+     ...(env.OPS_LOCAL_PRINT_RASTER_ENABLED==="true"?{format:printAgentRasterPayload}:{}),
      log:message=>console.warn(message),
    });
    for(const status of statuses){
