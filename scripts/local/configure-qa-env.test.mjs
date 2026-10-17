@@ -29,7 +29,7 @@ const template=[
  "OPS_LOCAL_CA_FILE=C:/REEMPLAZAR/root.crt",
 ].join("\n");
 
-test("Sincroniza las claves oficiales y origen local, mantiene Auth público deshabilitado",()=>{
+test("Sincroniza las claves oficiales y origen local, mantiene el registro público bloqueado con inicio por correo habilitado",()=>{
  const {app,stack,origin}=prepareQaEnv({stackText:text,appTemplate:template,
    ip:"192.168.0.172",caPath:"C:\\Users\\inicio\\AppData\\Roaming\\Caddy\\root.crt"});
  const a=parseEnv(app),s=parseEnv(stack);
@@ -40,7 +40,7 @@ test("Sincroniza las claves oficiales y origen local, mantiene Auth público des
    password+"@127.0.0.1:5432/postgres");
  assert.equal(a.OPS_LOCAL_CA_FILE,"C:/Users/inicio/AppData/Roaming/Caddy/root.crt");
  assert.equal(s.DISABLE_SIGNUP,"true");
- assert.equal(s.ENABLE_EMAIL_SIGNUP,"false");
+ assert.equal(s.ENABLE_EMAIL_SIGNUP,"true");
  assert.equal(s.ENABLE_PHONE_SIGNUP,"false");
  assert.equal(s.COMPOSE_FILE,"docker-compose.yml");
  assert.ok(inspectQaSecrets(a,s).ok);
