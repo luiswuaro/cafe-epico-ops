@@ -64,8 +64,13 @@ jobs:
           with open(sys.argv[1],encoding="utf-8") as handle:
               plan=json.load(handle)
           changes=plan.get("resource_changes") or []
-          if changes:
-              raise SystemExit("ERROR: La prueba de lectura contiene cambios de recursos; abortado")
+          writes=[
+              change for change in changes
+              if change.get("mode")=="managed" and
+                 (change.get("change") or {}).get("actions")!=["no-op"]
+          ]
+          if writes:
+              raise SystemExit("ERROR: La prueba contiene cambios de recursos administrados; abortado")
           outputs=(plan.get("planned_values") or {}).get("outputs") or {}
           count=(outputs.get("availability_domain_count") or {}).get("value")
           if not isinstance(count,int) or count<1:
