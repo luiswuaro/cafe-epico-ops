@@ -87,7 +87,11 @@ async function main(){
                 (${org.id},${alice.id},${order.id},'EARN',2.5,'Cuenta 1 QA'),
                 (${org.id},${bob.id},${order.id},'EARN',3,'Cuenta 2 QA')`;
        await tx`update public.pos_order_splits
-         set status='PAID',paid_at=now() where id in (${splitA.id},${splitB.id})`;
+         set status='PAID',customer_id=${alice.id},paid_at=now()
+         where id=${splitA.id}`;
+       await tx`update public.pos_order_splits
+         set status='PAID',customer_id=${bob.id},paid_at=now()
+         where id=${splitB.id}`;
        await tx`update public.pos_orders
          set status='PAID',paid_at=now() where id=${order.id}`;
        const checks=await tx`
@@ -111,6 +115,27 @@ async function main(){
        const [points]=await tx`select count(*)::int as n,sum(points)::numeric as delta
          from public.pos_loyalty_entries where order_id=${order.id}`;
        assert.equal(points.n,3);assert.equal(Number(points.delta),-14.5);
+       // Un cliente puede tener solamente su cuenta, NO toda la mesa.
+       const profile=await tx`
+         select s.customer_id as customer_id,
+           sum(s.total)::numeric as subtotal,
+           array_agg(l.name_snapshot order by l.name_snapshot) as products
+         from public.pos_order_splits s
+         join public.pos_order_split_lines sl on sl.split_id=s.id
+         join public.pos_order_lines l on l.id=sl.order_line_id
+         where s.order_id=${order.id} and s.status='PAID'
+         group by s.customer_id order by s.customer_id`;
+       assert.equal(profile.length,2);
+       const a=profile.find(row=>row.customer_id===alice.id);
+       const b=profile.find(row=>row.customer_id===bob.id);
+       assert.equal(Number(a.subtotal),70);
+       assert.deepEqual(a.products,["Latte español QA"]);
+       assert.equal(Number(b.subtotal),60);
+       assert.deepEqual(b.products,["Matcha QA"]);
+       const [unassigned]=await tx`select count(*)::int as n
+         from public.pos_order_splits where order_id=${order.id}
+         and customer_id is null`;
+       assert.equal(unassigned.n,0);
        // Duplicados se ignoran por índices ÚNICOS reales, no por la UI.
        const duplicateMoney=await tx`insert into public.pos_payments
          (organization_id,order_id,split_id,method,amount)
