@@ -45,7 +45,7 @@ try{
     throw 'Override distinto del archivo QA previsto; no se modifica a ciegas.'
   }
   if($updated -ne $original){
-    [System.IO.File]::WriteAllText($override,$updated,(New-Object System.Text.UTF8Encoding($false)))
+    [System.IO.File]::WriteAllText($override,$updated,([System.Text.UTF8Encoding]::new($false)))
   }
   try{
     Push-Location $stack
@@ -57,7 +57,7 @@ try{
     }finally{Pop-Location}
   }catch{
     if($updated -ne $original){
-      [System.IO.File]::WriteAllText($override,$original,(New-Object System.Text.UTF8Encoding($false)))
+      [System.IO.File]::WriteAllText($override,$original,([System.Text.UTF8Encoding]::new($false)))
     }
     throw 'Validacion de Compose fallo; se restauro el override previo.'
   }
