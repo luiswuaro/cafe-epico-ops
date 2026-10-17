@@ -26,6 +26,21 @@ const line=(text,{align="left",bold=false,size="normal"}={})=>({
  text:sanitized(text),align,bold,size,
 });
 const rows=(text,width,opts)=>wrapped(text,width).map(s=>line(s,opts));
+/** El puente 1.3.0 admite un logo rasterizado y texto ESC/POS
+ * en el mismo trabajo. Mantiene acentos CP850 y evita una 2a llamada física.
+ */
+function printableLogo(template){
+ if(template.showLogo!==true)return null;
+ const {logoRasterBase64:data,logoWidthPx:width,logoHeightPx:height}=template;
+ if(typeof data!=="string"||!Number.isInteger(width)||!Number.isInteger(height)||
+    width<1||width>384||height<1||height>800)return null;
+ const expected=Math.ceil(width/8)*height;
+ if(data.length>expected*2||!/^[A-Za-z0-9+/]+={0,2}$/.test(data))return null;
+ if(Buffer.from(data,"base64").length!==expected)return null;
+ return {dataBase64:data,width,height,
+   align:["left","right","center"].includes(template.logoAlign)
+     ?template.logoAlign:"center"};
+}
 export function printAgentPayload(job,template={},now=new Date()){
  if(!job||typeof job!=="object"||!["KITCHEN","VOID","RECEIPT","PREBILL"].includes(job.kind))
    throw Error("Trabajo de impresión inválido.");
@@ -97,5 +112,6 @@ export function printAgentPayload(job,template={},now=new Date()){
  if(job.kind!=="PREBILL"&&template.footerMessage)add(template.footerMessage,{align:"center"});
  if(template.showNoCfdi!==false)add("Este ticket no es CFDI.",{align:"center"});
  if(lines.length>240)throw Error("Impresión excesiva: revisión manual");
- return {lines,feed:Math.max(1,Math.min(8,Number(template.feedLines)||3)),cut:Boolean(template.autoCut)};
+ return {lines,feed:Math.max(1,Math.min(8,Number(template.feedLines)||3)),
+   cut:Boolean(template.autoCut),logo:printableLogo(template)};
 }
