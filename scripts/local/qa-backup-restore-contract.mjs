@@ -171,7 +171,7 @@ async function main(){
    const age=proc("age",["--decrypt","--identity",keyPath,file]);
    const restore=proc("pg_restore",[
      "--clean","--if-exists","--no-owner","--no-acl","--exit-on-error",
-     "--dbname="+restoreUrl.href,"-",
+     "--dbname="+restoreUrl.href,
    ]);
    const outcomes=await Promise.allSettled([
      age.finished,restore.finished,pipeline(age.child.stdout,restore.child.stdin),
