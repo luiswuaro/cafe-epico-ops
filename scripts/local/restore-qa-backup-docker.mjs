@@ -140,8 +140,11 @@ async function verifyArchive(){
 }
 async function restore(archive){
  const age=run("age",["--decrypt","--identity",archive.identity,archive.file],{capture:false});
+ // La base destino YA fue comprobada vacía: --clean provocaba DROP de
+ // tablas en storage antes de existir ese esquema (PostgreSQL 3F000).
+ // Restaurar sin limpieza; --single-transaction revierte cualquier fallo.
  const pg=run("docker",["exec","-i",TARGET,"pg_restore",
-  "--clean","--if-exists","--no-owner","--no-acl",
+  "--no-owner","--no-acl",
   "--single-transaction","--exit-on-error",
   "--username=postgres","--dbname="+DATABASE],{input:"pipe",output:"ignore"});
  const outcomes=await Promise.allSettled([
