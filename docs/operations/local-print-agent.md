@@ -125,3 +125,21 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\local\install-prin
 El tiempo de separación de papel es configurable con `OPS_LOCAL_PRINT_GAP_SECONDS`
 (0–30 segundos). Para la POS-58 sin guillotina se mantiene 12 segundos
 hasta medir el flujo real; con autocorte puede utilizarse 0.
+
+## Generar una comanda de prueba desde la base QA
+
+Después de iniciar el agente y comprobar las credenciales, se puede
+crear **un único pedido ficticio LIVE** directamente en la sucursal QA.
+No representa una venta, no registra pago, no descuenta inventario y no
+genera movimientos de lealtad. No ejecutarlo en equipos de producción.
+
+```powershell
+node --env-file=.env.local scripts/local/create-print-agent-qa-order.mjs --print-qa-fixture
+```
+
+Imprime "COMANDA DE PRUEBA" con acentos y una nota de prueba. Validar
+que se envía una sola vez, que el agente marca `DONE` y que el
+navegador puede permanecer cerrado. El script verifica la organización
+y sucursal QA antes de insertar. Generar el pedido **después** de
+iniciar el agente: nunca recupera un lote de comandas antiguas sin
+confirmación manual.
