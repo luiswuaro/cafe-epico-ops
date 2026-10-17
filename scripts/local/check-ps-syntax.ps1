@@ -3,7 +3,9 @@ $ErrorActionPreference = 'Stop'
 $files = @(
   'scripts/local/test-lan.ps1',
   'scripts/local/check-windows.ps1',
-  'scripts/local/start-qa.ps1'
+  'scripts/local/start-qa.ps1',
+  'scripts/local/bootstrap-selfhost-qa.ps1',
+  'scripts/local/start-selfhost-qa.ps1'
 )
 foreach($file in $files){
   $tokens = $null
