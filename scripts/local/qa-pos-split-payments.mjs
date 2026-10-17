@@ -1,0 +1,145 @@
+/**
+ * Contratos con Postgres 17 real; únicamente CI efímero QA.
+ * Dos clientes y dos cuentas: canje + transferencia; segunda con efectivo.
+ * La misma restricción de producción rechaza cobrar dos veces una cuenta.
+ * Todo se revierte: nunca deja pedidos, saldos o puntos persistentes.
+ */
+import assert from "node:assert/strict";
+import postgres from "postgres";
+import {validateLocalQaConfig} from "./guard-qa-config.mjs";
+
+function gate(){
+  const env=process.env;
+  if(env.GITHUB_ACTIONS!=="true"||env.OPS_CI_DB_TEST!=="true"||
+     !validateLocalQaConfig(env).ok)
+    throw Error("Este contrato sólo se ejecuta en PostgreSQL sintético CI.");
+  const uri=new URL(env.DATABASE_URL??"");
+  if(uri.hostname!=="127.0.0.1"||uri.pathname!=="/postgres")
+    throw Error("Prohibido consultar una base comercial.");
+}
+
+async function main(){
+ gate();
+ const db=postgres(process.env.DATABASE_URL,{prepare:false,max:2});
+ const rollbackTag="EXPECTED_QA_SPLIT_ROLLBACK";
+ try{
+   const [org]=await db`select id from public.organizations where slug='cafe-epico-qa'`;
+   const [store]=await db`select id from public.stores
+     where organization_id=${org.id} and code='QA-TEPEXI'`;
+   assert.ok(org?.id&&store?.id);
+   try{
+     await db.begin(async tx=>{
+       const [alice,bob]=await tx`insert into public.pos_customers
+         (organization_id,name,points_balance)
+         values (${org.id},'QA-Cuenta-A',22.50),
+                (${org.id},'QA-Cuenta-B',0)
+         returning id,points_balance`;
+       const [order]=await tx`insert into public.pos_orders
+         (organization_id,store_id,client_order_id,folio,mode,status,
+          service_mode,business_date,subtotal,total,customer_id)
+         values (${org.id},${store.id},'qa-contract-split',
+           'QA-SPLIT-TEST','SHADOW','SENT','DINE_IN',
+           '2026-10-17',130,130,null) returning id`;
+       const line1=await tx`insert into public.pos_order_lines
+         (organization_id,order_id,catalog_external_id,name_snapshot,
+          category_snapshot,unit_price,quantity,line_total)
+         values (${org.id},${order.id},'qa-espresso','Latte español QA',
+          'CALIENTES',70,1,70) returning id`;
+       const line2=await tx`insert into public.pos_order_lines
+         (organization_id,order_id,catalog_external_id,name_snapshot,
+          category_snapshot,unit_price,quantity,line_total)
+         values (${org.id},${order.id},'qa-matcha','Matcha QA',
+          'FRÍAS',60,1,60) returning id`;
+       const [splitA,splitB]=await tx`insert into public.pos_order_splits
+         (organization_id,order_id,label,total,status)
+         values (${org.id},${order.id},'Cuenta 1',70,'OPEN'),
+                (${org.id},${order.id},'Cuenta 2',60,'OPEN')
+         returning id,total`;
+       await tx`insert into public.pos_order_split_lines
+         (organization_id,split_id,order_line_id,quantity,line_total)
+         values (${org.id},${splitA.id},${line1[0].id},1,70),
+                (${org.id},${splitB.id},${line2[0].id},1,60)`;
+       // Cuenta A: canje de 20 puntos + transferencia de 50 pesos.
+       await tx`insert into public.pos_payments
+         (organization_id,order_id,split_id,method,amount)
+         values (${org.id},${order.id},${splitA.id},'POINTS',20),
+                (${org.id},${order.id},${splitA.id},'TRANSFER',50)`;
+       // Cuenta B: efectivo de $60; cliente distinto para recibir sus puntos.
+       await tx`insert into public.pos_payments
+         (organization_id,order_id,split_id,method,amount)
+         values (${org.id},${order.id},${splitB.id},'CASH',60)`;
+       const [session]=await tx`insert into public.pos_cash_sessions
+         (organization_id,store_id,status,opening_cash)
+         values (${org.id},${store.id},'OPEN',100) returning id`;
+       await tx`insert into public.pos_cash_movements
+         (organization_id,store_id,session_id,order_id,split_id,
+          movement_type,amount)
+         values (${org.id},${store.id},${session.id},${order.id},
+          ${splitB.id},'SALE',60)`;
+       // Exactamente la política actual: ganar 5 % sólo de dinero real.
+       await tx`update public.pos_customers
+         set points_balance=points_balance-20+2.5 where id=${alice.id}`;
+       await tx`update public.pos_customers
+         set points_balance=points_balance+3 where id=${bob.id}`;
+       await tx`insert into public.pos_loyalty_entries
+         (organization_id,customer_id,order_id,entry_type,points,note)
+         values (${org.id},${alice.id},${order.id},'REDEEM',-20,'Cuenta 1 QA'),
+                (${org.id},${alice.id},${order.id},'EARN',2.5,'Cuenta 1 QA'),
+                (${org.id},${bob.id},${order.id},'EARN',3,'Cuenta 2 QA')`;
+       await tx`update public.pos_order_splits
+         set status='PAID',paid_at=now() where id in (${splitA.id},${splitB.id})`;
+       await tx`update public.pos_orders
+         set status='PAID',paid_at=now() where id=${order.id}`;
+       const checks=await tx`
+         select s.label,s.total,
+           coalesce(sum(p.amount),0) as paid,
+           count(p.id)::int as payment_count
+         from public.pos_order_splits s
+         join public.pos_payments p on p.split_id=s.id
+         where s.order_id=${order.id}
+         group by s.id,s.label,s.total
+         order by s.label`;
+       assert.deepEqual(checks.map(x=>[x.label,Number(x.total),Number(x.paid),x.payment_count]),
+         [["Cuenta 1",70,70,2],["Cuenta 2",60,60,1]]);
+       const [cash]=await tx`select sum(amount)::numeric as amount from
+         public.pos_cash_movements where order_id=${order.id}`;
+       assert.equal(Number(cash.amount),60);
+       const customers=await tx`select id,points_balance from public.pos_customers
+         where id in (${alice.id},${bob.id})`;
+       assert.equal(Number(customers.find(c=>c.id===alice.id).points_balance),5);
+       assert.equal(Number(customers.find(c=>c.id===bob.id).points_balance),3);
+       const [points]=await tx`select count(*)::int as n,sum(points)::numeric as delta
+         from public.pos_loyalty_entries where order_id=${order.id}`;
+       assert.equal(points.n,3);assert.equal(Number(points.delta),-14.5);
+       // Duplicados se ignoran por índices ÚNICOS reales, no por la UI.
+       const duplicateMoney=await tx`insert into public.pos_payments
+         (organization_id,order_id,split_id,method,amount)
+         values (${org.id},${order.id},${splitA.id},'CARD',50)
+         on conflict do nothing returning id`;
+       const duplicatePoints=await tx`insert into public.pos_payments
+         (organization_id,order_id,split_id,method,amount)
+         values (${org.id},${order.id},${splitA.id},'POINTS',20)
+         on conflict do nothing returning id`;
+       assert.equal(duplicateMoney.length,0,"Bloquear doble pago monetario");
+       assert.equal(duplicatePoints.length,0,"Bloquear doble canje");
+       const [total]=await tx`select coalesce(sum(amount),0) as amount
+         from public.pos_payments where order_id=${order.id}`;
+       assert.equal(Number(total.amount),130,"No duplicar ingresos");
+       console.log("PASS: dos clientes, dos cuentas, $20 pts + $50 transferencia + $60 efectivo.");
+       console.log("PASS: puntos finales 5 y 3, pagos $130, efectivo $60, sin duplicaciones.");
+       throw Error(rollbackTag);
+     });
+     throw Error("Rollback QA no ejecutado");
+   }catch(error){
+     if(error?.message!==rollbackTag)throw error;
+   }
+   const [leftovers]=await db`select count(*)::int as n from public.pos_orders
+     where client_order_id='qa-contract-split'`;
+   assert.equal(leftovers.n,0);
+   console.log("PASS: pruebas reversibles sin ventas ni puntos residuales.");
+ }finally{await db.end({timeout:3});}
+}
+main().catch(error=>{
+ console.error("BLOQUEADO: contrato de pagos divididos QA "+(error?.code||"no válido"));
+ process.exitCode=1;
+});
