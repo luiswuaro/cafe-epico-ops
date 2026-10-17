@@ -28,9 +28,10 @@ export function inspectQaSecrets(app, stack) {
     errors.push("DASHBOARD_PASSWORD: usar alfanumérico de al menos 16 caracteres.");
   if (stack.POSTGRES_PASSWORD && stack.POSTGRES_PASSWORD.length<20)
     errors.push("POSTGRES_PASSWORD: mínimo 20 caracteres.");
-  if (stack.ENABLE_EMAIL_SIGNUP !== "false" || stack.ENABLE_PHONE_SIGNUP !== "false" ||
-      stack.DISABLE_SIGNUP !== "true")
-    errors.push("Auth QA: deshabilitar registro de usuarios públicos.");
+  if (stack.ENABLE_EMAIL_SIGNUP !== "true")
+    errors.push("Auth QA: habilitar proveedor de correo para permitir iniciar sesión.");
+  if (stack.ENABLE_PHONE_SIGNUP !== "false" || stack.DISABLE_SIGNUP !== "true")
+    errors.push("Auth QA: bloquear altas públicas y el proveedor telefónico.");
   if (stack.ENABLE_ANONYMOUS_USERS !== "false")
     errors.push("Auth QA: deshabilitar usuarios anónimos.");
   const origin=app.APP_ORIGIN?.replace(/\/$/, "");
