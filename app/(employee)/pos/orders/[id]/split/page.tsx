@@ -95,6 +95,8 @@ export default async function SplitOrderPage({
               <strong className="metric">
                 {money.format(Number(split.total))}
               </strong>
+              {split.status==="PAID"&&split.customerId&&
+                <p className="muted">Cliente: {customers.find(c=>c.id===split.customerId)?.name??"Cliente vinculado"}</p>}
 
               <div className="split-mini-lines">
                 {split.lines.map((assignment) => {
