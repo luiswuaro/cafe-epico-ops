@@ -109,7 +109,7 @@ function verifyEnvironment(){
  assert(u.hostname==="127.0.0.1"&&u.pathname==="/postgres",
    "Origen debe ser PostgreSQL loopback QA.");
 }
-async function verifyTarget(){
+async function verifyTarget({requireEmpty=true}={}){
  const [image,network,ports,mountsText]=await Promise.all([
   docker(["inspect",TARGET,"--format","{{.Config.Image}}"]),
   docker(["inspect",TARGET,"--format","{{.HostConfig.NetworkMode}}"]),
@@ -128,7 +128,15 @@ async function verifyTarget(){
  const tables=await query(TARGET,DATABASE,
   "select count(*)::int from pg_class c join pg_namespace n on n.oid=c.relnamespace "+
   "where n.nspname in ('public','auth','storage') and c.relkind in ('r','p')");
- assert.equal(tables,"0","Destino contiene tablas: detener y examinar antes de repetir.");
+ if(requireEmpty){
+   assert.equal(tables,"0","Destino contiene tablas: detener y examinar antes de repetir.");
+ }else{
+   assert(Number(tables)>0,"Verificación posrestauración requiere tablas en el destino.");
+   const names=await query(TARGET,DATABASE,
+    "select nspname from pg_namespace where nspname in ('public','auth','storage') order by nspname");
+   assert.deepEqual(names.split(/\r?\n/),["auth","public","storage"],
+     "Faltan esquemas restaurados: no certificar.");
+ }
  const exts=await query(TARGET,DATABASE,
   "select e.extname||'|'||n.nspname||'|'||e.extversion from pg_extension e "+
   "join pg_namespace n on n.oid=e.extnamespace order by e.extname");
@@ -173,7 +181,7 @@ const aclTableSql=[
  "order by n.nspname,c.relname"
 ].join(" ");
 const defaultAclSql=[
- "select r.rolname||'|'||n.nspname||'|'||d.defaclobjtype||'|'||",
+ "select r.rolname||'|'||n.nspname||'|'||d.defaclobjtype::text||'|'||",
  "coalesce((select string_agg(a::text,',' order by a::text)",
  "from unnest(d.defaclacl) a),'')",
  "from pg_default_acl d",
@@ -253,25 +261,32 @@ async function restore(archive){
    failed.map(x=>String(x.reason?.message??"error").slice(0,180)).join("; "));
 }
 async function main(){
+ const verifyOnly=process.argv.includes("--verify-only");
  verifyEnvironment();
- console.log("QA RESTORE: verificando aislamiento y base vacía...");
- await verifyTarget();
+ console.log(verifyOnly?
+  "QA RESTORE: modo SOLO LECTURA para validar restauración existente.":
+  "QA RESTORE: verificando aislamiento y base vacía...");
+ await verifyTarget({requireEmpty:!verifyOnly});
  console.log("QA RESTORE: verificando administrador exclusivo de recuperación...");
  await verifyRestoreAdministrator();
  console.log("QA RESTORE: comprobando manifiesto, SHA-256 y archivo age...");
  const archive=await verifyArchive();
  const original=JSON.parse(await query(SOURCE,"postgres",snapshotSQL));
  console.log("PASS: destino aislado, origen QA y respaldo íntegro.");
- // Exigir explícitamente los CREATE SCHEMA del archivo antes de quitar public.
- const archiveToc=await cmd(process.execPath,
-  ["scripts/local/inspect-ops-local-backup.mjs","--show-schemas"]);
- for(const name of ["public","auth","storage"]){
-   assert(archiveToc.includes("schema="+name+"; CREATE_SCHEMA=SI"),
-     "El respaldo no creará el esquema "+name+". Bloqueado.");
+ if(!verifyOnly){
+   // Exigir CREATE SCHEMA antes de preparar y restaurar.
+   const archiveToc=await cmd(process.execPath,
+    ["scripts/local/inspect-ops-local-backup.mjs","--show-schemas"]);
+   for(const name of ["public","auth","storage"]){
+     assert(archiveToc.includes("schema="+name+"; CREATE_SCHEMA=SI"),
+       "El respaldo no creará el esquema "+name+". Bloqueado.");
+   }
+   await prepareDefaultPublicSchema();
+   console.log("QA RESTORE: restaurando en "+DATABASE+"...");
+   await restore(archive);
+ }else{
+   console.log("QA RESTORE: SIN RESTAURAR / SIN ESCRIBIR, comprobando copia existente.");
  }
- await prepareDefaultPublicSchema();
- console.log("QA RESTORE: restaurando en "+DATABASE+"...");
- await restore(archive);
  console.log("QA RESTORE: comparando saldos y conteos...");
  const recovered=JSON.parse(await query(TARGET,DATABASE,snapshotSQL));
  const differences=Object.keys(original).filter(k=>
@@ -281,7 +296,9 @@ async function main(){
  assert.equal(await query(TARGET,DATABASE,orphanSQL),"0",
    "Existen pagos, líneas o puntos sin registros padre.");
  await verifySqlPrivileges();
- console.log("PASS: archivo age restaurado en PostgreSQL Supabase independiente.");
+ console.log(verifyOnly?
+  "PASS: copia PostgreSQL Supabase ya restaurada y verificada sin escritura.":
+  "PASS: archivo age restaurado en PostgreSQL Supabase independiente.");
  console.log("PASS: conteos, pagos, montos, puntos, inventario, Auth y migraciones coinciden.");
  console.log("PASS: no se detectaron referencias huérfanas en relaciones críticas.");
  console.log("PASS: RLS, ACL, DEFAULT ACL y propietarios de tablas coinciden en esquemas respaldados.");
