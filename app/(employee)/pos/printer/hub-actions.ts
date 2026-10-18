@@ -1,6 +1,6 @@
 "use server";
 
-import {and,desc,eq,gte,inArray,or,sql} from "drizzle-orm";
+import {and,desc,eq,gte,inArray,isNull,like,or,sql} from "drizzle-orm";
 import {getDb} from "@/src/infrastructure/db/client";
 import {getCurrentEmployee} from "@/src/infrastructure/auth/current-employee";
 import {getVerifiedHotPathUserId} from "@/src/infrastructure/auth/verified-hot-path-user";
@@ -23,6 +23,37 @@ type FeedInput={since:string;lastVersion?:string};
 export type HubFeed={jobs:HubJob[];version:string};
 const MAX_AUTO_PRINT_AGE_MS=5*60*1000;
 const HEARTBEAT_TIMEOUT_MS=60*1000;
+// Fixture de impresión QA con importe cero. No habilita cobros LIVE.
+const QA_PRINT_MARKER="QA_PRINT_SMOKE_TEST_ONLY";
+function allowQaPrintFixture(){
+ return process.env.OPS_LOCAL_FIRST==="true" &&
+   process.env.OPS_QA_MODE==="true" &&
+   process.env.POS_LIVE_ENABLED==="false" &&
+   process.env.DEFAULT_ORGANIZATION_SLUG==="cafe-epico-qa" &&
+   process.env.DEFAULT_STORE_CODE==="QA-TEPEXI" &&
+   !process.env.VERCEL && !process.env.VERCEL_ENV;
+}
+// Filtros equivalentes para la sonda SQL y la validación transaccional.
+function printFeedScopeSql(){
+ if(!allowQaPrintFixture())return sql`o.mode='LIVE'`;
+ return sql`(o.mode='LIVE' OR (
+   o.mode='SHADOW' AND o.folio LIKE 'QA-PRINT-%'
+   AND o.note=${QA_PRINT_MARKER} AND o.status='SENT'
+   AND o.paid_at IS NULL AND o.total=0
+   AND o.inventory_effect_applied=false AND o.loyalty_effect_applied=false
+ ))`;
+}
+function printOrderScopeDrizzle(){
+ const live=eq(posOrders.mode,"LIVE");
+ if(!allowQaPrintFixture())return live;
+ return or(live,and(
+   eq(posOrders.mode,"SHADOW"),like(posOrders.folio,"QA-PRINT-%"),
+   eq(posOrders.note,QA_PRINT_MARKER),eq(posOrders.status,"SENT"),
+   isNull(posOrders.paidAt),eq(posOrders.total,"0.00"),
+   eq(posOrders.inventoryEffectApplied,false),
+   eq(posOrders.loyaltyEffectApplied,false),
+ ));
+}
 
 async function principal({deferPermissionCheck=false}:{deferPermissionCheck?:boolean}={}){
  const {user,employee}=await getCurrentEmployee();
@@ -89,17 +120,17 @@ export async function getPrintStationJobs(input:FeedInput):Promise<HubFeed|HubJo
      case when access.allowed and access.home_store_id is not null then
        coalesce((select max(o.updated_at)::text from public.pos_orders o
          where o.organization_id=access.organization_id
-           and o.store_id=access.home_store_id and o.mode='LIVE'
+           and o.store_id=access.home_store_id and ${printable}
            and (o.updated_at>=${after}::timestamptz or o.created_at>=${after}::timestamptz)), '') || '|' ||
        coalesce((select max(l.created_at)::text from public.pos_order_lines l
          inner join public.pos_orders o on o.id=l.order_id
          where o.organization_id=access.organization_id
-           and o.store_id=access.home_store_id and o.mode='LIVE'
+           and o.store_id=access.home_store_id and ${printable}
            and l.created_at>=${after}::timestamptz), '') || '|' ||
        coalesce((select max(s.paid_at)::text from public.pos_order_splits s
          inner join public.pos_orders o on o.id=s.order_id
          where o.organization_id=access.organization_id
-           and o.store_id=access.home_store_id and o.mode='LIVE'
+           and o.store_id=access.home_store_id and ${printable}
            and s.paid_at>=${after}::timestamptz), '') || '|' ||
        coalesce((select max(a.created_at)::text from public.audit_events a
          where a.organization_id=access.organization_id
@@ -134,7 +165,7 @@ export async function getPrintStationJobs(input:FeedInput):Promise<HubFeed|HubJo
    .from(posOrders).leftJoin(employees,eq(employees.id,posOrders.employeeId))
    .leftJoin(posCustomers,eq(posCustomers.id,posOrders.customerId))
    .where(and(eq(posOrders.organizationId,employee.organizationId),
-      eq(posOrders.storeId,storeId),eq(posOrders.mode,"LIVE"),
+      eq(posOrders.storeId,storeId),printOrderScopeDrizzle(),
       or(gte(posOrders.updatedAt,start),gte(posOrders.createdAt,start))))
    .orderBy(desc(posOrders.updatedAt)).limit(150);
  if(!orders.length)return legacyClient?[]:{jobs:[],version};
@@ -296,7 +327,7 @@ async function verifyJob(jobKey:string,org:string,store:string,tx:Pick<ReturnTyp
  if(!match)throw new Error("Trabajo de impresión inválido.");
  const [order]=await tx.select({id:posOrders.id}).from(posOrders).where(and(
   eq(posOrders.id,match[2]),eq(posOrders.organizationId,org),
-  eq(posOrders.storeId,store),eq(posOrders.mode,"LIVE"))).limit(1);
+  eq(posOrders.storeId,store),printOrderScopeDrizzle())).limit(1);
  if(!order)throw new Error("Pedido de otra sucursal.");
  return order;
 }
