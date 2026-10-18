@@ -38,7 +38,7 @@ function checkEnvironment(){
 async function inspect(db,org,store){
  diagnosticStage="consultar comanda QA";
  const orders=await db.unsafe(
-  "select id,folio,mode,status,total,paid_at,created_at,inventory_effect_applied,loyalty_effect_applied from public.pos_orders where organization_id=$1 and store_id=$2 and note=$3 and folio like 'QA-PRINT-%' order by created_at desc limit 3",
+  "select id,folio,mode,status,total,paid_at,created_at,inventory_effect_applied,loyalty_effect_applied from public.pos_orders where organization_id=$1 and store_id=$2 and note=$3 and folio like 'QA-PRINT-%' and folio not like 'QA-PRINT-R2-%' order by created_at desc limit 3",
   [org,store,note]);
  if(orders.length>1)fail("Varias órdenes QA: revisar manualmente.");
  if(orders.length===0){
@@ -152,7 +152,7 @@ async function main(){
   const date=[parts.year,parts.month,parts.day].join("-");
   await db.begin(async tx=>{
    const existing=await tx.unsafe(
-    "select id from public.pos_orders where organization_id=$1 and store_id=$2 and note=$3 and folio like 'QA-PRINT-%' limit 1",
+    "select id from public.pos_orders where organization_id=$1 and store_id=$2 and note=$3 and folio like 'QA-PRINT-%' and folio not like 'QA-PRINT-R2-%' limit 1",
     [org,store,note]);
    if(existing.length)fail("Orden QA preexistente.");
    const rows=await tx.unsafe(
