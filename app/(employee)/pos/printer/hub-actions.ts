@@ -11,6 +11,7 @@ import {auditEvents,employees,posOrderLines,posOrderSplits,posOrderSplitLines,
 import {extraLabels} from "@/src/application/pos/extras";
 import {receiptLoyaltyView} from "@/src/domain/pos/receipt-loyalty";
 import {efficientPrintFeedSince} from "@/src/domain/pos/print-feed-window";
+import {QA_POS_PILOT_PREFIX,qaPosPrintPilotEnabled} from "@/src/domain/pos/qa-pos-print-pilot";
 import {kitchenOrderIdentity} from "@/src/application/pos/kitchen-slip";
 import type {KitchenSlip} from "@/src/application/pos/kitchen-slip";
 import type {DirectReceiptPayload} from "../receipt/[id]/direct-print-button";
@@ -36,23 +37,38 @@ function allowQaPrintFixture(){
 // Filtros equivalentes para la sonda SQL y la validación transaccional.
 function printFeedScopeSql(){
  if(!allowQaPrintFixture())return sql`o.mode='LIVE'`;
+ // Solo la primera orden SHADOW del POS reservada por createShadowOrder.
+ // El resto de los espejos (incluidos los anteriores) queda bloqueado.
+ const qaPilot=qaPosPrintPilotEnabled()?sql` OR (
+   o.mode='SHADOW' AND o.folio LIKE ${QA_POS_PILOT_PREFIX+"%"}
+   AND o.status='SENT' AND o.paid_at IS NULL
+   AND o.inventory_effect_applied=false AND o.loyalty_effect_applied=false
+ )`:sql``;
  return sql`(o.mode='LIVE' OR (
    o.mode='SHADOW' AND o.folio LIKE 'QA-PRINT-%'
    AND o.note=${QA_PRINT_MARKER} AND o.status='SENT'
    AND o.paid_at IS NULL AND o.total=0
    AND o.inventory_effect_applied=false AND o.loyalty_effect_applied=false
- ))`;
+ ) ${qaPilot})`;
 }
 function printOrderScopeDrizzle(){
  const live=eq(posOrders.mode,"LIVE");
  if(!allowQaPrintFixture())return live;
- return or(live,and(
+ const fixture=and(
    eq(posOrders.mode,"SHADOW"),like(posOrders.folio,"QA-PRINT-%"),
    eq(posOrders.note,QA_PRINT_MARKER),eq(posOrders.status,"SENT"),
    isNull(posOrders.paidAt),eq(posOrders.total,"0.00"),
    eq(posOrders.inventoryEffectApplied,false),
    eq(posOrders.loyaltyEffectApplied,false),
- ));
+ );
+ if(!qaPosPrintPilotEnabled())return or(live,fixture);
+ const pilot=and(
+   eq(posOrders.mode,"SHADOW"),like(posOrders.folio,QA_POS_PILOT_PREFIX+"%"),
+   eq(posOrders.status,"SENT"),isNull(posOrders.paidAt),
+   eq(posOrders.inventoryEffectApplied,false),
+   eq(posOrders.loyaltyEffectApplied,false),
+ );
+ return or(live,fixture,pilot);
 }
 
 async function principal({deferPermissionCheck=false}:{deferPermissionCheck?:boolean}={}){
