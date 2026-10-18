@@ -55,7 +55,8 @@ try{
   assert.ok(sale.includes("theoreticalQuantity:\"0\""));
   const readiness=fs.readFileSync("src/application/pos/readiness.ts","utf8");
   assert.ok(readiness.includes('warnings.push("Sin conteo inicial:'));
-  assert.ok(readiness.includes('warnings.push(\n          "Reabastecer:'));
+  assert.match(readiness,/warnings\.push\(\s*"Reabastecer:/,
+    "El faltante de stock debe ser una advertencia de reabasto, no un bloqueo");
   assert.ok(!readiness.includes('errors.push("Sin saldo inicial:'));
   const split=fs.readFileSync("app/(employee)/pos/orders/[id]/split/actions.ts","utf8");
   assert.ok(!split.includes("allowStockShortage"));
