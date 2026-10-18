@@ -13,7 +13,7 @@ import assert from "node:assert/strict";
 import {validateLocalQaConfig} from "./guard-qa-config.mjs";
 
 const TARGET="cafe-epico-restore-supabase";
-const DATABASE="cafe_epico_restore_qa";
+const DATABASE="cafe_epico_restore_acl_qa";
 const SOURCE="supabase-db";
 const EXPECTED_EXTENSIONS=[
   "pg_net|extensions|0.20.3",
@@ -138,13 +138,51 @@ async function verifyArchive(){
  assert.equal(properties.format,"pg_dump_custom_encrypted_age_v1");
  assert.equal(properties.encrypted_file,basename(file));
  assert.equal(properties.schemas,"public,auth,storage");
+ assert.equal(properties.acl_dump_requested,"yes","El archivo anterior omite ACL: crea un NUEVO respaldo QA.");
  assert.match(properties.sha256??"",/^[a-f0-9]{64}$/);
  assert.equal(Number(properties.encrypted_bytes),(await stat(file)).size);
  assert.equal(await sha256(file),properties.sha256,"SHA-256 del archivo no coincide.");
- const audit=await cmd(process.execPath,["scripts/local/inspect-ops-local-backup.mjs"]);
- assert(audit.includes("PASS: SHA-256"),"Inspector no aprobó el respaldo.");
+ const audit=await cmd(process.execPath,["scripts/local/inspect-ops-local-backup.mjs","--show-acls","--require-acls"]);
+ assert(audit.includes("PASS: SHA-256") && audit.includes("DIAGNOSTICO ACL TOC:"),
+  "Inspector ACL no aprobó el respaldo.");
  return {file,identity};
 }
+const aclTableSql=[
+ "select n.nspname||'.'||c.relname||'|'||c.relrowsecurity::text||'|'||c.relforcerowsecurity::text||'|'||",
+ "string_agg(roles.r||':'||",
+ "(has_table_privilege(roles.r,c.oid,'SELECT'))::text||','||",
+ "(has_table_privilege(roles.r,c.oid,'INSERT'))::text||','||",
+ "(has_table_privilege(roles.r,c.oid,'UPDATE'))::text||','||",
+ "(has_table_privilege(roles.r,c.oid,'DELETE'))::text,';' order by roles.r)",
+ "from pg_class c join pg_namespace n on n.oid=c.relnamespace",
+ "cross join (values ('anon'),('authenticated'),('service_role')) roles(r)",
+ "where n.nspname in ('public','auth','storage') and c.relkind in ('r','p')",
+ "group by n.nspname,c.relname,c.relrowsecurity,c.relforcerowsecurity",
+ "order by n.nspname,c.relname"
+].join(" ");
+const aclSchemaSql=[
+ "select n.nspname||'|'||",
+ "string_agg(roles.r||':'||(has_schema_privilege(roles.r,n.oid,'USAGE'))::text||','||",
+ "(has_schema_privilege(roles.r,n.oid,'CREATE'))::text,';' order by roles.r)",
+ "from pg_namespace n",
+ "cross join (values ('anon'),('authenticated'),('service_role')) roles(r)",
+ "where n.nspname in ('public','auth','storage')",
+ "group by n.nspname order by n.nspname"
+].join(" ");
+async function verifySqlPrivileges(){
+ for(const [label,sql] of [["table",aclTableSql],["schema",aclSchemaSql]]){
+   const [original,recovered]=await Promise.all([
+     query(SOURCE,"postgres",sql),
+     query(TARGET,DATABASE,sql)
+   ]);
+   const originalLines=original.split(/\\r?\\n/);
+   const recoveredLines=recovered.split(/\\r?\\n/);
+   const changed=originalLines.filter((x,i)=>x!==recoveredLines[i]);
+   assert(changed.length===0&&originalLines.length===recoveredLines.length,
+     "Permisos "+label+" distintos: "+changed.length+" registros discrepantes.");
+ }
+}
+
 // Sólo tras verificar imagen, volumen, red, origen, archivo íntegro y base vacía.
 // PostgreSQL 17 crea el esquema public incluso con TEMPLATE template0.
 // El dump contiene CREATE SCHEMA public, que fallaría con 42P06 si ya existe.
@@ -173,7 +211,7 @@ async function restore(archive){
  // tablas en storage antes de existir ese esquema (PostgreSQL 3F000).
  // Restaurar sin limpieza; --single-transaction revierte cualquier fallo.
  const pg=run("docker",["exec","-i",TARGET,"pg_restore",
-  "--no-owner","--no-acl",
+  "--no-owner",
   "--single-transaction","--exit-on-error","--verbose",
   "--username=postgres","--dbname="+DATABASE],{input:"pipe",output:"ignore"});
  const outcomes=await Promise.allSettled([
@@ -209,9 +247,11 @@ async function main(){
    ". El origen pudo haber cambiado después del respaldo.");
  assert.equal(await query(TARGET,DATABASE,orphanSQL),"0",
    "Existen pagos, líneas o puntos sin registros padre.");
+ await verifySqlPrivileges();
  console.log("PASS: archivo age restaurado en PostgreSQL Supabase independiente.");
  console.log("PASS: conteos, pagos, montos, puntos, inventario, Auth y migraciones coinciden.");
  console.log("PASS: no se detectaron referencias huérfanas en relaciones críticas.");
+ console.log("PASS: RLS y privilegios SELECT/INSERT/UPDATE/DELETE de tablas y esquemas coinciden.");
  console.log("PENDIENTE: acceso Auth real, permisos, archivos Storage y prueba de otro equipo.");
 }
 main().catch(error=>{
