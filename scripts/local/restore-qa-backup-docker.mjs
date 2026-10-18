@@ -175,8 +175,8 @@ async function verifySqlPrivileges(){
      query(SOURCE,"postgres",sql),
      query(TARGET,DATABASE,sql)
    ]);
-   const originalLines=original.split(/\\r?\\n/);
-   const recoveredLines=recovered.split(/\\r?\\n/);
+   const originalLines=original.split(/\r?\n/);
+   const recoveredLines=recovered.split(/\r?\n/);
    const changed=originalLines.filter((x,i)=>x!==recoveredLines[i]);
    assert(changed.length===0&&originalLines.length===recoveredLines.length,
      "Permisos "+label+" distintos: "+changed.length+" registros discrepantes.");
