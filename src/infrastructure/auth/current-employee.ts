@@ -110,11 +110,22 @@ export const getOptionalCurrentEmployee=cache(async function getOptionalCurrentE
   return result.status==="active"?{user:result.user,employee:result.employee}:null;
 });
 
+// Contrato estricto para TODAS las páginas y acciones protegidas. Las
+// funciones que requieren identidad jamás devuelven user/employee opcionales.
+type CurrentEmployeeIdentity={
+  user:{id:string;email:string|null};
+  employee:typeof employees.$inferSelect;
+};
+
 // Obliga a que cada página y acción protegida rechace las cuentas inactivas.
-export const getCurrentEmployee=cache(async function getCurrentEmployee() {
+// Mantener el menú global con getOptionalCurrentEmployee, sin redirecciones.
+export const getCurrentEmployee=cache(async function getCurrentEmployee():Promise<CurrentEmployeeIdentity> {
   const result=await resolveCurrentEmployeeSession();
-  if(result.status==="unauthenticated")redirect("/login");
-  if(result.status==="inactive")redirect("/login?error=Cuenta%20de%20empleado%20desactivada");
-  if(result.status==="unlinked")redirect("/login?error=Cuenta%20autenticada%20sin%20empleado%20vinculado");
+  if(result.status!=="active"){
+    if(result.status==="unauthenticated")redirect("/login");
+    if(result.status==="inactive")redirect("/login?error=Cuenta%20de%20empleado%20desactivada");
+    if(result.status==="unlinked")redirect("/login?error=Cuenta%20autenticada%20sin%20empleado%20vinculado");
+    throw new Error("Estado de autenticación no reconocido");
+  }
   return {user:result.user,employee:result.employee};
 });
