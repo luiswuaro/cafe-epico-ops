@@ -30,7 +30,7 @@ assert.ok(pos.includes("inventoryEffectApplied: false"));
 assert.ok(pos.includes("loyaltyEffectApplied: false"));
 for(const rule of [
  "const qaPilot=qaPosPrintPilotEnabled()?sql",
- "o.mode='SHADOW' AND o.folio LIKE ${QA_POS_PILOT_PREFIX+\"%\"}",
+ "o.mode='SHADOW' AND o.folio LIKE "+String.raw`${QA_POS_PILOT_PREFIX+"%"}`,
  "o.status='SENT' AND o.paid_at IS NULL",
  "o.inventory_effect_applied=false AND o.loyalty_effect_applied=false",
  'if(!qaPosPrintPilotEnabled())return or(live,fixture)',
@@ -43,7 +43,7 @@ assert.equal(hub.split("and $"+ "{printable}").length-1,3);
 assert.ok(board.includes('order.mode==="SHADOW"&&!agentOwnsQaPilot'));
 assert.ok(toggle.includes('process.env.POS_LIVE_ENABLED!=="false"'));
 assert.ok(toggle.includes('copyFile(file,backup)'));
-assert.ok(toggle.includes('OPS_QA_POS_PRINT_PILOT='+ '"'));
+assert.ok(toggle.includes('lines.push("OPS_QA_POS_PRINT_PILOT="+desired)'));
 console.log("PASS: piloto QA exige opt-in y aislamiento local; LIVE comercial intacto.");
 console.log("PASS: una sola comanda POS bajo lock; SHADOW sin cobro, puntos ni inventario.");
 console.log("PASS: feed y claim equivalentes; navegador no duplica impresión.");
