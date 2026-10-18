@@ -17,6 +17,7 @@ const root=resolve(fileURLToPath(new URL("../..",import.meta.url)));
 const markerRel=".local/qa-autoprint-e2e.once";
 const marker=join(root,markerRel);
 const note="QA_PRINT_SMOKE_TEST_ONLY";
+let diagnosticStage="validar configuración QA";
 function fail(msg){throw Error("BLOQUEADO: "+msg);}
 function checkEnvironment(){
  const action=process.argv[2];
@@ -35,6 +36,7 @@ function checkEnvironment(){
  return action;
 }
 async function inspect(db,org,store){
+ diagnosticStage="consultar comanda QA";
  const orders=await db.unsafe(
   "select id,folio,mode,status,total,paid_at,inventory_effect_applied,loyalty_effect_applied from public.pos_orders where organization_id=$1 and store_id=$2 and note=$3 and folio like 'QA-PRINT-%' order by created_at desc limit 3",
   [org,store,note]);
@@ -43,20 +45,29 @@ async function inspect(db,org,store){
   console.log("PENDIENTE: todavía no hay comanda E2E QA.");
   return false;
  }
+ diagnosticStage="verificar integridad de comanda QA";
  const o=orders[0];
  if(o.mode!=="SHADOW"||o.status!=="SENT"||Number(o.total)!==0||
    o.paid_at!==null||o.inventory_effect_applied||o.loyalty_effect_applied)
-   fail("La comanda ficticia no cumple requisitos de importe cero.");
+   fail("Comanda fuera del contrato $0: "+
+     "SHADOW="+(o.mode==="SHADOW")+"; SENT="+(o.status==="SENT")+
+     "; importe_cero="+(Number(o.total)===0)+"; sin_cobro="+(o.paid_at===null)+
+     "; sin_inventario="+(o.inventory_effect_applied===false)+
+     "; sin_puntos="+(o.loyalty_effect_applied===false));
+ diagnosticStage="consultar auditoria CLAIM/DONE/FAILED";
  const key="KITCHEN:"+o.id+":QA_ONE_SHOT";
  const events=await db.unsafe(
   "select action from public.audit_events where organization_id=$1 and store_id=$2 and entity_type='pos_print_job' and entity_id=$3 order by created_at",
   [org,store,key]);
+ diagnosticStage="verificar ausencia de pagos";
  const paid=await db.unsafe(
   "select count(*)::int n from public.pos_payments where organization_id=$1 and order_id=$2",
   [org,o.id]);
+ diagnosticStage="verificar ausencia de puntos";
  const points=await db.unsafe(
   "select count(*)::int n from public.pos_loyalty_entries where organization_id=$1 and order_id=$2",
   [org,o.id]);
+ diagnosticStage="comprobar deduplicacion e integridad";
  const n=action=>events.filter(e=>e.action===action).length;
  console.log("COMANDA SHADOW QA: "+o.folio+" / $0.00");
  console.log("CLAIM="+n("POS_PRINT_HUB_CLAIMED")+
@@ -78,7 +89,9 @@ async function main(){
  const action=checkEnvironment();
  const db=postgres(env.DATABASE_URL,{max:1,prepare:false,connect_timeout:5});
  try{
+  diagnosticStage="comprobar organizacion QA";
   const orgs=await db.unsafe("select id,slug from public.organizations");
+  diagnosticStage="comprobar sucursal QA";
   const stores=await db.unsafe("select id,organization_id,code from public.stores");
   if(orgs.length!==1||orgs[0].slug!=="cafe-epico-qa"||
      stores.length!==1||stores[0].code!=="QA-TEPEXI"||
@@ -142,7 +155,14 @@ async function main(){
   console.log("No repetir --create-once. Consultar --status para resultado.");
  }finally{await db.end({timeout:3});}
 }
-main().catch(()=>{
- console.error("BLOQUEADO/RESULTADO INCIERTO: no repetir --create-once; utilizar --status.");
+main().catch(error=>{
+ // Mostrar sólo etapa, código SQL y violaciones redactadas por este script.
+ // Nunca volcar el objeto postgres.js: podría contener query o conexión.
+ const sqlCode=typeof error?.code==="string"&&/^[0-9A-Z]{5}$/.test(error.code)
+   ?" SQLSTATE="+error.code:"";
+ const detail=typeof error?.message==="string"&&error.message.startsWith("BLOQUEADO:")
+   ?" "+error.message:" Error no clasificado (detalles internos ocultos)";
+ console.error("DIAGNOSTICO QA ["+diagnosticStage+"]"+sqlCode+":"+detail);
+ console.error("BLOQUEADO/RESULTADO INCIERTO: no repetir --create-once; solo consultas --status.");
  process.exitCode=1;
 });
