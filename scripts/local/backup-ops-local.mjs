@@ -52,7 +52,7 @@ async function backup(){
   let published=false;
   try{
     const dump=spawn("pg_dump",[
-      "--format=custom","--no-owner","--no-acl",
+      "--format=custom","--no-owner",
       "--schema=public","--schema=auth","--schema=storage",
     ],{env:pgEnvironment(check.db),stdio:["ignore","pipe","ignore"],windowsHide:true});
     const age=spawn("age",["--recipient",ageKey],{
@@ -78,6 +78,7 @@ async function backup(){
       "format=pg_dump_custom_encrypted_age_v1",
       "created_utc="+timestamp,
       "schemas=public,auth,storage",
+      "acl_dump_requested=yes",
       "encrypted_file="+archive.split(/[\\/]/).pop(),
       "encrypted_bytes="+bytes,
       "sha256="+sha256,
