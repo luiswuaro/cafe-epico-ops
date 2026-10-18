@@ -6,9 +6,13 @@
 ## Propósito y alcance
 
 Respalda tablas de `public`, `auth` y `storage` con `pg_dump` formato
-custom; cifra directamente el flujo con `age`. Se conserva la integridad
-de tickets, clientes, puntos, inventario, lotes de tueste y permisos
-existentes en PostgreSQL al instante del snapshot. Los tres esquemas
+custom; cifra directamente el flujo con `age`. Se conservan en el archivo los datos de tickets, clientes, puntos,
+inventario y lotes de tueste. Desde la revisión QA del 17/10/2026,
+los NUEVOS respaldos incluyen también las ACL SQL (sin `--no-acl`).
+Los respaldos creados antes de esa revisión OMITEN ACL y no sirven
+por sí solos para recuperar los permisos PostgreSQL.
+La inclusión y restauración efectiva de los permisos requiere
+inspeccionar el TOC y comparar privilegios contra el origen. Los tres esquemas
 **no incluyen los archivos físicos de Storage**: si se comienzan a guardar
 fotos o PDFs allí, hace falta copiar aparte su volumen/bucket y probarlo.
 Tampoco incluye los certificados Caddy, claves JWT, contraseñas y variables
@@ -74,6 +78,10 @@ Si el respaldo es correcto, muestra la ruta de un
 `cafe-epico-local-*.pgcustom.age` y su `.manifest.txt`. El manifiesto
 registra fecha, tamaño, hash SHA-256 y deja `restore_tested=no`.
 **No tratar la existencia del archivo como prueba de recuperación.**
+Verificar ACL en respaldos nuevos con
+`node scripts/local/inspect-ops-local-backup.mjs --show-acls --require-acls`
+y restaurar en una nueva base QA vacía. El respaldo antiguo, aunque
+recuperable en datos, no es una copia íntegra de permisos.
 
 ## Inspección criptográfica y estructura
 
