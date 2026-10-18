@@ -38,11 +38,11 @@ try{
 
   if(!$SkipBuild){
     Write-Host 'Compilando Next.js local, solo para QA ...'
-    & npm run build
+    & npm.cmd run build
     if($LASTEXITCODE -ne 0){throw 'Compilación local falló. No se inició el servidor.'}
   }
   Write-Host 'Prueba Next.js SOLO en 127.0.0.1:3000. Los móviles requieren configurar HTTPS con proxy antes de acceso LAN.' -ForegroundColor Yellow
-  & npm run start -- --hostname 127.0.0.1 --port 3000
+  & npm.cmd run start -- --hostname 127.0.0.1 --port 3000
   if($LASTEXITCODE -ne 0){throw ('Next.js terminó con error '+$LASTEXITCODE)}
 }finally{
   Pop-Location
