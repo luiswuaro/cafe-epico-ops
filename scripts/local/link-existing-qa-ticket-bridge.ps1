@@ -29,7 +29,7 @@ try {
     throw 'BLOQUEADO: tarea de agente QA ya está ejecutándose.'
   }
   $active=@(Get-CimInstance Win32_Process -Filter "Name = 'node.exe'" -ErrorAction SilentlyContinue |
-    Where-Object {$_.CommandLine -like '*scripts/local/print-agent.mjs*'})
+    Where-Object {$_.CommandLine -match 'print-agent[.]mjs'})
   if ($active.Count -gt 0) {throw 'BLOQUEADO: hay un agente QA en ejecución.'}
 
   if (!(Test-Path -LiteralPath $bridgePath -PathType Leaf)) {
