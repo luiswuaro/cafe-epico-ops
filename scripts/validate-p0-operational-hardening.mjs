@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 
 const migration=fs.readFileSync("db/migrations/0029_p0_public_table_hardening.sql","utf8");
-const actions=fs.readFileSync("app/(admin)/admin/purchases/actions.ts","utf8");
+// Git puede convertir LF a CRLF en Windows: normalizar para validar igual.
+const actions=fs.readFileSync("app/(admin)/admin/purchases/actions.ts","utf8").replace(/\r\n/g,"\n");
 const cached=fs.readFileSync("src/application/loyverse/cached-catalog-base.ts","utf8");
 const allowedTables=[
   "operational_events","loyverse_categories","loyverse_inventory_snapshots",
@@ -20,7 +21,10 @@ const edit=actions.slice(actions.indexOf("export async function saveLoyverseItem
 assert.match(edit,/await db\.transaction\(async \(tx\) => \{/);
 // A preview shares the database; purchases cannot mutate its live records.
 const purchaseMutations=[...actions.matchAll(/export async function (\w+)\(formData: FormData\) \{\n/g)];
-assert.equal(purchaseMutations.length,7);
+assert.deepEqual(purchaseMutations.map(match=>match[1]),[
+  "createSupplier","saveLoyverseItemSetting","generateSuggestedPurchasePlan",
+  "updatePurchasePlan","updatePurchaseLine","addManualPurchaseLine","togglePurchaseLine",
+], "Las siete mutaciones de compras deben conservar su guard de QA/Preview");
 for(const match of purchaseMutations){
   const after=actions.slice(match.index+match[0].length,match.index+match[0].length+90);
   assert.match(after,/^  assertNoPreviewMutation\(\);/,
