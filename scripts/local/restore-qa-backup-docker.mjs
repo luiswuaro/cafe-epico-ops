@@ -83,6 +83,18 @@ async function query(container,database,sql){
  return docker(["exec",container,"psql","-X","-U","postgres","-d",database,
    "-A","-t","-v","ON_ERROR_STOP=1","-c",sql]);
 }
+async function verifyRestoreAdministrator(){
+ const role=await query(TARGET,DATABASE,
+  "select rolcanlogin::text||'|'||rolsuper::text from pg_roles where rolname='supabase_admin'");
+ assert.equal(role,"true|true",
+  "La cuenta administrativa aislada no tiene LOGIN y SUPERUSER; detener.");
+ const who=await docker(["exec",TARGET,"psql","-X","-U","supabase_admin","-d",DATABASE,
+  "-A","-t","-v","ON_ERROR_STOP=1",
+  "-c","select current_user||'|'||current_database()"]);
+ assert.equal(who,"supabase_admin|"+DATABASE,
+  "No se pudo autenticar como superusuario en la base de recuperación aislada.");
+}
+
 async function sha256(file){
  const hash=createHash("sha256");
  for await(const chunk of createReadStream(file))hash.update(chunk);
@@ -160,6 +172,23 @@ const aclTableSql=[
  "group by n.nspname,c.relname,c.relrowsecurity,c.relforcerowsecurity",
  "order by n.nspname,c.relname"
 ].join(" ");
+const defaultAclSql=[
+ "select r.rolname||'|'||n.nspname||'|'||d.defaclobjtype||'|'||",
+ "coalesce((select string_agg(a::text,',' order by a::text)",
+ "from unnest(d.defaclacl) a),'')",
+ "from pg_default_acl d",
+ "join pg_roles r on r.oid=d.defaclrole",
+ "join pg_namespace n on n.oid=d.defaclnamespace",
+ "where n.nspname in ('public','auth','storage')",
+ "order by r.rolname,n.nspname,d.defaclobjtype"
+].join(" ");
+const objectOwnersSql=[
+ "select n.nspname||'.'||c.relname||'|'||pg_get_userbyid(c.relowner)",
+ "from pg_class c join pg_namespace n on n.oid=c.relnamespace",
+ "where n.nspname in ('public','auth','storage')",
+ "and c.relkind in ('r','p')",
+ "order by n.nspname,c.relname"
+].join(" ");
 const aclSchemaSql=[
  "select n.nspname||'|'||",
  "string_agg(roles.r||':'||(has_schema_privilege(roles.r,n.oid,'USAGE'))::text||','||",
@@ -170,7 +199,8 @@ const aclSchemaSql=[
  "group by n.nspname order by n.nspname"
 ].join(" ");
 async function verifySqlPrivileges(){
- for(const [label,sql] of [["table",aclTableSql],["schema",aclSchemaSql]]){
+ for(const [label,sql] of [["table",aclTableSql],["schema",aclSchemaSql],
+  ["default ACL",defaultAclSql],["table owners",objectOwnersSql]]){
    const [original,recovered]=await Promise.all([
      query(SOURCE,"postgres",sql),
      query(TARGET,DATABASE,sql)
@@ -211,9 +241,10 @@ async function restore(archive){
  // tablas en storage antes de existir ese esquema (PostgreSQL 3F000).
  // Restaurar sin limpieza; --single-transaction revierte cualquier fallo.
  const pg=run("docker",["exec","-i",TARGET,"pg_restore",
-  "--no-owner",
+  // Se restauran propietarios originales: el usuario superusuario aislado
+  // puede ejecutar ALTER OWNER y DEFAULT ACL sin otorgar permisos al origen.
   "--single-transaction","--exit-on-error","--verbose",
-  "--username=postgres","--dbname="+DATABASE],{input:"pipe",output:"ignore"});
+  "--username=supabase_admin","--dbname="+DATABASE],{input:"pipe",output:"ignore"});
  const outcomes=await Promise.allSettled([
   age.done,pg.done,pipeline(age.child.stdout,pg.child.stdin)
  ]);
@@ -225,6 +256,8 @@ async function main(){
  verifyEnvironment();
  console.log("QA RESTORE: verificando aislamiento y base vacía...");
  await verifyTarget();
+ console.log("QA RESTORE: verificando administrador exclusivo de recuperación...");
+ await verifyRestoreAdministrator();
  console.log("QA RESTORE: comprobando manifiesto, SHA-256 y archivo age...");
  const archive=await verifyArchive();
  const original=JSON.parse(await query(SOURCE,"postgres",snapshotSQL));
@@ -251,7 +284,7 @@ async function main(){
  console.log("PASS: archivo age restaurado en PostgreSQL Supabase independiente.");
  console.log("PASS: conteos, pagos, montos, puntos, inventario, Auth y migraciones coinciden.");
  console.log("PASS: no se detectaron referencias huérfanas en relaciones críticas.");
- console.log("PASS: RLS y privilegios SELECT/INSERT/UPDATE/DELETE de tablas y esquemas coinciden.");
+ console.log("PASS: RLS, ACL, DEFAULT ACL y propietarios de tablas coinciden en esquemas respaldados.");
  console.log("PENDIENTE: acceso Auth real, permisos, archivos Storage y prueba de otro equipo.");
 }
 main().catch(error=>{
