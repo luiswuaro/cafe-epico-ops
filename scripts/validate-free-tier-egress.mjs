@@ -103,7 +103,11 @@ try{
 }finally{fs.rmSync(temp,{recursive:true,force:true});}
 
 // Protege el hot path de autenticación frente a regresiones de egress.
-for(const path of ["src/infrastructure/auth/current-employee.ts","components/app-nav.tsx","proxy.ts"]){
+// El menú global (/login incluido) DELEGA la validación JWT a current-employee:
+// realizar getClaims() directamente en app-nav duplicaría la verificación.
+const identitySource=fs.readFileSync("src/infrastructure/auth/current-employee.ts","utf8");
+const navAuthSource=fs.readFileSync("components/app-nav.tsx","utf8");
+for(const path of ["src/infrastructure/auth/current-employee.ts","proxy.ts"]){
  const source=fs.readFileSync(path,"utf8");
  assert.match(source,/\.auth\.getClaims\(/,`${path}: verificar JWT firmado localmente`);
  assert.doesNotMatch(source,/\.auth\.getUser\(/,`${path}: no consultar Auth en cada refresco/poll`);
@@ -112,7 +116,21 @@ for(const path of ["src/infrastructure/auth/current-employee.ts","components/app
  assert.match(source,/typeof claims\.sub\s*!==\s*["']string["']/,
    `${path}: se requiere identidad válida`);
 }
-console.log("Auth egress: PASS (JWT ES256 local, protección de rutas y personal activa)");
+assert.match(navAuthSource,/import\s*\{\s*getOptionalCurrentEmployee\s*\}\s*from\s*["']@\/src\/infrastructure\/auth\/current-employee["']/,
+ "La navegación debe usar identidad autenticada del servidor");
+assert.match(navAuthSource,/const identity=await getOptionalCurrentEmployee\(\)/,
+ "El menú debe delegar resolución de sesión a current-employee");
+assert.match(navAuthSource,/if\(!identity\)return null/,
+ "En /login y para empleados inactivos no debe entrar en bucle de redirección");
+assert.doesNotMatch(navAuthSource,/\.auth\.getUser\(|\.auth\.getClaims\(/,
+ "El menú debe evitar consultas Auth adicionales");
+assert.match(identitySource,/const resolveCurrentEmployeeSession=cache\(/,
+ "La sesión no debe revalidarse varias veces durante el mismo request React");
+assert.match(identitySource,/getOptionalCurrentEmployee=cache\(/,
+ "Navegación sin redirección mantiene el control de sesión");
+assert.match(identitySource,/result\.status==="active"\?\{user:result\.user,employee:result\.employee\}:null/,
+ "Sólo empleados activos pueden acceder al menú");
+console.log("Auth egress: PASS (JWT delegado, navegación segura en /login y roles activos)");
 
 // Evitar repetir 2-3 joins RBAC en el mismo render sin introducir una caché
 // que mantenga visibles accesos revocados al personal.
