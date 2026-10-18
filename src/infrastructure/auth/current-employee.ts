@@ -10,9 +10,9 @@ import { ensureBootstrapBaristaLink } from "./bootstrap-barista";
 
 // Cache exclusivo del request React; jamás comparte permisos entre usuarios ni turnos.
 // La autorización continúa validándose en cada solicitud/acción del servidor.
-export const getCurrentEmployee=cache(async function getCurrentEmployee() {
+const resolveCurrentEmployeeSession=cache(async function resolveCurrentEmployeeSession() {
   const device=localPrintAgentIdentity();
-  if(device)return device; // Sólo la ruta local autenticada crea este contexto.
+  if(device)return {status:"active" as const,...device}; // Sólo la ruta local autenticada crea este contexto.
   const supabase = await createSupabaseServerClient();
   // La firma ES256 de Supabase se verifica localmente con JWKS cacheado.
   // Evita una petición /auth/v1/user por cada refresco y acción de impresión.
@@ -20,7 +20,7 @@ export const getCurrentEmployee=cache(async function getCurrentEmployee() {
   const { data, error } = await supabase.auth.getClaims();
   const claims = data?.claims;
   if (error || !claims || claims.role !== "authenticated" || typeof claims.sub !== "string") {
-    redirect("/login");
+    return {status:"unauthenticated" as const};
   }
   const user = { id: claims.sub, email: typeof claims.email === "string" ? claims.email : null };
 
@@ -87,8 +87,34 @@ export const getCurrentEmployee=cache(async function getCurrentEmployee() {
   }
 
   if (!employee) {
-    redirect("/login?error=Cuenta%20autenticada%20sin%20empleado%20vinculado");
+    // Distinguir cuenta desactivada de usuario sin vínculo Auth.
+    const [inactive] = await db.select({ id: employees.id })
+      .from(employees)
+      .innerJoin(organizations, eq(organizations.id, employees.organizationId))
+      .where(and(
+        eq(employees.userId, user.id),
+        eq(organizations.slug, orgSlug),
+        eq(employees.isActive, false),
+      ))
+      .limit(1);
+    return {status:inactive?"inactive" as const:"unlinked" as const};
   }
 
-  return { user, employee };
+  return {status:"active" as const, user, employee};
+});
+
+// Usar sólo en UI global (ej. menú). No redirige desde /login: si el
+// empleado está inactivo, devuelve null y oculta la navegación.
+export const getOptionalCurrentEmployee=cache(async function getOptionalCurrentEmployee() {
+  const result=await resolveCurrentEmployeeSession();
+  return result.status==="active"?{user:result.user,employee:result.employee}:null;
+});
+
+// Obliga a que cada página y acción protegida rechace las cuentas inactivas.
+export const getCurrentEmployee=cache(async function getCurrentEmployee() {
+  const result=await resolveCurrentEmployeeSession();
+  if(result.status==="unauthenticated")redirect("/login");
+  if(result.status==="inactive")redirect("/login?error=Cuenta%20de%20empleado%20desactivada");
+  if(result.status==="unlinked")redirect("/login?error=Cuenta%20autenticada%20sin%20empleado%20vinculado");
+  return {user:result.user,employee:result.employee};
 });
