@@ -21,7 +21,7 @@ try {
   if ($LASTEXITCODE -ne 0) {throw 'BLOQUEADO: la configuración no es QA local.'}
 
   $all=[IO.File]::ReadAllText($envPath)
-  if ($all -match '(?m)^\\s*NEXT_PUBLIC_OPS_LOCAL_PRINT_AGENT_ENABLED\\s*=\\s*["'']?true') {
+  if ($all -match '(?m)^\s*NEXT_PUBLIC_OPS_LOCAL_PRINT_AGENT_ENABLED\s*=\s*["'']?true') {
     throw 'BLOQUEADO: apaga primero el modo de agente QA.'
   }
   if (Get-ScheduledTask -TaskName 'CafeEpicoOps-QA-PrintAgent' -ErrorAction SilentlyContinue |
@@ -61,7 +61,7 @@ try {
   )) {
     $key=[string]$entry.key
     $value=[string]$entry.value
-    $hits=@(0..($lines.Count-1) | Where-Object { $lines[$_] -match ('^\\s*'+[regex]::Escape($key)+'\\s*=') })
+    $hits=@(0..($lines.Count-1) | Where-Object { $lines[$_] -match ('^\s*'+[regex]::Escape($key)+'\s*=') })
     if ($hits.Count -gt 1) {throw "BLOQUEADO: variable duplicada: $key"}
     if ($hits.Count -eq 1) {
       $index=[int]$hits[0]
