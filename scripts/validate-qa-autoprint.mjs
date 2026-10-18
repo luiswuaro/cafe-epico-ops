@@ -61,6 +61,23 @@ assert.deepEqual((await runPrintJobs({...config,
 assert.deepEqual((await runPrintJobs({...config,availability:new Map()}))
  .map(x=>x.status),["BRIDGE_OFFLINE"]);
 assert.equal(printed,1);
+// Segunda prueba: no reutilizar reserva o pedido R1, no crear cobros.
+const r2=readFileSync("scripts/local/test-qa-autoprint-r2.mjs","utf8");
+for(const v of [
+ ".local/qa-autoprint-e2e-r2.once",
+ '"QA-PRINT-R2-"+id.slice',
+ "QA_ONE_SHOT_R2",
+ "and folio not like 'QA-PRINT-R2-%'",
+ "oldClaims[0].n!==0",
+ "columnCheck.column_default!==null",
+ "paid_at,inventory_effect_applied",
+ ",$7,NULL,false,false) returning id,paid_at",
+ "rows[0].paid_at!==null",
+ 'open(marker,"wx",0o600)',
+ "db.begin(async tx=>"
+])assert.ok(r2.includes(v),"Falta guardia R2: "+v);
+assert.ok(!r2.includes("insert into public.pos_payments"));
+assert.ok(!r2.includes("insert into public.pos_loyalty_entries"));
 console.log("PASS: excepción QA únicamente para SHADOW $0, sin pagos ni puntos.");
 console.log("PASS: un solo CLAIM/DONE; duplicado, vencido o puente offline bloqueados.");
 console.log("PASS: sin impresora física ni acceso a PostgreSQL.");
