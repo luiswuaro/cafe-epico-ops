@@ -44,6 +44,35 @@ async function main(){
  const parsed=parseEnv(contents);
  console.log("Ubicación del .env.local: "+(resolve(process.cwd())===root?"coincide con el directorio de PowerShell":"DISTINTA, revisar"));
  console.log("Tamaño de .env.local (bytes): "+Buffer.byteLength(contents,"utf8"));
+
+ const endings={
+   crlf:(contents.match(/\r\n/g)||[]).length,
+   lfAlone:(contents.match(/(?<!\r)\n/g)||[]).length,
+   crAlone:(contents.match(/\r(?!\n)/g)||[]).length,
+   unicodeLines:(contents.match(/[\u0085\u2028\u2029]/g)||[]).length,
+   nullBytes:(contents.match(/\u0000/g)||[]).length
+ };
+ console.log("Separadores: CRLF="+endings.crlf+"; LF="+endings.lfAlone+
+   "; CR_suelto="+endings.crAlone+"; Unicode="+endings.unicodeLines+
+   "; NUL="+endings.nullBytes);
+ for(const key of variables){
+   const position=contents.indexOf(key);
+   if(position===-1){
+     console.log(key+": cadena literal no encontrada en archivo leído.");
+     continue;
+   }
+   const before=contents.slice(0,position);
+   const lastLf=before.lastIndexOf("\n");
+   const prefix=before.slice(lastLf+1);
+   const previous=position===0?"inicio":contents[position-1]==="\n"?"LF":
+     contents[position-1]==="\r"?"CR":
+     /\s/u.test(contents[position-1])?"espacio": "otro";
+   console.log(key+": cadena encontrada; prefijo en línea LF "+
+     (prefix.length===0?"vacío":/^\s*$/u.test(prefix)?"solo espacios":"contiene otros caracteres")+
+     "; carácter inmediato anterior="+previous+
+     "; línea_LF="+(before.match(/\n/g)||[]).length);
+ }
+
  console.log("=== QA: DIAGNÓSTICO PRIVADO DEL AGENTE, SOLO LECTURA ===");
  let bad=false;
  for(const key of variables){
