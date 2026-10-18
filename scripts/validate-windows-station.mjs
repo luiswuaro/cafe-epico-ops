@@ -25,9 +25,15 @@ assert.match(installer,/Get-CimInstance Win32_Process -Filter/,
   "Debe detener las versiones anteriores del supervisor antes de sustituirlas");
 const launchStatements=installer.match(/Start-Process -FilePath \$selectedBrowser\.Exe/g)??[];
 assert.equal(launchStatements.length,1,"El instalador abre OPS una sola vez");
-const monitorLoop=installer.slice(installer.indexOf("  while($true){"),installer.indexOf("\n$selectedBrowser=ResolveBrowser $Browser\nNew-Item"));
+// Aceptar CRLF de Windows (Git core.autocrlf) sin extender la sección vigilada.
+const normalizedInstaller=installer.replace(/\r\n/g,"\n");
+const loopStart=normalizedInstaller.indexOf("  while($true){");
+const loopEnd=normalizedInstaller.indexOf("\n }finally{",loopStart);
+assert.ok(loopStart>=0&&loopEnd>loopStart,
+  "No fue posible aislar el bucle del supervisor -Watch");
+const monitorLoop=normalizedInstaller.slice(loopStart,loopEnd);
 assert.ok(monitorLoop.startsWith("  while($true){"));
-assert.doesNotMatch(monitorLoop,/Start-Process/,
+assert.doesNotMatch(monitorLoop,/\bStart-Process\b/,
   "Nunca abrir OPS desde el bucle: la detección de ventana puede fallar y duplicar pantallas");
 assert.match(installer,/if\(-not \(Test-OpsRunning\)\)/,
   "Evitar lanzar OPS si ya existe una ventana o un proceso --app");
