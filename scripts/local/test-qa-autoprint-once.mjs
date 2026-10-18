@@ -38,22 +38,16 @@ function checkEnvironment(){
 async function inspect(db,org,store){
  diagnosticStage="consultar comanda QA";
  const orders=await db.unsafe(
-  "select id,folio,mode,status,total,paid_at,inventory_effect_applied,loyalty_effect_applied from public.pos_orders where organization_id=$1 and store_id=$2 and note=$3 and folio like 'QA-PRINT-%' order by created_at desc limit 3",
+  "select id,folio,mode,status,total,paid_at,created_at,inventory_effect_applied,loyalty_effect_applied from public.pos_orders where organization_id=$1 and store_id=$2 and note=$3 and folio like 'QA-PRINT-%' order by created_at desc limit 3",
   [org,store,note]);
  if(orders.length>1)fail("Varias órdenes QA: revisar manualmente.");
  if(orders.length===0){
   console.log("PENDIENTE: todavía no hay comanda E2E QA.");
   return false;
  }
- diagnosticStage="verificar integridad de comanda QA";
  const o=orders[0];
- if(o.mode!=="SHADOW"||o.status!=="SENT"||Number(o.total)!==0||
-   o.paid_at!==null||o.inventory_effect_applied||o.loyalty_effect_applied)
-   fail("Comanda fuera del contrato $0: "+
-     "SHADOW="+(o.mode==="SHADOW")+"; SENT="+(o.status==="SENT")+
-     "; importe_cero="+(Number(o.total)===0)+"; sin_cobro="+(o.paid_at===null)+
-     "; sin_inventario="+(o.inventory_effect_applied===false)+
-     "; sin_puntos="+(o.loyalty_effect_applied===false));
+ // Auditar primero CLAIM/DONE y pagos incluso cuando un campo falla:
+ // no volver a probar hasta conocer el historial de impresión.
  diagnosticStage="consultar auditoria CLAIM/DONE/FAILED";
  const key="KITCHEN:"+o.id+":QA_ONE_SHOT";
  const events=await db.unsafe(
@@ -67,6 +61,17 @@ async function inspect(db,org,store){
  const points=await db.unsafe(
   "select count(*)::int n from public.pos_loyalty_entries where organization_id=$1 and order_id=$2",
   [org,o.id]);
+ diagnosticStage="consultar valor predeterminado de paid_at";
+ const [column]=await db.unsafe(
+  "select column_default,is_nullable from information_schema.columns where table_schema='public' and table_name='pos_orders' and column_name='paid_at'");
+ const hasDefault=typeof column?.column_default==="string"&&column.column_default.length>0;
+ console.log("PAID_AT: "+(o.paid_at===null?"NULL":"CON_FECHA")+
+  " | DEFAULT_EN_DB="+(hasDefault?"SI":"NO")+
+  " | NULABLE="+(column?.is_nullable??"DESCONOCIDO"));
+ console.log("EDAD_COMANDA_SEGUNDOS: "+
+  (Number.isFinite(new Date(o.created_at).getTime())
+   ?Math.max(0,Math.floor((Date.now()-new Date(o.created_at).getTime())/1000))
+   :"DESCONOCIDA"));
  diagnosticStage="comprobar deduplicacion e integridad";
  const n=action=>events.filter(e=>e.action===action).length;
  console.log("COMANDA SHADOW QA: "+o.folio+" / $0.00");
@@ -75,6 +80,15 @@ async function inspect(db,org,store){
   " FAILED="+n("POS_PRINT_HUB_FAILED")+
   " EXPIRED="+n("POS_PRINT_HUB_EXPIRED"));
  console.log("PAGOS="+paid[0].n+" PUNTOS="+points[0].n);
+ // No ocultar las estadísticas del job: es indispensable saber si el
+ // servidor llegó a reclamarlo antes de elegir una recuperación.
+ if(o.mode!=="SHADOW"||o.status!=="SENT"||Number(o.total)!==0||
+    o.paid_at!==null||o.inventory_effect_applied||o.loyalty_effect_applied)
+   fail("Comanda fuera del contrato $0: "+
+     "SHADOW="+(o.mode==="SHADOW")+"; SENT="+(o.status==="SENT")+
+     "; importe_cero="+(Number(o.total)===0)+"; sin_cobro="+(o.paid_at===null)+
+     "; sin_inventario="+(o.inventory_effect_applied===false)+
+     "; sin_puntos="+(o.loyalty_effect_applied===false));
  if(paid[0].n!==0||points[0].n!==0||
     n("POS_PRINT_HUB_CLAIMED")>1||n("POS_PRINT_HUB_DONE")>1)
    fail("Anomalía en integridad o deduplicación.");
