@@ -78,10 +78,22 @@ try {
   }
 
   $updated=$lines -join "`r`n"
-  $tmp=$envPath+'.link-'+[guid]::NewGuid().ToString('N')+'.tmp'
+  # PowerShell 5.1/.NET Framework necesita una ruta de respaldo real para Replace.
+  # Los archivos transitorios contienen secretos y DEBEN quedar bajo .local/ (ignorado por Git).
+  $secretDir=Join-Path $root '.local'
+  & git check-ignore -q -- '.local/qa-env-private.tmp'
+  if ($LASTEXITCODE -ne 0) {throw 'BLOQUEADO: .local no está excluido de Git.'}
+  $null=[IO.Directory]::CreateDirectory($secretDir)
+  $nonce=[guid]::NewGuid().ToString('N')
+  $tmp=Join-Path $secretDir ("qa-env-staging-"+$nonce+".tmp")
+  $backup=Join-Path $secretDir ("qa-env-backup-"+$nonce+".bak")
   [IO.File]::WriteAllText($tmp,$updated,(New-Object Text.UTF8Encoding($false)))
-  [IO.File]::Replace($tmp,$envPath,$null)
+  [IO.File]::Replace($tmp,$envPath,$backup,$true)
   $tmp=$null
+  if ([IO.File]::ReadAllText($envPath) -cne $updated) {
+    throw 'BLOQUEADO: verificación tras escritura no coincide. Conservar respaldo privado en .local.'
+  }
+  Remove-Item -LiteralPath $backup -Force -ErrorAction SilentlyContinue
   Write-Host 'PASS: enlace privado de Ticket a POS-58 / 9137 guardado únicamente en .env.local QA.' -ForegroundColor Green
   Write-Host 'PASS: puente autenticado mediante GET /status. No se imprimió papel.' -ForegroundColor Green
   Write-Host 'Sin iniciar agentes ni enviar comandas. Barra separada todavía no configurada.' -ForegroundColor Yellow
