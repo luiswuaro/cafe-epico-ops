@@ -38,6 +38,9 @@ async function main(){
    const [occupied]=await tx`select id from public.employees
       where user_id=${id}::uuid and id<>${employee.id}`;
    if(occupied||employee.user_id && employee.user_id!==id)fail();
+   // Conservar perfil Auth vinculado a empleado QA, sin sobrescribir perfiles existentes.
+   await tx`insert into public.user_profiles (id,display_name)
+     values (${id}::uuid,${employee.name}) on conflict (id) do nothing`;
    if(employee.user_id!==id)await tx`update public.employees
      set user_id=${id}::uuid where id=${employee.id} and user_id is null`;
   });
