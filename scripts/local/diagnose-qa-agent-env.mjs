@@ -4,6 +4,7 @@
  * NO modifica configuración, NO conecta a impresora, NO crea trabajos.
  */
 import {readFile} from "node:fs/promises";
+import {parseEnv} from "node:util";
 import {resolve,join} from "node:path";
 import {fileURLToPath} from "node:url";
 import {validateLocalQaConfig} from "./guard-qa-config.mjs";
@@ -35,19 +36,32 @@ async function main(){
  const guard=validateLocalQaConfig(process.env);
  if(!guard.ok)throw Error("BLOQUEADO: configuración actual no es QA local.");
  const contents=await readFile(join(root,".env.local"),"utf8");
+ // Prueba automática del detector, sin usar las credenciales del usuario.
+ const mock="OPS_LOCAL_PRINT_AGENT_TOKEN="+"a".repeat(64)+"\nOPS_LOCAL_PRINT_AGENT_USER_ID=12345678-1234-4123-8123-123456789abc\n";
+ if(readEntries(mock,"OPS_LOCAL_PRINT_AGENT_TOKEN").length!==1||
+    readEntries(mock,"OPS_LOCAL_PRINT_AGENT_USER_ID").length!==1)
+    throw Error("BUG interno del detector de variables.");
+ const parsed=parseEnv(contents);
+ console.log("Ubicación del .env.local: "+(resolve(process.cwd())===root?"coincide con el directorio de PowerShell":"DISTINTA, revisar"));
+ console.log("Tamaño de .env.local (bytes): "+Buffer.byteLength(contents,"utf8"));
  console.log("=== QA: DIAGNÓSTICO PRIVADO DEL AGENTE, SOLO LECTURA ===");
  let bad=false;
  for(const key of variables){
    const entries=readEntries(contents,key);
    const fileValue=entries.length===1?entries[0]:null;
    const runtimeValue=process.env[key];
+   const parsedValue=parsed[key];
+   const dotenvOk=validity(key,parsedValue);
+   const dotenvSame=fileValue!==null&&parsedValue===fileValue;
    const fileOk=entries.length===1&&validity(key,fileValue);
    const runtimeOk=validity(key,runtimeValue);
    const same=fileValue!==null&&runtimeValue===fileValue;
    console.log(key+": archivo="+(entries.length===0?"ausente":entries.length>1?"DUPLICADA":fileOk?"válido":"no válido")+
+     "; parseEnv="+(dotenvOk?"válido":parsedValue===undefined?"ausente":"no válido")+
      "; Node="+(runtimeOk?"válido":runtimeValue===undefined?"ausente":"no válido")+
-     "; coincide="+(same?"SÍ":"NO"));
-   if(key!=="NEXT_PUBLIC_OPS_LOCAL_PRINT_AGENT_ENABLED"&&(!fileOk||!runtimeOk||!same))bad=true;
+     "; archivo/parseEnv="+(dotenvSame?"SÍ":"NO")+
+     "; archivo/Node="+(same?"SÍ":"NO"));
+   if(key!=="NEXT_PUBLIC_OPS_LOCAL_PRINT_AGENT_ENABLED"&&(!fileOk||!dotenvOk||!runtimeOk||!same||!dotenvSame))bad=true;
  }
  if(bad){
   console.log("PENDIENTE: diferencias entre .env.local y proceso Node. No iniciar el agente.");
