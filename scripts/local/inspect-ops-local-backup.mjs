@@ -114,6 +114,16 @@ async function inspect(){
        (match?"SI":"NO")+"; objetos="+objects);
    }
  }
+ if(process.argv.includes("--show-acls")) {
+   const lines=toc.split(/\r?\n/).filter(v=>v && !v.startsWith(";"));
+   const aclLines=lines.filter(v=>/\bACL\b/i.test(v));
+   const count=(schema)=>aclLines.filter(v=>new RegExp("\\bACL\\s+"+schema+"\\s","i").test(v)).length;
+   const pub=count("public"),storage=count("storage"),auth=count("auth");
+   console.log("DIAGNOSTICO ACL TOC: total="+aclLines.length+
+     "; public="+pub+"; auth="+auth+"; storage="+storage);
+   if(process.argv.includes("--require-acls")&&(pub===0||storage===0))
+     throw Error("Respaldo sin ACL de tablas en public/storage. Generar NUEVO backup con pg_dump sin --no-acl.");
+ }
  console.log("PASS: SHA-256, age y pg_restore TOC: tablas críticas presentes.");
  console.log("PENDIENTE: restaurar en segundo PostgreSQL aislado y cotejar datos/usuarios.");
 }
