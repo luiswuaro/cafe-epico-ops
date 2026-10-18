@@ -23,12 +23,12 @@ function ignored(path){
  catch{return false}
 }
 function envValue(contents,key){
- const matches=[...contents.matchAll(new RegExp("^\\s*"+key+"\\s*=([^\\r\\n]*)$","gm"))];
+ const matches=[...contents.matchAll(new RegExp("^[ \\t]*"+key+"[ \\t]*=([^\\r\\n]*)$","gm"))];
  if(matches.length>1)fail();
  return matches.length?matches[0][1].trim().replace(/^["']|["']$/g,""):"";
 }
 function setEnv(contents,key,value){
- const rex=new RegExp("^\\s*"+key+"\\s*=[^\\r\\n]*$","gm");
+ const rex=new RegExp("^[ \\t]*"+key+"[ \\t]*=[^\\r\\n]*$","gm");
  const matches=[...contents.matchAll(rex)];
  if(matches.length>1)fail();
  if(matches.length===1)return contents.replace(rex,key+"="+value);
