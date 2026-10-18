@@ -86,6 +86,8 @@ export async function getPrintStationJobs(input:FeedInput):Promise<HubFeed|HubJo
  const organizationSlug=process.env.DEFAULT_ORGANIZATION_SLUG??"cafe-epico";
  const start=efficientPrintFeedSince(allowedSince(since)),db=getDb();
  const after=start.toISOString();
+ // Restricción de QA aplicada a las tres marcas de versión del feed.
+ const printable=printFeedScopeSql();
  // La identidad, empleado activo, alcance de sucursal y pos.sell se comprueban
  // en UN viaje a PostgreSQL. El JWT se verifica ANTES de ejecutar la sonda.
  // Sin caché entre requests: revocar permisos/empleados actúa inmediatamente.
