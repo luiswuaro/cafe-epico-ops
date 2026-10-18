@@ -92,3 +92,41 @@ No comprueba todavía el alta de órdenes mediante la pantalla POS,
 cobros reales, cuentas divididas, descuentos, integración con clientes,
 inventario ni recuperación tras cortes de luz. Requieren pruebas
 independientes y conciliación antes de migrar desde la instalación comercial.
+
+## R2: retest controlado después de corregir DEFAULT paid_at
+
+La primera prueba R1 se insertó con `paid_at` no nulo por un DEFAULT erróneo.
+No fue reclamada (`CLAIM=0, DONE=0`) ni impresa y debe conservarse
+sin editarla ni borrar su marcador. Después de aplicar la reparación en QA,
+`repair-qa-pos-orders-paid-at.mjs --check` debe indicar `DEFAULT_ACTUAL=NINGUNO`.
+
+Con el servidor QA, el puente 9137 y **un solo agente** ya activos,
+utilizar **la PowerShell de mantenimiento existente**:
+
+```powershell
+cd C:\Users\inicio\Documents\GitHub\cafe-epico-ops-qa
+git pull --ff-only origin feat/local-selfhost-qa-bootstrap
+node --check scripts/local/test-qa-autoprint-r2.mjs
+node scripts/validate-qa-autoprint.mjs
+node --env-file=.env.local scripts/local/test-qa-autoprint-r2.mjs --check
+```
+
+Si los resultados son PASS y hay papel cargado, ejecutar **una sola vez**:
+
+```powershell
+node --env-file=.env.local scripts/local/test-qa-autoprint-r2.mjs --create-once
+```
+
+No reiniciar el agente entre el chequeo y el INSERT. Consultar después:
+
+```powershell
+node --env-file=.env.local scripts/local/test-qa-autoprint-r2.mjs --status
+```
+
+La R2 usa el folio `QA-PRINT-R2-*`, ronda `QA_ONE_SHOT_R2` y marcador
+privado `.local/qa-autoprint-e2e-r2.once`. Antes de crear, inspecciona el DEFAULT,
+la R1 bloqueada y el agente. En el INSERT especifica `paid_at=NULL` y
+revalida el valor devuelto: si aparece una fecha, revierte la transacción.
+Un resultado `DONE=1` exige además confirmar **una sola comanda física**.
+Ante `CLAIM=1 DONE=0`, error de SQL o papel ambiguo, **no repetir la creación**.
+Ninguna de estas pruebas habilita cobros LIVE.
