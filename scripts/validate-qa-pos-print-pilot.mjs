@@ -30,7 +30,8 @@ assert.ok(pos.includes("inventoryEffectApplied: false"));
 assert.ok(pos.includes("loyaltyEffectApplied: false"));
 for(const rule of [
  "const qaPilot=qaPosPrintPilotEnabled()?sql",
- "o.mode='SHADOW' AND o.folio LIKE "+String.raw`${QA_POS_PILOT_PREFIX+"%"}`,
+ "o.mode='SHADOW' AND o.folio LIKE",
+ 'QA_POS_PILOT_PREFIX+"%"',
  "o.status='SENT' AND o.paid_at IS NULL",
  "o.inventory_effect_applied=false AND o.loyalty_effect_applied=false",
  'if(!qaPosPrintPilotEnabled())return or(live,fixture)',
