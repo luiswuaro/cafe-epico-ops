@@ -61,7 +61,7 @@ function Test-Api(){
 }
 Push-Location $root
 try{
- $mutex=New-Object System.Threading.Mutex($false,'Local\CafeEpicoOpsQaRuntimeSupervisor')
+ $mutex=[System.Threading.Mutex]::new($false,'Local\CafeEpicoOpsQaRuntimeSupervisor')
  if(!$mutex.WaitOne(0)){Log 'Otra instancia supervisa OPS QA. Salida limpia.';exit 0}
  try{
   if(Test-Path $stopFile){Remove-Item -LiteralPath $stopFile -Force}
