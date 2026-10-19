@@ -18,19 +18,22 @@ $root=(Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $envFile=Join-Path $root '.env.local'
 $worker=Join-Path $root 'scripts\local\print-agent.mjs'
 $guard=Join-Path $root 'scripts\local\guard-qa-config.mjs'
+$runner=Join-Path $PSScriptRoot 'run-print-agent-hidden.ps1'
 if(!(Test-Path -LiteralPath $envFile -PathType Leaf)){throw 'Falta .env.local local QA.'}
 if(!(Test-Path -LiteralPath $worker -PathType Leaf)){throw 'Falta agente de impresión.'}
+if(!(Test-Path -LiteralPath $runner -PathType Leaf)){throw 'Falta lanzador oculto de impresión.'}
 $node=(Get-Command node.exe -ErrorAction Stop).Source
 & $node ("--env-file="+$envFile) $guard
 if($LASTEXITCODE -ne 0){throw 'No instalar: el entorno no cumple seguridad QA.'}
-# Nunca escribir tokens en línea de comandos ni logs.
-$arguments='--env-file="'+$envFile+'" "'+$worker+'"'
+# El proceso programado usa PowerShell sin ventana, que inicia Node oculto.
+# Ni los tokens ni los secretos aparecen en argumentos o registros.
+$arguments='-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "'+$runner+'"'
 $current=Get-ScheduledTask -TaskName $task -ErrorAction SilentlyContinue
 if($current -and $current.State -eq 'Running'){
   throw 'El agente ya está activo. Detenerlo antes de reinstalar.'
 }
 $identity=[Security.Principal.WindowsIdentity]::GetCurrent().Name
-$action=New-ScheduledTaskAction -Execute $node -Argument $arguments -WorkingDirectory $root
+$action=New-ScheduledTaskAction -Execute "$PSHOME\powershell.exe" -Argument $arguments -WorkingDirectory $root
 $trigger=New-ScheduledTaskTrigger -AtLogOn -User $identity
 $settings=New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit ([TimeSpan]::Zero)
 $principal=New-ScheduledTaskPrincipal -UserId $identity -LogonType Interactive -RunLevel Limited
