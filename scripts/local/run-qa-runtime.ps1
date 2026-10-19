@@ -77,8 +77,12 @@ try{
     if($LASTEXITCODE -ne 0){throw 'Docker Desktop no está listo. Reintento automático.'}
     if(!$script:databaseReady){
      $startup=Join-Path $PSScriptRoot 'start-selfhost-qa.ps1'
-     & "$PSHOME\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $startup *>> (Join-Path $local 'database-start.log')
-     if($LASTEXITCODE -ne 0){throw 'Docker QA no inició correctamente; ver database-start.log.'}
+     # Docker Compose emite progreso normal en stderr. En Windows PowerShell 5.1,
+     # redirigir la consola hija con *>> puede convertirlo en un error terminante.
+     # Ejecutar la consola hija con stdout/stderr separados y revisar solo su ExitCode.
+     $startupArgs='-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "'+$startup+'"'
+     $startupProcess=Start-Process -FilePath "$PSHOME\powershell.exe" -ArgumentList $startupArgs -WorkingDirectory $root -WindowStyle Hidden -RedirectStandardOutput (Join-Path $local 'database-start.log') -RedirectStandardError (Join-Path $local 'database-start.err.log') -Wait -PassThru
+     if($startupProcess.ExitCode -ne 0){throw 'Docker QA no inició correctamente; revisar database-start.log y database-start.err.log.'}
      $script:databaseReady=$true
      Log 'PostgreSQL/Auth QA arrancaron en loopback.'
     }
