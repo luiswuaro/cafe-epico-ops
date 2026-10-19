@@ -79,6 +79,8 @@ jobs:
         run: node scripts/local/prepare-ci-postgres.mjs
       - name: Aplicar esquema y seed QA
         run: node scripts/local/apply-qa-schema.mjs --seed-qa
+      - name: Preparar snapshot estructural QA
+        run: node scripts/local/repair-qa-catalog-snapshot.mjs
       - name: Verificar integridad de datos QA
         run: node scripts/local/qa-smoke.mjs --db-only
       - name: Preparar y probar apertura y cierre de Azucena en QA
