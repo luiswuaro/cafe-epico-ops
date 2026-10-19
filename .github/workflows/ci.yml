@@ -1,5 +1,11 @@
 name: CI
 
+# Ahorra minutos de Actions en commits rápidos: sólo se conserva el CI
+# más reciente para una rama, tanto en push como en pull_request.
+concurrency:
+  group: ci-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
 on:
   push:
     branches: [main, "feat/**"]
@@ -23,7 +29,8 @@ jobs:
           node-version: 22
       - run: npm install --no-audit --no-fund
       - run: bash -n scripts/backup/backup-ops.sh scripts/backup/inspect-ops-backup.sh && node scripts/backup/validate-backup-safety.mjs
-      - run: node --test scripts/local/lan-probe.test.mjs scripts/local/guard-qa-config.test.mjs
+      - run: node --test scripts/local/lan-probe.test.mjs scripts/local/guard-qa-config.test.mjs scripts/local/inspect-qa-compose.test.mjs scripts/local/inspect-qa-secrets.test.mjs scripts/local/qa-sql-plan.test.mjs scripts/local/qa-readiness-policy.test.mjs scripts/local/local-backup-policy.test.mjs scripts/local/local-print-agent-auth.test.mjs scripts/local/print-agent-format.test.mjs scripts/local/print-agent-cycle.test.mjs scripts/local/qa-ui-preview-policy.test.mjs scripts/local/configure-qa-env.test.mjs
+      - run: node --check scripts/local/backup-ops-local.mjs && node --check scripts/local/inspect-ops-local-backup.mjs && node --check scripts/local/print-agent-raster.mjs && node --check scripts/local/print-agent.mjs && node --check scripts/local/create-print-agent-qa-order.mjs && node --check scripts/local/seed-qa-operations.mjs && node --check scripts/local/qa-operations-contract.mjs && node --check scripts/local/link-qa-employee.mjs && node --check scripts/local/configure-qa-env.mjs
       - shell: pwsh
         run: ./scripts/local/check-ps-syntax.ps1
       - run: node scripts/validate-oracle-readonly.mjs
@@ -31,3 +38,97 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run build
+
+  local-qa-postgres:
+    # Este ensayo sólo usa un PostgreSQL efímero dentro de GitHub Actions.
+    # No invoca ni conoce Supabase/Vercel productivos.
+    if: startsWith(github.head_ref || github.ref_name, 'feat/local-')
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: ci_qa_password_only
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:ci_qa_password_only@127.0.0.1:5432/postgres
+      OPS_LOCAL_FIRST: "true"
+      OPS_QA_MODE: "true"
+      OPS_CI_DB_TEST: "true"
+      POS_LIVE_ENABLED: "false"
+      DEFAULT_ORGANIZATION_SLUG: cafe-epico-qa
+      DEFAULT_STORE_CODE: QA-TEPEXI
+      NEXT_PUBLIC_SUPABASE_URL: https://192.168.1.100:8443
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: sb_publishable_ci_test_only
+      APP_ORIGIN: https://192.168.1.100:8443
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - name: Preparar auth.users y roles ficticios
+        run: node scripts/local/prepare-ci-postgres.mjs
+      - name: Aplicar esquema y seed QA
+        run: node scripts/local/apply-qa-schema.mjs --seed-qa
+      - name: Preparar snapshot estructural QA
+        run: node scripts/local/repair-qa-catalog-snapshot.mjs
+      - name: Verificar integridad de datos QA
+        run: node scripts/local/qa-smoke.mjs --db-only
+      - name: Preparar y probar apertura y cierre de Azucena en QA
+        run: node scripts/local/qa-operations-contract.mjs
+      - name: Comprobar restricciones POS y transacciones
+        run: node scripts/local/qa-database-contracts.mjs
+      - name: Dos cuentas con distintos clientes y pago mixto sin duplicados
+        run: node scripts/local/qa-pos-split-payments.mjs
+      - name: Repetir migrador para comprobar idempotencia
+        run: node scripts/local/apply-qa-schema.mjs --seed-qa
+      - name: Confirmar integridad después de repetir
+        run: node scripts/local/qa-smoke.mjs --db-only
+      - name: Preparar herramientas de cifrado age y PostgreSQL 17
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y age ca-certificates curl
+          sudo install -d -m 0755 /usr/share/postgresql-common/pgdg
+          sudo curl --fail --silent --show-error -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          . /etc/os-release
+          printf 'Types: deb\nURIs: https://apt.postgresql.org/pub/repos/apt\nSuites: %s-pgdg\nComponents: main\nSigned-By: /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc\n' "$VERSION_CODENAME" | sudo tee /etc/apt/sources.list.d/pgdg.sources > /dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client-17
+          if test -x /usr/lib/postgresql/17/bin/pg_dump; then
+            echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
+            export PATH="/usr/lib/postgresql/17/bin:$PATH"
+          fi
+          pg_dump --version
+          pg_dump --version | grep -q "PostgreSQL) 17\."
+          pg_restore --version
+          pg_restore --version | grep -q "PostgreSQL) 17\."
+          age --version
+      - name: Probar backup cifrado y restauración en otra base
+        run: node scripts/local/qa-backup-restore-contract.mjs
+      - name: Cobro LIVE real contra PostgreSQL efímero y puntos CI
+        run: node scripts/local/qa-live-checkout-contract.mjs
+      - name: Conciliar ventas LIVE con caja y puntos
+        run: node scripts/local/qa-cash-reconciliation.mjs
+
+
+  print-raster-windows:
+    # Ejecuta el renderer con GDI de Windows. Sin base comercial, ni POS-58.
+    if: startsWith(github.head_ref || github.ref_name, 'feat/local-')
+    runs-on: windows-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Renderer real GDI, Unicode y bandas ESC/POS
+        run: node --test scripts/local/print-agent-raster.windows.test.mjs

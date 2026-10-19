@@ -22,6 +22,7 @@ import {
 import { getCashState } from "@/src/application/pos/cash";
 import { getOpenPosOrders } from "@/src/application/pos/orders";
 import { getCurrentEmployee } from "@/src/infrastructure/auth/current-employee";
+import {qaPosPrintPilotEnabled} from "@/src/domain/pos/qa-pos-print-pilot";
 import { getEmployeePermissions } from "@/src/infrastructure/auth/permissions";
 
 export const dynamic = "force-dynamic";
@@ -73,9 +74,13 @@ export default async function PosOrdersPage({
   // Las pruebas de impresora sobre comandas ESPEJO se habilitan sólo en
   // deployments preview; no registrar pagos ni tocar inventario.
   const previewShadowPrint=process.env.VERCEL_ENV==="preview";
+  // El agente local es el único emisor automático del piloto SHADOW.
+  // Evita que la pestaña imprima el mismo folio por el puente USB.
+  const agentOwnsQaPilot=qaPosPrintPilotEnabled()&&
+    process.env.NEXT_PUBLIC_OPS_LOCAL_PRINT_AGENT_ENABLED==="true";
   const autoOrder=params.autoKitchen==="saved"&&autoId
     ?orders.find(order=>order.id===autoId&&(
-      order.mode==="LIVE"||order.mode==="SHADOW"
+      order.mode==="LIVE"||(order.mode==="SHADOW"&&!agentOwnsQaPilot)
     ))
     :null;
   const autoRoundId=autoOrder

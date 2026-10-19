@@ -95,6 +95,15 @@ export default async function SplitOrderPage({
               <strong className="metric">
                 {money.format(Number(split.total))}
               </strong>
+              {split.status==="PAID"&&split.customerId&&
+                <p className="muted">Cliente: {customers.find(c=>c.id===split.customerId)?.name??"Cliente vinculado"}</p>}
+              {split.status==="PAID"&&split.payments.length>0&&
+                <p className="muted">Pagos: {split.payments.map(payment=>{
+                  const label=payment.method==="POINTS"?"Puntos":
+                    payment.method==="CASH"?"Efectivo":
+                    payment.method==="CARD"?"Tarjeta":"Transferencia";
+                  return label+" "+money.format(Number(payment.amount));
+                }).join(" + ")}</p>}
 
               <div className="split-mini-lines">
                 {split.lines.map((assignment) => {
@@ -142,18 +151,9 @@ export default async function SplitOrderPage({
                     total={Number(split.total)}
                     cashOpen={Boolean(cash.session)}
                     live={state.order.mode==="LIVE"}
+                    customers={customers}
+                    defaultCustomerId={state.order.customerId}
                   />
-                  {state.order.mode==="LIVE" && <>
-                    <label>Cliente que recibe los puntos (5%)
-                      <select name="customerId" defaultValue={state.order.customerId??""}>
-                        <option value="">Sin cliente · no acreditar puntos</option>
-                        {customers.map(customer=><option key={customer.id} value={customer.id}>
-                          {customer.name} · {Number(customer.pointsBalance).toFixed(2)} pts
-                        </option>)}
-                      </select>
-                    </label>
-
-                  </>}
                   <button type="submit">
                     Cobrar {money.format(Number(split.total))}
                   </button>
@@ -194,6 +194,13 @@ export default async function SplitOrderPage({
               note: line.note,
               quantity: Number(line.quantity),
               unitPrice: Number(line.unitPrice),
+            }))}
+            savedAccounts={state.splits.map((split) => ({
+              label: split.label,
+              lines: split.lines.map((item) => ({
+                orderLineId: item.orderLineId,
+                quantity: Number(item.quantity),
+              })),
             }))}
           />
         </section>

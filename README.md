@@ -1,107 +1,127 @@
-# Café Épico Ops
+# Café Épico OPS
 
-Sistema web/PWA interno para operar Café Épico. Loyverse sigue siendo el POS y la fuente externa de ventas; Ops agrega ejecución operativa, inventario físico, auditoría, recetas, SOPs, costos y analítica.
+Sistema interno de operación para Café Épico (Tepexi de Rodríguez, Puebla).
+La aplicación comercial actual opera sobre **Next.js + PostgreSQL/Supabase**
+con POS nativo; Loyverse quedó como integración histórica heredada.
 
-## Estado V0.1
+> **Cuidado:** `main` continúa siendo el origen productivo. La rama
+> `feat/local-selfhost-qa-bootstrap` prepara una **réplica QA local** y
+> todavía no representa una migración comercial terminada.
 
-Incluido en este corte:
+## Módulos
 
-- Next.js 16 + React + TypeScript.
-- PostgreSQL/Supabase + Drizzle ORM.
-- Supabase Auth y RBAC por permisos.
-- Modelo multi-organización, multi-sucursal y multi-ubicación.
-- Inventario por ledger inmutable + balance proyectado + conteos físicos.
-- Recetas y SOPs versionados.
-- Checklist dinámica con frecuencias y snapshots históricos.
-- Control de espresso (dosis/yield/tiempo/sensorial; especificación inicial 22–35 s).
-- Espejo Loyverse: stores, items, variants, inventory, customers, receipts y receipt lines.
-- Inbox idempotente de webhooks y verificación HMAC-SHA1 para webhooks OAuth.
-- Reconciliación pull con overlap para recuperar eventos perdidos.
-- Seed inicial de Café Épico Tepexi, roles y checklist de apertura de Azucena.
-- PWA shell y pantallas iniciales empleado/admin.
+| Área | Rutas y alcance |
+|---|---|
+| POS | Catálogo, órdenes, mesas, para llevar, extras y notas |
+| Cobro | Pagos, división, caja, descuentos, clientes y puntos |
+| Barra | Comandas por rondas, estados, tiempos y recibos |
+| Impresión | Estación de impresión y puente ESC/POS en PC |
+| Inventario | Artículos, conteos, mermas, recetas y empaque |
+| Compras | Planeación, proveedores y sugerencias |
+| Calidad | Espresso y procedimientos operativos |
+| Tueste | Sesiones, lotes, HiBean, comparativos, maquila |
+| Gestión | Checklist, entregas de turno, usuarios y permisos |
+| Finanzas | Costos, indicadores, ventas y productividad |
 
-Pendiente de credenciales/infraestructura real:
-
-- Crear proyecto Supabase y ejecutar migración/seed.
-- Crear usuarios Auth y vincularlos a `employees`.
-- Configurar token de Loyverse (solo servidor).
-- Publicar URL HTTPS y registrar webhooks Loyverse.
-- Elegir scheduler de producción para la reconciliación periódica.
-
-## Arquitectura
+## Estructura del código
 
 ```text
-Loyverse POS
-    │
-    ├── REST API ─────────────┐
-    └── Webhooks ─────────────┤
-                              ▼
-                      Café Épico Ops
-                      Next.js / Node
-                              │
-                 ┌────────────┴────────────┐
-                 ▼                         ▼
-          PostgreSQL/Supabase        Supabase Auth/Storage
-                 │
-       ┌─────────┼──────────┐
-       ▼         ▼          ▼
- Inventario  Operación   Finanzas/BI
+app/                         Pantallas, acciones y rutas HTTP
+src/domain/                  Políticas puras y reglas unitarias
+src/application/             Casos de uso y operaciones de negocio
+src/infrastructure/db/       Drizzle y PostgreSQL
+src/infrastructure/auth/     Sesiones y RBAC respaldado por DB
+db/migrations/               Esquema versionado
+scripts/local/               Diagnóstico, réplica y controles QA
+infra/local/                 Compose QA y plantilla proxy HTTPS
+docs/operations/             Runbooks de lanzamiento y pruebas
+docs/adr/                    Decisiones de arquitectura
 ```
 
-El espejo Loyverse está separado del dominio interno. Cambiar de POS no debe obligar a reescribir recetas, inventario físico o SOPs.
+Monolito modular: las reglas compartidas se mantienen separadas de la interfaz.
+La arquitectura existente ya contempla `organization_id` y `store_id` en
+varios modelos. **Esto no significa** que dos sucursales independientes estén
+validadas en producción: ver `docs/adr/ADR-009-local-first-one-authoritative-ledger.md`.
 
-## Primer arranque
+## Modo local de costo cero en suscripciones
 
-1. Copiar `.env.example` a `.env.local`.
-2. Crear un proyecto PostgreSQL/Supabase.
-3. Ejecutar `db/migrations/0000_v0_1_core.sql` en el SQL editor.
-4. Ejecutar `db/seed.sql`.
-5. Crear usuarios en Supabase Auth y vincularlos con `scripts/link-auth-user.sql.example`.
-6. Configurar `LOYVERSE_ACCESS_TOKEN` con permisos de lectura necesarios.
-7. `npm install` y `npm run dev`.
+El objetivo es que una PC Windows mantenga Next.js, PostgreSQL y Auth locales,
+y que dispositivos propios accedan por una red LAN protegida y HTTPS. El
+internet remoto se usará solamente para consultas o comandos autorizados, no
+como requisito para cobrar por LAN.
 
-> Nunca usar `NEXT_PUBLIC_` para el token de Loyverse ni para la service-role key.
+**Aún no está desplegado en la PC.** La entrega prepara:
 
-## Comandos
+1. `scripts/local/bootstrap-selfhost-qa.ps1`: obtiene una pila self-hosted
+   oficial y fijada en versión, pero no la inicia.
+2. `scripts/local/start-selfhost-qa.ps1`: verifica credenciales, endpoints
+   y puertos antes de iniciar contenedores **QA**.
+3. `scripts/local/apply-qa-schema.mjs`: migra y audita esquema local con SHA-256
+   y seed sintético de prueba.
+4. `scripts/local/start-qa.ps1`: arranca Next.js QA en loopback.
+5. `scripts/local/start-qa-gateway.ps1`: valida la IP local e inicia Caddy HTTPS.
+   Para Next.js debe configurarse `OPS_LOCAL_CA_FILE` con la CA pública
+   `root.crt`; la verificación TLS se conserva habilitada.
+6. `scripts/local/qa-smoke.mjs`: auditoría de DB/HTTPS de solo lectura.
+
+**Instalación completa:**
+[docs/operations/selfhost-qa-bootstrap.md](docs/operations/selfhost-qa-bootstrap.md)
+
+**Criterios para autorizar el corte:**
+[docs/operations/local-qa-acceptance.md](docs/operations/local-qa-acceptance.md)
+
+**Vista previa del POS sin datos comerciales:**
+en PC QA local abrir `/qa/pos-preview`; navegación y flujo de cobro
+**simulados**, no reemplazan al POS real. Instrucciones:
+[docs/operations/qa-ui-preview.md](docs/operations/qa-ui-preview.md).
+
+**Estrategia de salida de Vercel y acceso remoto:**
+[docs/adr/ADR-010-vendor-exit-and-remote-access.md](docs/adr/ADR-010-vendor-exit-and-remote-access.md).
+Vercel Hobby y Tailscale Personal no son vías comerciales gratuitas.
+Cloudflare Zero Trust Free se evalúa para uso remoto empresarial, después
+de las pruebas LAN y de seguridad.
+
+Las pruebas y certificados son obligatorios; no abrir PostgreSQL,
+la estación ESC/POS ni Supabase Studio directamente a la Wi-Fi del hotel.
+
+## Comandos de desarrollo
 
 ```bash
-npm run dev
+npm install
 npm run typecheck
 npm run lint
+npm run validate:structure
 npm run build
-npm run db:generate
-npm run db:migrate
-npm run db:studio
 ```
 
-## Rutas V0.1
+Variables necesarias documentadas en `.env.example`. Nunca añadir archivos
+`.env.local`, tokens o claves al repositorio.
 
-- `/today` — inicio simple del empleado.
-- `/checklists` — checklist del turno.
-- `/recipes` — recetas vigentes desde PostgreSQL.
-- `/sops` — SOPs vigentes y lectura por versión.
-- `/quality/espresso` — interfaz inicial de control de espresso; persistencia pendiente.
-- `/admin` — panel administrativo protegido por RBAC.
-- `/admin/checklists` — alta, programación y activación/desactivación de tareas de checklist.
-- `/api/webhooks/loyverse` — recepción de webhooks.
-- `/api/internal/loyverse/reconcile` — reconciliación protegida con `CRON_SECRET`.
-- `/api/health` — healthcheck.
+## Datos y recuperación
 
-## Qué funciona en V0.1 y qué queda preparado
+- PostgreSQL es la fuente transaccional de órdenes, movimientos de
+  inventario, caja, puntos y auditorías.
+- Versionado de recetas/SOPs y movimientos contables históricos.
+- `docs/operations/local-backup-runbook.md`: respaldo cifrado por ejecución,
+  integridad SHA-256 y restauración **lógica aprobada en CI PostgreSQL 17**;
+  falta probar disco externo, PC física y usuarios Auth reales.
+- `docs/operations/backup-and-multistore-readiness.md`: política para
+  extraer un respaldo cifrado y validarlo, sin afectar producción.
+- `docs/operations/lan-local-first-rollout.md`: pruebas LAN/Windows y
+  restricciones de red del hotel.
+- `docs/operations/antenna-integration-2026-10-18.md`: guion para probar la
+  antena Wi-Fi desde dos celulares sin tocar el POS comercial, y el orden
+  seguro de instalación QA, certificados, impresora y prueba sin WAN.
+- La conservación de ventas históricas y sesiones Auth requiere restauración
+  aislada y verificación. Compilar el proyecto no equivale a trasladar los datos.
 
-**Implementado:** autenticación base, RBAC, checklist diaria materializada desde reglas, captura de resultados, lectura de recetas/SOPs, editor administrativo de tareas, esquema de inventario ledger, espejo/sync de lectura Loyverse, inbox de webhooks y reconciliación protegida.
+## Estado y seguridad
 
-**Preparado en modelo pero todavía sin flujo completo de UI:** conteos físicos, mermas, escandallo/COGS calculado, edición/publicación de recetas y SOPs, dashboard financiero, compras, producción y capacitación. El formulario visual de control de espresso todavía no persiste registros.
+Al migrar se debe verificar POS concurrente, impresora, recuperación, permisos,
+pagos divididos, internet desconectado, caja y puntos. Los roles administrativos
+no deben depender de botones ocultos: la aplicación comprueba permisos en el
+servidor/DB. La estación impresora necesita flujo durable y acuses
+idempotentes para reintentos.
 
-La V0.1 no escribe a Loyverse.
-
-## Principios
-
-1. Una sola fuente interna de verdad para recetas y costos.
-2. No sobrescribir historia: movimientos, versiones y ejecuciones se conservan.
-3. Empleado: mínima complejidad; dueño: controles completos.
-4. El stock físico nunca sustituye silenciosamente al teórico.
-5. Escritura hacia Loyverse queda fuera de V0.1.
-6. No hay lógica de negocio crítica hardcodeada en una pantalla.
-
-Ver `docs/architecture/` y `docs/adr/`.
+No desplegar la rama QA como POS LIVE ni reemplazar Supabase/Vercel comercial
+antes de completar la hoja de aceptación.

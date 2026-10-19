@@ -1211,6 +1211,7 @@ export const posOrderSplits = pgTable("pos_order_splits", {
   id: uuid("id").primaryKey().defaultRandom(),
   organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
   orderId: uuid("order_id").notNull().references(() => posOrders.id, { onDelete: "cascade" }),
+  customerId: uuid("customer_id").references(() => posCustomers.id, { onDelete: "set null" }),
   label: text("label").notNull(),
   status: varchar("status", { length: 20 }).notNull().default("OPEN"),
   total: numeric("total", { precision: 14, scale: 2 }).notNull(),
@@ -1219,6 +1220,8 @@ export const posOrderSplits = pgTable("pos_order_splits", {
 }, (t) => [
   uniqueIndex("pos_order_splits_label_uidx").on(t.orderId, t.label),
   index("pos_order_splits_order_idx").on(t.orderId, t.status),
+  index("pos_order_splits_customer_paid_idx").on(t.customerId,t.paidAt.desc())
+    .where(sql`${t.customerId} IS NOT NULL AND ${t.status} = 'PAID'`),
 ]);
 
 export const posOrderSplitLines = pgTable("pos_order_split_lines", {
@@ -1247,6 +1250,14 @@ export const posPayments = pgTable("pos_payments", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   index("pos_payments_order_idx").on(t.orderId),
+  // Permitir POINTS + pago real en la misma cuenta, pero impedir que dos
+  // dispositivos dupliquen cada componente del cobro dividido.
+  uniqueIndex("pos_payments_split_points_once_uidx").on(t.splitId)
+    .where(sql`${t.splitId} IS NOT NULL AND ${t.method} = 'POINTS'`),
+  uniqueIndex("pos_payments_split_monetary_once_uidx").on(t.splitId)
+    .where(sql`${t.splitId} IS NOT NULL AND ${t.method} <> 'POINTS'`),
+  index("pos_payments_split_lookup_idx").on(t.splitId)
+    .where(sql`${t.splitId} IS NOT NULL`),
 ]);
 
 
@@ -1356,3 +1367,58 @@ export const roastContractDeliveries = pgTable("roast_contract_deliveries", {
   notes: text("notes"),
   ...timestamps,
 },t=>[index("roast_contract_deliveries_batch_idx").on(t.batchId)]);
+
+/**
+ * Archivo de compatibilidad histórica. Estas tablas existen en producción y
+ * deben viajar en el respaldo, pero NO forman parte del inventario POS nativo.
+ * No reactivar las rutas antiguas de sincronización Loyverse.
+ */
+export const financialBudgetsLegacy = pgTable("financial_budgets", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id").notNull().references(() => organizations.id, {onDelete:"cascade"}),
+  expenses: jsonb("expenses").$type<unknown[]>().notNull().default([]),
+  variableRatio: numeric("variable_ratio",{precision:6,scale:2}).notNull().default("30"),
+  cardRate: numeric("card_rate",{precision:6,scale:2}).notNull().default("3.5"),
+  revision: integer("revision").notNull().default(1),
+  updatedByEmployeeId: uuid("updated_by_employee_id").references(() => employees.id,{onDelete:"set null"}),
+  ...timestamps,
+},t=>[uniqueIndex("financial_budgets_org_uidx").on(t.organizationId)]);
+
+export const operationalInventoryBalancesLegacy = pgTable("operational_inventory_balances", {
+  organizationId: uuid("organization_id").notNull().references(() => organizations.id,{onDelete:"cascade"}),
+  storeId: uuid("store_id").notNull().references(() => stores.id,{onDelete:"cascade"}),
+  loyverseStoreExternalId: text("loyverse_store_external_id").notNull(),
+  variantExternalId: text("variant_external_id").notNull(),
+  itemNameSnapshot: text("item_name_snapshot").notNull(),
+  quantityNative: numeric("quantity_native",{precision:18,scale:6}).notNull(),
+  sourceQuantityNative: numeric("source_quantity_native",{precision:18,scale:6}).notNull(),
+  sourceSyncedAt: timestamp("source_synced_at",{withTimezone:true}),
+  initializedAt: timestamp("initialized_at",{withTimezone:true}).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at",{withTimezone:true}).notNull().defaultNow(),
+},t=>[
+  primaryKey({columns:[t.storeId,t.variantExternalId]}),
+  index("operational_inventory_balances_variant_idx").on(t.organizationId,t.variantExternalId),
+]);
+
+export const operationalInventoryMovementsLegacy = pgTable("operational_inventory_movements", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id").notNull().references(() => organizations.id,{onDelete:"cascade"}),
+  storeId: uuid("store_id").notNull().references(() => stores.id,{onDelete:"cascade"}),
+  variantExternalId: text("variant_external_id").notNull(),
+  itemNameSnapshot: text("item_name_snapshot").notNull(),
+  movementType: varchar("movement_type",{length:40}).notNull(),
+  quantityDeltaNative: numeric("quantity_delta_native",{precision:18,scale:6}).notNull(),
+  sourceType: varchar("source_type",{length:40}).notNull(),
+  sourceId: text("source_id"),
+  orderId: uuid("order_id").references(() => posOrders.id,{onDelete:"set null"}),
+  employeeId: uuid("employee_id").references(() => employees.id,{onDelete:"set null"}),
+  occurredAt: timestamp("occurred_at",{withTimezone:true}).notNull().defaultNow(),
+  note: text("note"),
+  createdAt: timestamp("created_at",{withTimezone:true}).notNull().defaultNow(),
+},t=>[
+  index("operational_inventory_movements_variant_idx").on(t.organizationId,t.storeId,t.variantExternalId,t.occurredAt),
+  index("operational_inventory_movements_order_idx").on(t.orderId),
+  uniqueIndex("operational_inventory_movements_source_uidx")
+    .on(t.organizationId,t.sourceType,t.sourceId,t.variantExternalId)
+    .where(sql`${t.sourceId} is not null`),
+]);

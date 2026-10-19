@@ -48,7 +48,7 @@ export function PurchaseCard({profile,customerId}:{profile:Profile;customerId:st
           const item=line as Record<string,unknown>;
           return <p className="muted" key={i}>{String(item.quantity ?? 1)} × {String(item.item_name ?? "Producto")}</p>;
         })}
-        <Link href={ticket.source==="OPS" ? "/pos/receipt/"+ticket.receipt_id : "/pos/tickets?q="+encodeURIComponent(ticket.folio)}>Abrir ticket</Link>
+        <Link href={ticket.source==="OPS" ? "/pos/receipt/"+(ticket.order_id??ticket.receipt_id)+(ticket.split_id?"?split="+ticket.split_id:"") : "/pos/tickets?q="+encodeURIComponent(ticket.folio)}>Abrir ticket</Link>
       </div>
     </details>)}
     <div className="pos-result-actions">

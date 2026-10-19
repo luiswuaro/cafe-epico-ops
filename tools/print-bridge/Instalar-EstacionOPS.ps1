@@ -2,7 +2,8 @@
 param(
  [ValidateSet('Auto','Chrome','Brave','Edge')][string]$Browser='Auto',
  [switch]$Watch,
- [switch]$Uninstall
+ [switch]$Uninstall,
+ [string]$OpsUrl='https://cafe-epico-ops.vercel.app/pos'
 )
 $ErrorActionPreference='Stop'
 $folder=Join-Path $env:LOCALAPPDATA 'CafeEpicoOps'
@@ -10,7 +11,29 @@ $installed=Join-Path $folder 'Estacion-OPS.ps1'
 $log=Join-Path $folder 'estacion-ops.log'
 $taskName='CafeEpicoOps-StationWatchdog'
 $startup=Join-Path ([Environment]::GetFolderPath('Startup')) 'CafeEpicoOps-Station.cmd'
-$url='https://cafe-epico-ops.vercel.app/pos'
+# El destino original sigue siendo producción salvo -OpsUrl explícita.
+# QA local: -OpsUrl https://IP_PRIVADA_PC:8443/pos
+$parsedUrl=$null
+if(-not [uri]::TryCreate($OpsUrl,[UriKind]::Absolute,[ref]$parsedUrl)){
+ throw 'OPS URL inválida.'
+}
+$hostName=$parsedUrl.Host
+$ip=$null
+$isPrivate=$false
+if([System.Net.IPAddress]::TryParse($hostName,[ref]$ip) -and
+   $ip.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetwork){
+ $octets=$ip.GetAddressBytes()
+ $isPrivate=$octets[0] -eq 10 -or
+   ($octets[0] -eq 172 -and $octets[1] -ge 16 -and $octets[1] -le 31) -or
+   ($octets[0] -eq 192 -and $octets[1] -eq 168) -or
+   ($octets[0] -eq 127)
+}
+if($parsedUrl.Scheme -ne 'https' -or $parsedUrl.UserInfo -or
+   $parsedUrl.Query -or $parsedUrl.Fragment -or $parsedUrl.AbsolutePath -ne '/pos' -or
+   (-not $isPrivate -and $hostName -ne 'cafe-epico-ops.vercel.app')){
+ throw 'URL no autorizada. Usar OPS oficial o la IP HTTPS privada de la PC.'
+}
+$url=$parsedUrl.AbsoluteUri.TrimEnd('/')
 function Log([string]$msg){try{Add-Content $log ((Get-Date -Format s)+' '+$msg) -Encoding UTF8}catch{}}
 function ResolveBrowser([string]$name) {
  if($name -eq 'Auto'){
@@ -61,7 +84,7 @@ function Test-OpsRunning {
  try {
   $app=@(Get-CimInstance Win32_Process -ErrorAction Stop |
    Where-Object {$_.Name -in @('chrome.exe','brave.exe','msedge.exe') -and
-    $_.CommandLine -match '--app=https://cafe-epico-ops\.vercel\.app(/pos)?'})
+    $_.CommandLine -match ('--app='+[regex]::Escape($url))})
   return ($app.Count -gt 0)
  }catch {return $false}
 }
@@ -112,7 +135,7 @@ try {
  if($LASTEXITCODE -ne 0){throw 'No se pudo cambiar powercfg'}
  Write-Host 'OK: suspensión deshabilitada en corriente alterna.' -ForegroundColor Green
 }catch{Write-Warning 'Configura manualmente suspensión: Windows > Sistema > Energía.'}
-$argsForWorker='-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "'+$installed+'" -Watch -Browser '+$selectedBrowser.Name
+$argsForWorker='-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "'+$installed+'" -Watch -Browser '+$selectedBrowser.Name+' -OpsUrl "'+$url+'"'
 $taskCreated=$false
 try{
  $user=[Security.Principal.WindowsIdentity]::GetCurrent().Name

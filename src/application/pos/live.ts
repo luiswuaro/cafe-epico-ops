@@ -626,7 +626,7 @@ export async function checkoutLiveOrder(input:{
     }
     if(split){
       const [changed]=await tx.update(posOrderSplits).set({
-        status:"PAID",paidAt:now,updatedAt:now
+        status:"PAID",customerId:input.customerId,paidAt:now,updatedAt:now
       }).where(and(eq(posOrderSplits.id,split.id),eq(posOrderSplits.status,"OPEN")))
         .returning({id:posOrderSplits.id});
       if(!changed)throw new Error("Esta cuenta fue cobrada por otro dispositivo.");

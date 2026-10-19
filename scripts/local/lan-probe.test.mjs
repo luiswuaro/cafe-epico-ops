@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import {test} from "node:test";
 import {once} from "node:events";
-import {createLanProbeServer} from "./lan-probe.mjs";
+import {Script} from "node:vm";
+import {createLanProbeServer,isPrivateLanIp} from "./lan-probe.mjs";
 
 test("LAN probe serves public health without credentials or POS data",async()=>{
   const server=createLanProbeServer();
@@ -15,7 +16,18 @@ test("LAN probe serves public health without credentials or POS data",async()=>{
     assert.equal(html.status,200);
     assert.equal(html.headers.get("cache-control"),"no-store, private");
     assert.equal(html.headers.get("x-frame-options"),"DENY");
-    assert.match(await html.text(),/CONEXIÓN LOCAL CONFIRMADA/);
+    const htmlPage=await html.text();
+    assert.match(htmlPage,/CONEXIÓN LOCAL CONFIRMADA/);
+    assert.match(htmlPage,/Medir estabilidad LAN/);
+    assert.match(htmlPage,/src="\/client.js"/);
+    assert.match(html.headers.get("content-security-policy"),/script-src 'self'/);
+    const script=await fetch(root+"/client.js");
+    assert.equal(script.status,200);
+    assert.match(script.headers.get("content-type"),/application\/javascript/);
+    const javascript=await script.text();
+    assert.doesNotThrow(()=>new Script(javascript));
+    assert.match(javascript,/12 respuestas/);
+    assert.doesNotMatch(javascript,/https?:\/\/|supabase|vercel|DATABASE_URL/i);
 
     const health=await fetch(root+"/health");
     assert.equal(health.status,200);
@@ -48,8 +60,18 @@ test("LAN probe does not read .env files, auth tokens or database libraries",asy
   const ps=fs.readFileSync("scripts/local/test-lan.ps1","utf8");
   assert.doesNotMatch(js,/getDb\(|process\.env|DATABASE_URL|SUPABASE_|\bfs\.readFile|\bexec\(|\bspawn\(/);
   assert.match(js,/MAX_RUNTIME_MS=15\*60\*1000/);
-  assert.match(js,/server\.listen\(port,"0\.0\.0\.0"/);
+  assert.match(js,/server\.listen\(port,bindHost/);
+  assert.match(ps,/LocalAddress=\$ip/);
+  assert.match(ps,/InterfaceAlias/);
   assert.match(ps,/RemoteAddress='LocalSubnet'/);
   assert.match(ps,/Remove-NetFirewallRule/);
   assert.match(ps,/\$ruleCreated/);
+});
+
+test("LAN probe only accepts private IPs and loopback default",()=>{
+ for(const ip of ["192.168.1.5","10.0.4.6","172.16.3.8","172.31.255.254"])
+   assert.equal(isPrivateLanIp(ip),true,ip);
+ for(const ip of ["0.0.0.0","8.8.8.8","1.1.1.1","127.0.0.1",
+   "169.254.1.1","172.32.0.1","192.0.2.3","::","hotel-wifi"])
+   assert.equal(isPrivateLanIp(ip),false,ip);
 });
