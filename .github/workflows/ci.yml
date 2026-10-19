@@ -114,6 +114,10 @@ jobs:
           age --version
       - name: Probar backup cifrado y restauración en otra base
         run: node scripts/local/qa-backup-restore-contract.mjs
+      - name: Cobro LIVE real contra PostgreSQL efímero y puntos CI
+        run: node scripts/local/qa-live-checkout-contract.mjs
+      - name: Conciliar ventas LIVE con caja y puntos
+        run: node scripts/local/qa-cash-reconciliation.mjs
 
 
   print-raster-windows:
