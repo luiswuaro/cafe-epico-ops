@@ -9,6 +9,7 @@ $files = @(
   'scripts/local/start-qa-gateway.ps1',
   'tools/print-bridge/Instalar-EstacionOPS.ps1',
   'scripts/local/install-print-agent.ps1',
+  'scripts/local/run-print-agent-hidden.ps1',
   'scripts/local/Render-PrintTicketRaster.ps1',
   'scripts/local/launch-qa.ps1',
   'scripts/local/run-qa-runtime.ps1',
