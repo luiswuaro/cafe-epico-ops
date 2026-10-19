@@ -11,14 +11,23 @@ type Line = {
   unitPrice: number;
 };
 
+type SavedAccount = {
+  label: string;
+  lines: { orderLineId: string; quantity: number }[];
+};
+
 export function SplitAccountBuilder({
   orderId,
   lines,
+  savedAccounts = [],
 }: {
   orderId: string;
   lines: Line[];
+  savedAccounts?: SavedAccount[];
 }) {
-  const [accountCount, setAccountCount] = useState(2);
+  const [accountCount, setAccountCount] = useState(() =>
+    Math.max(2, Math.min(8, savedAccounts.length || 2)),
+  );
   const units = useMemo(
     () =>
       lines.flatMap((line) =>
@@ -37,9 +46,35 @@ export function SplitAccountBuilder({
     [lines],
   );
 
-  const [assignments, setAssignments] = useState<Record<string, number>>(() =>
-    Object.fromEntries(units.map((unit) => [unit.key, 1])),
-  );
+  const [assignments, setAssignments] = useState<Record<string, number>>(() => {
+    const initial: Record<string, number> = Object.fromEntries(
+      units.map((unit) => [unit.key, 1]),
+    );
+    const used = new Map<string, number>();
+
+    for (const [index, saved] of savedAccounts.entries()) {
+      const account = Number(
+        saved.label.match(/^Cuenta (\d+)$/)?.[1] ?? index + 1,
+      );
+      if (account < 1 || account > accountCount) continue;
+
+      for (const line of saved.lines) {
+        const start = used.get(line.orderLineId) ?? 0;
+        const quantity = Math.max(0, Math.round(line.quantity));
+
+        for (let n = start; n < start + quantity; n++) {
+          const key = line.orderLineId + ":" + n;
+          if (Object.prototype.hasOwnProperty.call(initial, key)) {
+            initial[key] = account;
+          }
+        }
+
+        used.set(line.orderLineId, start + quantity);
+      }
+    }
+
+    return initial;
+  });
 
   const payload = useMemo(() => {
     const grouped = new Map<

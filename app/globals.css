@@ -3185,3 +3185,25 @@ main.pos-shell .pos-product-card .pos-product-qty{
   main.pos-shell .pos-product-grid .pos-product-card{min-height:133px;padding:.52rem}
   main.pos-shell .pos-product-card .pos-product-name{font-size:.82rem}
 }
+
+/* EPICO-QA-SPLIT-DARK-FIX */
+:root[data-theme="dark"] .split-account-summary > div,
+:root[data-theme="dark"] .split-count-control button {
+  background: var(--epic-raised) !important;
+  color: var(--epic-fg) !important;
+  border-color: var(--epic-border) !important;
+}
+
+:root[data-theme="dark"] .split-account-summary > div > * {
+  color: var(--epic-fg) !important;
+}
+
+:root[data-theme="dark"] a.button.pos-prebill-link {
+  background: var(--epic-raised) !important;
+  color: var(--epic-fg) !important;
+  border-color: var(--epic-border) !important;
+}
+
+:root[data-theme="dark"] a.button.pos-prebill-link:hover {
+  background: var(--epic-soft) !important;
+}

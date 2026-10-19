@@ -195,6 +195,13 @@ export default async function SplitOrderPage({
               quantity: Number(line.quantity),
               unitPrice: Number(line.unitPrice),
             }))}
+            savedAccounts={state.splits.map((split) => ({
+              label: split.label,
+              lines: split.lines.map((item) => ({
+                orderLineId: item.orderLineId,
+                quantity: Number(item.quantity),
+              })),
+            }))}
           />
         </section>
       )}
