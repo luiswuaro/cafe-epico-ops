@@ -2,6 +2,10 @@
 import postgres from "postgres";
 import {validateLocalQaConfig} from "./guard-qa-config.mjs";
 const env=process.env,check=validateLocalQaConfig(env);
+const runId=env.OPS_QA_POS_PRINT_PILOT_RUN_ID?.trim()??"";
+if(runId&&!/^R[0-9]{8}[A-Z0-9]{2}$/.test(runId))
+ throw Error("BLOQUEADO: identificador de sesión QA inválido.");
+const pilotLike=runId?"QA-POS-PILOT-"+runId+"-%":"QA-POS-PILOT-%";
 if(!check.ok||env.POS_LIVE_ENABLED!=="false"||env.DEFAULT_STORE_CODE!=="QA-TEPEXI")
  throw Error("BLOQUEADO: sólo consultar PostgreSQL QA.");
 const url=new URL(env.DATABASE_URL);
@@ -16,9 +20,9 @@ async function main(){
    throw Error("BLOQUEADO: organización/sucursal no exclusiva QA.");
   const orders=await db.unsafe(
    "select id,folio,mode,status,total,paid_at,inventory_effect_applied,loyalty_effect_applied "+
-   "from public.pos_orders where organization_id=$1 and store_id=$2 and folio like 'QA-POS-PILOT-%'",
-   [orgs[0].id,stores[0].id]);
-  if(orders.length>1)throw Error("BLOQUEADO: existe más de un piloto.");
+   "from public.pos_orders where organization_id=$1 and store_id=$2 and folio like $3",
+   [orgs[0].id,stores[0].id,pilotLike]);
+  if(orders.length>1)throw Error("BLOQUEADO: existe más de una comanda en la sesión QA seleccionada.");
   if(!orders.length){console.log("PENDIENTE: aún no se creó una comanda piloto desde POS.");return;}
   const o=orders[0];
   const events=await db.unsafe(
