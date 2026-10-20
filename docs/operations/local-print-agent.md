@@ -163,3 +163,33 @@ ticket gráfico actual: acentos, ñ, notas, letra, logo, anchos, separación y
 tiempos de impresión. Si hay caracteres convertidos en símbolos, líneas
 cortadas o franjas horizontales, detener el ensayo y conservar el modo
 manual. **No habilitar por defecto sin fotos de resultados físicos.**
+
+## Retomar un piloto POS QA consumido (20/oct/2026)
+
+El primer folio `QA-POS-PILOT-*` era intencionalmente de **un solo uso**.
+Cambiar `OPS_QA_POS_PRINT_PILOT=true` no autoriza una segunda orden: la
+reserva usa `pg_advisory_xact_lock` y comprueba si ya existe el prefijo.
+**No borrar ni modificar órdenes previas, no levantar dos agentes.**
+
+En una réplica aislada y con código actualizado, se puede reservar una nueva
+sesión explícita mediante `OPS_QA_POS_PRINT_PILOT_RUN_ID=RYYYYMMDDAA`,
+donde `AA` son dos caracteres alfanuméricos mayúsculos, por ejemplo
+`R20261020A1`. Cada sesión permite **como máximo UNA nueva comanda
+SHADOW SENT** mediante el POS del teléfono. Las otras órdenes conservan
+folios `SH-*` y no entran en impresión automática.
+
+- Solo se admite identificador con patrón `^R[0-9]{8}[A-Z0-9]{2}$`.
+  Un valor malformado bloquea el piloto (no autoriza trabajos).
+- Primero inspeccionar el historial de la sesión anterior y el pulso del
+  agente; luego respaldar `.env.local` privadamente y asignar el nuevo ID.
+- Recompilar Next.js (`npm run build`) con el servidor QA parado; reiniciar
+  el supervisor; comprobar `/api/health` y `print-agent` antes de crear.
+- El feed continúa limitado por modo SHADOW, ámbito QA, estado SENT, sin
+  `paid_at`, sin inventario/puntos y edad de trabajo menor de 5 minutos.
+- El estado se consulta con `node --env-file=.env.local
+  scripts/local/status-qa-pos-print-pilot.mjs` y audita **la sesión activa**.
+- Si `CLAIM=1` y `DONE=0`, o el papel es ambiguo, no imprimir otra vez.
+  Desactivar el piloto tras registrar el resultado; preservar auditorías.
+- En el siguiente ensayo debe elegirse otro ID **solo con autorización nueva**,
+  tras revisar `DONE/FAILED`, y sin recuperar trabajos antiguos.
+- Este mecanismo es exclusivo de QA: el modo comercial continúa bloqueado.
