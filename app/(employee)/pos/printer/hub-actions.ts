@@ -11,7 +11,7 @@ import {auditEvents,employees,posOrderLines,posOrderSplits,posOrderSplitLines,
 import {extraLabels} from "@/src/application/pos/extras";
 import {receiptLoyaltyView} from "@/src/domain/pos/receipt-loyalty";
 import {efficientPrintFeedSince} from "@/src/domain/pos/print-feed-window";
-import {QA_POS_PILOT_PREFIX,qaPosPrintPilotEnabled} from "@/src/domain/pos/qa-pos-print-pilot";
+import {qaPosPrintPilotSessionPrefix,qaPosPrintPilotEnabled} from "@/src/domain/pos/qa-pos-print-pilot";
 import {kitchenOrderIdentity} from "@/src/application/pos/kitchen-slip";
 import type {KitchenSlip} from "@/src/application/pos/kitchen-slip";
 import type {DirectReceiptPayload} from "../receipt/[id]/direct-print-button";
@@ -37,10 +37,10 @@ function allowQaPrintFixture(){
 // Filtros equivalentes para la sonda SQL y la validación transaccional.
 function printFeedScopeSql(){
  if(!allowQaPrintFixture())return sql`o.mode='LIVE'`;
- // Solo la primera orden SHADOW del POS reservada por createShadowOrder.
- // El resto de los espejos (incluidos los anteriores) queda bloqueado.
- const qaPilot=qaPosPrintPilotEnabled()?sql` OR (
-   o.mode='SHADOW' AND o.folio LIKE ${QA_POS_PILOT_PREFIX+"%"}
+ // El feed sólo toma órdenes de la sesión activa; las antiguas no se recuperan.
+ const activeQaPrefix=qaPosPrintPilotSessionPrefix();
+ const qaPilot=qaPosPrintPilotEnabled()&&activeQaPrefix?sql` OR (
+   o.mode='SHADOW' AND o.folio LIKE ${activeQaPrefix+"%"}
    AND o.status='SENT' AND o.paid_at IS NULL
    AND o.inventory_effect_applied=false AND o.loyalty_effect_applied=false
  )`:sql``;
@@ -63,7 +63,7 @@ function printOrderScopeDrizzle(){
  );
  if(!qaPosPrintPilotEnabled())return or(live,fixture);
  const pilot=and(
-   eq(posOrders.mode,"SHADOW"),like(posOrders.folio,QA_POS_PILOT_PREFIX+"%"),
+   eq(posOrders.mode,"SHADOW"),like(posOrders.folio,qaPosPrintPilotSessionPrefix()!+"%"),
    eq(posOrders.status,"SENT"),isNull(posOrders.paidAt),
    eq(posOrders.inventoryEffectApplied,false),
    eq(posOrders.loyaltyEffectApplied,false),
