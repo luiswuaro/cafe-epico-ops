@@ -193,3 +193,47 @@ folios `SH-*` y no entran en impresión automática.
 - En el siguiente ensayo debe elegirse otro ID **solo con autorización nueva**,
   tras revisar `DONE/FAILED`, y sin recuperar trabajos antiguos.
 - Este mecanismo es exclusivo de QA: el modo comercial continúa bloqueado.
+
+## Varias comandas de prueba desde el POS, con límite QA (20/oct/2026)
+
+Por defecto se mantiene el piloto **de una sola comanda por sesión**.
+La ampliación es opcional y sigue reservada a QA local.
+
+Para probar varias comandas nuevas desde Android en una sesión que ya tiene
+una orden impresa (por ejemplo `R20261020A1`), añadir en `.env.local`:
+
+```dotenv
+OPS_QA_POS_PRINT_PILOT=true
+OPS_QA_POS_PRINT_PILOT_RUN_ID=R20261020A1
+OPS_QA_POS_PRINT_PILOT_MAX_ORDERS=5
+```
+
+El límite acepta **1 a 10**, sin valores mayores. Valores mayores que 1
+requieren ID de sesión válido. Un valor inválido desactiva la autorización
+para imprimir SHADOW desde el POS.
+
+**Aplicación:** guardar copia privada de `.env.local`, confirmar guard QA,
+detener únicamente el supervisor QA, compilar Next.js y volver a iniciar
+el supervisor. Mantener PostgreSQL y volúmenes Docker sin cambios.
+La sesión existente conserva su primera comanda; sólo nuevas órdenes hasta
+completar el límite reciben el prefijo `QA-POS-PILOT-R20261020A1-*`.
+No reimpresionar ni transformar folios `SH-*` creados anteriormente.
+Si se alcanza el máximo, el servidor devuelve un error y **no registra**
+otra orden piloto en silencio.
+
+Feed y CLAIM filtran sólo el prefijo de la sesión actual y exigen SHADOW,
+SENT, `paid_at=null`, sin inventario ni puntos. El agente reclama cada
+trabajo una sola vez; una respuesta ambigua no desencadena repetición.
+Además aplica su ventana de edad y evita pedidos anteriores a su arranque.
+
+Auditar después de cada impresión:
+
+```powershell
+node --env-file=.env.local scripts/local/status-qa-pos-print-pilot.mjs
+```
+
+El estado presenta todos los folios de la sesión y por cada uno
+`CLAIM`, `DONE`, `FAILED`, `EXPIRED`, `ACK` y los efectos de pagos/puntos.
+`DONE=1` no sustituye la confirmación de **un papel físico legible**.
+Al terminar los ensayos, desactivar `OPS_QA_POS_PRINT_PILOT`, recompilar
+y reiniciar Next.js QA. Los cobros comerciales siguen deshabilitados.

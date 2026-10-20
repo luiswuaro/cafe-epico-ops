@@ -15,7 +15,7 @@ import { cancelLiveOrder } from "@/src/application/pos/live-cancellation";
 import { checkoutLiveOrder, isPosLiveEnabled } from "@/src/application/pos/live";
 import { getPosReadiness } from "@/src/application/pos/readiness";
 import {shadowPaymentFields} from "@/src/domain/pos/shadow-payment";
-import {qaPosPrintPilotEnabled,qaPosPrintPilotSessionPrefix} from "@/src/domain/pos/qa-pos-print-pilot";
+import {qaPosPrintPilotEnabled,qaPosPrintPilotSessionPrefix,qaPosPrintPilotMaxOrders} from "@/src/domain/pos/qa-pos-print-pilot";
 import {commandPreparationDecision} from "@/src/domain/pos/command-preparation";
 import {validateFreeCupCarriers} from "@/src/domain/pos/paper-bag-packaging";
 import { syncLoyverseReceipts } from "@/src/application/loyverse/sync";
@@ -220,8 +220,8 @@ async function createShadowOrder(
         errors.join("; "));
     }
   }
-  // Cada sesión explícita de QA autoriza como máximo una comanda SHADOW.
-  // La sesión anterior no se borra ni se reenvía; identificador inválido bloquea.
+  // QA autoriza sólo las comandas nuevas de la sesión activa, hasta un
+  // máximo explícito (1 por defecto; 2..10 con ID de sesión).
   const qaPilotPrefix=qaPosPrintPilotSessionPrefix();
   const qaPilotRequested=orderMode==="SHADOW"&&status==="SENT"&&
     qaPosPrintPilotEnabled()&&qaPilotPrefix!==null;
@@ -254,16 +254,20 @@ async function createShadowOrder(
       (input.serviceMode==="TAKEAWAY"&&!input.tableLabel)){
       await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${employee.homeStoreId!}))`);
     }
-    // El candado de sucursal hace atómica la reserva de una sola comanda
-    // por sesión QA, aun si dos baristas guardan pedidos al mismo tiempo.
+    // El candado de sucursal hace atómica la reserva de comandas en la
+    // sesión QA y evita superar el límite con dos baristas concurrentes.
     let qaPilotFolio:string|null=null;
     if(qaPilotRequested){
-      const [prior]=await tx.select({id:posOrders.id}).from(posOrders).where(and(
+      const [prior]=await tx.select({count:sql<number>`count(*)::int`}).from(posOrders).where(and(
         eq(posOrders.organizationId,employee.organizationId),
         eq(posOrders.storeId,employee.homeStoreId!),
         like(posOrders.folio,qaPilotPrefix!+"%"),
-      )).limit(1);
-      if(!prior)qaPilotFolio=qaPilotPrefix!+clientOrderId.slice(-12).toUpperCase();
+      ));
+      const maxOrders=qaPosPrintPilotMaxOrders();
+      if(maxOrders===null)throw new Error("Límite del piloto QA inválido.");
+      if(Number(prior?.count??0)>=maxOrders)
+        throw new Error("Piloto QA: límite de comandas alcanzado. No se guardó otra orden; revisar la sesión antes de repetir.");
+      qaPilotFolio=qaPilotPrefix!+clientOrderId.slice(-12).toUpperCase();
     }
     let assignedLabel=input.tableLabel;
     if(!assignedLabel&&input.serviceMode==="TAKEAWAY"){
