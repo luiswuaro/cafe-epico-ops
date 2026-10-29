@@ -21,8 +21,9 @@ no crea ventas y no imprime comandas por sí mismo.
 - Un trabajo anterior al arranque **no se reimprime automáticamente**.
   Reconciliar comandas pendientes una a una desde el POS tras verificar el papel.
 - El supervisor de ventana/puente existente (`CafeEpicoOps-StationWatchdog`)
-  sigue funcionando como antes. Guardian solo intenta iniciar tareas de puente
-  registradas y no deshabilitadas cuando están detenidas.
+  sigue funcionando como antes. Guardian solo intenta iniciar la tarea del puente
+  cuyo `/status` no responde correctamente, si la tarea está registrada y habilitada;
+  limita estos intentos a uno cada 2 minutos. No reinicia un puente sano.
 - Inicia **al iniciar sesión Windows** con el usuario que lo instala; requiere
   ese inicio de sesión. No convierte la PC en servicio sin usuario activo.
 

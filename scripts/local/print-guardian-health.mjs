@@ -10,7 +10,7 @@ const mode = process.argv.includes("--mode=pulse") ? "pulse" : "preflight";
 const env = process.env;
 const report = {
   mode, config: false, database: false, api: mode === "pulse" ? null : false,
-  bridges: false, ageSeconds: null, pulse: "NEVER", dependenciesReady: false,
+  bridges: false, bridgeStatus: [], ageSeconds: null, pulse: "NEVER", dependenciesReady: false,
   reason: "STARTING",
 };
 
@@ -57,15 +57,20 @@ async function checkApi() {
 }
 
 async function checkBridges() {
+  let allReady = true;
   for (const {port, token} of bridgeTargets(env)) {
-    const response = await fetch(`http://127.0.0.1:${port}/status`, {
-      headers: {"X-Cafe-Epico-Token": token}, signal: timeout(4000),
-    });
-    if (!response.ok) return false;
-    const result = await response.json().catch(() => null);
-    if (result?.ok !== true || result.rasterBands !== true) return false;
+    let ready = false;
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/status`, {
+        headers: {"X-Cafe-Epico-Token": token}, signal: timeout(4000),
+      });
+      const result = response.ok ? await response.json().catch(() => null) : null;
+      ready = result?.ok === true && result.rasterBands === true;
+    } catch { ready = false; }
+    report.bridgeStatus.push({port, ready}); // Sin tokens en el JSON de salida.
+    if (!ready) allReady = false;
   }
-  return true;
+  return allReady;
 }
 
 async function main() {

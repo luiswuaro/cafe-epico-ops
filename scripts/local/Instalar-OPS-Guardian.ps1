@@ -20,6 +20,7 @@ $dataDir = Join-Path $env:LOCALAPPDATA 'CafeEpicoOps\Guardian'
 $logPath = Join-Path $dataDir 'guardian.log'
 $historyPath = Join-Path $dataDir 'launch-history.json'
 $legacyStatePath = Join-Path $dataDir 'legacy-task-backup.json'
+$script:lastBridgeTaskAttempt = [DateTime]::MinValue
 
 function Write-GuardianLog([string]$code) {
   try {
@@ -51,8 +52,15 @@ function Read-Health([string]$mode) {
   catch { throw 'La sonda LIVE no devolvio un resultado valido.' }
 }
 
-function Start-PrinterBridgeTasks {
-  foreach ($name in @('CafeEpicoOps-PrintBridge', 'CafeEpicoOps-PrintBridge-Barra')) {
+function Start-PrinterBridgeTasks($health) {
+  if ($health.bridges -eq $true -or $health.bridgeStatus.Count -eq 0) { return }
+  $now = [DateTime]::UtcNow
+  if (($now - $script:lastBridgeTaskAttempt).TotalSeconds -lt 120) { return }
+  $script:lastBridgeTaskAttempt = $now
+  $names = @('CafeEpicoOps-PrintBridge', 'CafeEpicoOps-PrintBridge-Barra')
+  for ($i = 0; $i -lt [Math]::Min($names.Count, $health.bridgeStatus.Count); $i++) {
+    if ($health.bridgeStatus[$i].ready -eq $true) { continue }
+    $name = $names[$i]
     $task = Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue
     if ($null -ne $task -and $task.State -ne 'Running' -and $task.State -ne 'Disabled') {
       try { Start-ScheduledTask -TaskName $name -ErrorAction Stop; Write-GuardianLog ('BRIDGE_TASK_STARTED ' + $name) }
@@ -107,12 +115,12 @@ function Start-GuardianWatch {
     Write-GuardianLog 'WATCH_STARTED'
     while ($true) {
       try {
-        Start-PrinterBridgeTasks
         $agents = @(Get-AgentProcesses)
         if ($agents.Count -gt 1) {
           $state = 'DUPLICATE_AGENT_REQUIRES_OPERATOR'
         } elseif ($agents.Count -eq 1) {
           $health = Read-Health 'pulse'
+          Start-PrinterBridgeTasks $health
           $state = if ($health.pulse -eq 'HEALTHY' -and $health.bridges) {
             'AGENT_HEALTHY'
           } else { 'AGENT_RUNNING_' + $health.reason }
@@ -120,6 +128,7 @@ function Start-GuardianWatch {
           # El POS ya muestra una alerta visible; revisión humana requerida.
         } else {
           $health = Read-Health 'preflight'
+          Start-PrinterBridgeTasks $health
           if ($health.dependenciesReady -eq $true -and (Can-AttemptLaunch)) {
             Start-LiveAgent
             $state = 'RECOVERY_STARTED'
