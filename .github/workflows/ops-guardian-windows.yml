@@ -1,0 +1,47 @@
+name: OPS Guardian Windows QA
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/local/*Guardian*.ps1'
+      - 'scripts/local/print-guardian-*'
+      - 'scripts/local/validate-live-guardian.mjs'
+      - '.github/workflows/ops-guardian-windows.yml'
+  push:
+    branches:
+      - 'feat/local-ops-print-guardian-v1'
+
+jobs:
+  check-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Validate Guardian JavaScript
+        run: |
+          node --check scripts/local/print-guardian-health.mjs
+          node --test scripts/local/print-guardian-core.test.mjs
+          node scripts/local/validate-live-guardian.mjs
+      - name: Parse PowerShell 5.1 syntax without executing installer
+        shell: powershell
+        run: |
+          $files = @(
+            'scripts/local/Instalar-OPS-Guardian.ps1',
+            'scripts/local/Aplicar-Guardian-DesdeZIP.ps1'
+          )
+          foreach ($path in $files) {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path $path).Path,
+              [ref]$tokens,
+              [ref]$errors
+            ) | Out-Null
+            if ($errors.Count -gt 0) {
+              $errors | ForEach-Object { Write-Error ($path + ': ' + $_.Message) }
+              throw ('PowerShell syntax invalid: ' + $path)
+            }
+            Write-Host ('PowerShell syntax OK: ' + $path)
+          }
