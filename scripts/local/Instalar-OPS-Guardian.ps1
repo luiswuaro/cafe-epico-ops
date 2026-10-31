@@ -14,8 +14,15 @@ $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $envFile = Join-Path $repo '.env.local'
 $worker = Join-Path $repo 'scripts\local\print-agent.mjs'
 $healthScript = Join-Path $repo 'scripts\local\print-guardian-health.mjs'
+$taskPolicy = Join-Path $repo 'scripts\local\print-guardian-task-policy.ps1'
+if (!(Test-Path -LiteralPath $taskPolicy -PathType Leaf)) { throw 'Falta politica de tareas LIVE.' }
+. $taskPolicy
 $guardianTask = 'CafeEpicoOps-LIVE-Guardian'
 $legacyTask = 'CafeEpicoOps-LIVE-PrintAgent'
+$qaTask = 'CafeEpicoOps-QA-PrintAgent'
+# SHA256 del manage-live.ps1 entregado por Luis (31-oct-2026).
+# Si el archivo residente cambia, detenerse para revisar su nueva logica.
+$trustedSupervisorHash = 'c849944fe4a51e59cf330aa92a00be186beddf61e7ec5d601036e99b8ab05b83'
 $dataDir = Join-Path $env:LOCALAPPDATA 'CafeEpicoOps\Guardian'
 $logPath = Join-Path $dataDir 'guardian.log'
 $historyPath = Join-Path $dataDir 'launch-history.json'
@@ -36,9 +43,27 @@ function Get-AgentProcesses {
   @(Get-CimInstance Win32_Process -Filter "Name='node.exe'" -ErrorAction Stop |
     Where-Object {
       $_.CommandLine -and $_.CommandLine -match 'print-agent[.]mjs' -and
-      ($_.CommandLine -match $workerPattern -or
-       $_.CommandLine -notmatch 'cafe-epico-ops-qa')
+      $_.CommandLine -match $workerPattern
     })
+}
+
+function Get-PrintConflictReason {
+  $qa = Get-ScheduledTask -TaskName $qaTask -ErrorAction SilentlyContinue
+  if ($null -ne $qa -and $qa.State -eq 'Running') { return 'QA_TASK_RUNNING' }
+  $workerPattern = [regex]::Escape($worker)
+  $other = @(Get-CimInstance Win32_Process -Filter "Name='node.exe'" -ErrorAction Stop |
+    Where-Object {
+      $_.CommandLine -and $_.CommandLine -match 'print-agent[.]mjs' -and
+      $_.CommandLine -notmatch $workerPattern
+    })
+  if ($other.Count -gt 0) { return 'OTHER_PRINT_AGENT_RUNNING' }
+  return 'NONE'
+}
+
+function Get-LegacyMode {
+  $task = Get-ScheduledTask -TaskName $legacyTask -ErrorAction SilentlyContinue
+  Get-EpicoPrintTaskMode -Task $task -Repo $repo -EnvFile $envFile `
+    -Worker $worker -TrustedSupervisorHash $trustedSupervisorHash
 }
 
 function Read-Health([string]$mode) {
@@ -95,6 +120,19 @@ function Can-AttemptLaunch {
 
 function Start-LiveAgent {
   if ((@(Get-AgentProcesses)).Count -ne 0) { return }
+  $conflict = Get-PrintConflictReason
+  if ($conflict -ne 'NONE') { throw ('Impresion LIVE en espera: ' + $conflict) }
+  $mode = Get-LegacyMode
+  if ($mode -eq 'UNKNOWN') { throw 'La tarea LIVE existente cambio; revisar antes de iniciar.' }
+  if ($mode -ne 'NONE') {
+    $task = Get-ScheduledTask -TaskName $legacyTask -ErrorAction Stop
+    if ($task.State -eq 'Disabled') { throw 'La tarea LIVE esta deshabilitada.' }
+    if ($task.State -ne 'Running') {
+      Start-ScheduledTask -TaskName $legacyTask -ErrorAction Stop
+      Write-GuardianLog ('KNOWN_LIVE_TASK_RESTART_REQUESTED ' + $mode)
+    }
+    return
+  }
   if (!(Test-Path -LiteralPath $worker)) { throw 'Falta el worker LIVE.' }
   $node = (Get-Command node.exe -ErrorAction Stop).Source
   $tag = Get-Date -Format 'yyyyMMdd-HHmmss'
@@ -129,7 +167,13 @@ function Start-GuardianWatch {
         } else {
           $health = Read-Health 'preflight'
           Start-PrinterBridgeTasks $health
-          if ($health.dependenciesReady -eq $true -and (Can-AttemptLaunch)) {
+          $conflict = Get-PrintConflictReason
+          $mode = Get-LegacyMode
+          if ($conflict -ne 'NONE') {
+            $state = 'WAITING_' + $conflict
+          } elseif ($mode -eq 'UNKNOWN') {
+            $state = 'WAITING_LEGACY_TASK_CHANGED'
+          } elseif ($health.dependenciesReady -eq $true -and (Can-AttemptLaunch)) {
             Start-LiveAgent
             $state = 'RECOVERY_STARTED'
           } else {
@@ -154,6 +198,8 @@ function Show-GuardianStatus {
   $legacy = Get-ScheduledTask -TaskName $legacyTask -ErrorAction SilentlyContinue
   Write-Host ('Guardian: ' + $(if ($null -eq $task) {'NO INSTALADO'} else {$task.State}))
   Write-Host ('Tarea antigua: ' + $(if ($null -eq $legacy) {'NO EXISTE'} else {$legacy.State}))
+  Write-Host ('Tipo de tarea LIVE: ' + (Get-LegacyMode))
+  Write-Host ('Conflicto de impresion: ' + (Get-PrintConflictReason))
   Write-Host ('Agentes LIVE: ' + (@(Get-AgentProcesses)).Count)
   $health = Read-Health 'preflight'
   Write-Host ('OPS / API: ' + $(if ($health.api -eq $true) {'OK'} else {'ERROR'}))
@@ -188,15 +234,16 @@ function Install-Guardian {
 
   New-Item -ItemType Directory -Path $dataDir -Force | Out-Null
   $legacy = Get-ScheduledTask -TaskName $legacyTask -ErrorAction SilentlyContinue
-  $wasEnabled = $false
+  $legacyMode = Get-EpicoPrintTaskMode -Task $legacy -Repo $repo -EnvFile $envFile `
+    -Worker $worker -TrustedSupervisorHash $trustedSupervisorHash
+  if ($legacyMode -eq 'UNKNOWN') {
+    throw 'La tarea LIVE existe pero su accion no coincide con un supervisor verificado. No se modificaron tareas.'
+  }
+  if ($null -ne $legacy -and $legacy.State -eq 'Disabled') {
+    throw 'La tarea LIVE verificada esta deshabilitada. Revisar antes de instalar.'
+  }
   $backupPath = $null
   if ($null -ne $legacy) {
-    $actions = @($legacy.Actions)
-    if ($actions.Count -ne 1 -or
-        ($actions[0].Arguments + ' ' + $actions[0].Execute) -notmatch 'print-agent[.]mjs') {
-      throw 'La tarea antigua LIVE tiene una accion desconocida. Requiere inspeccion, no se sobrescribe.'
-    }
-    $wasEnabled = $legacy.State -ne 'Disabled'
     $backupPath = Join-Path $dataDir ('backup-print-task-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.xml')
     Export-ScheduledTask -TaskName $legacyTask -ErrorAction Stop |
       Set-Content -LiteralPath $backupPath -Encoding UTF8
@@ -218,7 +265,6 @@ function Install-Guardian {
     return
   }
   $registered = $false
-  $disabledLegacy = $false
   try {
     if ($null -eq $current) {
       $identity = [Security.Principal.WindowsIdentity]::GetCurrent().Name
@@ -234,11 +280,8 @@ function Install-Guardian {
         -Description 'Cafe Epico OPS Guardian: supervision segura de impresion LIVE' -ErrorAction Stop | Out-Null
       $registered = $true
     }
-    if ($null -ne $legacy -and $wasEnabled) {
-      Disable-ScheduledTask -TaskName $legacyTask -ErrorAction Stop | Out-Null
-      $disabledLegacy = $true
-    }
-    @{wasEnabled = $wasEnabled; backup = $backupPath; task = $legacyTask} |
+    # El Guardian reutiliza la tarea LIVE conocida: no la deshabilita ni la reemplaza.
+    @{backup = $backupPath; task = $legacyTask; disabledByGuardian = $false; mode = $legacyMode} |
       ConvertTo-Json | Set-Content -LiteralPath $legacyStatePath -Encoding UTF8
     $guardian = Get-ScheduledTask -TaskName $guardianTask -ErrorAction Stop
     if ($guardian.State -ne 'Running') { Start-ScheduledTask -TaskName $guardianTask -ErrorAction Stop }
@@ -246,14 +289,15 @@ function Install-Guardian {
     $now = Get-ScheduledTask -TaskName $guardianTask -ErrorAction Stop
     if ($now.State -ne 'Running') { throw 'Guardian no se mantuvo ejecutandose.' }
     Write-GuardianLog 'INSTALL_OK'
-    Write-Host 'GUARDIAN V1: TAREA ACTIVA' -ForegroundColor Green
-    Write-Host 'Tarea previa respaldada y deshabilitada cuando correspondia.'
+    Write-Host 'GUARDIAN V4: TAREA ACTIVA' -ForegroundColor Green
+    Write-Host ('Tarea LIVE verificada y conservada: ' + $legacyMode)
+    $conflict = Get-PrintConflictReason
+    if ($conflict -ne 'NONE') {
+      Write-Warning ('Impresion LIVE sigue en espera porque existe este conflicto: ' + $conflict)
+    }
     Write-Host 'El proceso LIVE actual no se interrumpio.'
     Write-Host 'Prueba pendiente: reiniciar Windows y hacer una comanda real.'
   } catch {
-    if ($disabledLegacy) {
-      try { Enable-ScheduledTask -TaskName $legacyTask -ErrorAction Stop | Out-Null } catch { }
-    }
     if ($registered) {
       try { Stop-ScheduledTask -TaskName $guardianTask -ErrorAction SilentlyContinue } catch { }
       try { Unregister-ScheduledTask -TaskName $guardianTask -Confirm:$false -ErrorAction Stop } catch { }
@@ -275,13 +319,14 @@ function Uninstall-Guardian {
   }
   if (Test-Path -LiteralPath $legacyStatePath) {
     $saved = Get-Content -LiteralPath $legacyStatePath -Raw | ConvertFrom-Json
-    if ($saved.wasEnabled -eq $true -and
+    if ($saved.PSObject.Properties.Name -contains 'disabledByGuardian' -and
+        $saved.disabledByGuardian -eq $true -and
         (Get-ScheduledTask -TaskName $legacyTask -ErrorAction SilentlyContinue)) {
       Enable-ScheduledTask -TaskName $legacyTask -ErrorAction Stop | Out-Null
     }
   }
   Write-GuardianLog 'GUARDIAN_UNINSTALLED'
-  Write-Host 'Guardian retirado; tarea anterior reactivada si estaba habilitada.'
+  Write-Host 'Guardian retirado; la tarea LIVE existente no se altero.'
   Write-Host 'No se detuvo el proceso LIVE de impresion que este atendiendo pedidos.'
 }
 

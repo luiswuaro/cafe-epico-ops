@@ -1,6 +1,6 @@
 #requires -Version 5.1
 <#
-  Bootstrap para el ZIP autónomo de OPS Guardian V1.
+  Bootstrap para el ZIP autónomo de OPS Guardian V4.
   Solo añade archivos nuevos a la carpeta LIVE; nunca sustituye
   un archivo local distinto sin revisión del propietario.
 #>
@@ -15,6 +15,8 @@ $files = @(
   'scripts/local/print-guardian-core.mjs',
   'scripts/local/print-guardian-core.test.mjs',
   'scripts/local/print-guardian-health.mjs',
+  'scripts/local/print-guardian-task-policy.ps1',
+  'scripts/local/print-guardian-task-policy.windows.test.ps1',
   'scripts/local/validate-live-guardian.mjs',
   'scripts/local/Instalar-OPS-Guardian.ps1',
   'scripts/local/Corregir-Inicio-OPS-LIVE.ps1',
@@ -77,6 +79,11 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Fallo revisión estática Guardian.' }
     & $node '--test' 'scripts/local/print-guardian-core.test.mjs'
     if ($LASTEXITCODE -ne 0) { throw 'Fallaron pruebas unitarias Guardian.' }
+    $psExe = Join-Path $PSHOME 'powershell.exe'
+    $policyTest = Join-Path $repo 'scripts\local\print-guardian-task-policy.windows.test.ps1'
+    & $psExe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File `
+      $policyTest
+    if ($LASTEXITCODE -ne 0) { throw 'Fallo la prueba de compatibilidad de tareas LIVE.' }
   } finally { Pop-Location }
 
   & (Join-Path $repo 'scripts\local\Instalar-OPS-Guardian.ps1')

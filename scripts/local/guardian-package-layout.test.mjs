@@ -11,7 +11,9 @@ test("los archivos copiados por el ZIP bastan para ejecutar el validador", () =>
   const files = [...boot.matchAll(/^\s*'((?:scripts|docs)\/[^']+)'[,]?\s*$/gm)].map(match => match[1]);
   assert.ok(files.includes("scripts/local/validate-live-guardian.mjs"));
   assert.ok(files.includes("scripts/local/Corregir-Inicio-OPS-LIVE.ps1"));
-  assert.equal(files.length, 7, "el manifiesto de copiado debe listar los 7 archivos del instalador");
+  assert.ok(files.includes("scripts/local/print-guardian-task-policy.ps1"));
+  assert.ok(files.includes("scripts/local/print-guardian-task-policy.windows.test.ps1"));
+  assert.equal(files.length, 9, "el manifiesto de copiado debe listar los 9 archivos del instalador");
   const minimal = mkdtempSync(join(tmpdir(), "epico-guardian-minimal-"));
   try {
     for (const path of files) {
