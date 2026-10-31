@@ -24,6 +24,9 @@ no crea ventas y no imprime comandas por sí mismo.
   sigue funcionando como antes. Guardian solo intenta iniciar la tarea del puente
   cuyo `/status` no responde correctamente, si la tarea está registrada y habilitada;
   limita estos intentos a uno cada 2 minutos. No reinicia un puente sano.
+- Durante la instalación, si los demás servicios LIVE están listos pero falla
+  un puente, se intenta iniciar exclusivamente su tarea registrada y se vuelve
+  a comprobar el estado antes de aceptar la instalación.
 - Inicia **al iniciar sesión Windows** con el usuario que lo instala; requiere
   ese inicio de sesión. No convierte la PC en servicio sin usuario activo.
 
@@ -33,6 +36,12 @@ no crea ventas y no imprime comandas por sí mismo.
 - `scripts/local/print-guardian-health.mjs`: diagnóstico sin imprimir ni mutar BD.
 - `scripts/local/print-guardian-core.mjs`: guardas y reglas de latido.
 - `scripts/local/print-guardian-core.test.mjs`: pruebas unitarias puras.
+- `scripts/local/Corregir-Inicio-OPS-LIVE.ps1`: consulta la tarea de inicio
+  `CafeEpicoOps-StationWatchdog`. Con `-Apply` solo sustituye el destino antiguo
+  `cafe-epico-ops.vercel.app/pos` por `APP_ORIGIN/pos`, si APP_ORIGIN es una IP
+  privada HTTPS 8443 asignada a la PC, el puerto escucha y la acción es conocida.
+  Respalda primero el XML y no reinicia tareas ni navegadores. No modifica
+  preferencias de Chrome, PWA o accesos directos de procedencia desconocida.
 
 ## Instalar (cuando los archivos estén en el repositorio LIVE local)
 
@@ -53,6 +62,11 @@ La nueva tarea `CafeEpicoOps-LIVE-Guardian` usa `MultipleInstances IgnoreNew`,
 inicio después de login, `StartWhenAvailable` y tres reintentos de Task Scheduler
 ante fallo del supervisor. Aparte, el propio supervisor verifica cada 30 s
 el estado del agente y el latido.
+
+Si se aplica desde el ZIP autónomo, después de instalar Guardian se intenta
+corregir la dirección de la tarea de inicio antigua **solo si coincide con el
+destino conocido de Vercel**. Si la acción es distinta, se conserva sin cambios.
+Si esta auditoría da error, Guardian permanece instalado y aparece un aviso.
 
 ## Diagnóstico y reversión
 

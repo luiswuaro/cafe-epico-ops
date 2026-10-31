@@ -17,6 +17,7 @@ $files = @(
   'scripts/local/print-guardian-health.mjs',
   'scripts/local/validate-live-guardian.mjs',
   'scripts/local/Instalar-OPS-Guardian.ps1',
+  'scripts/local/Corregir-Inicio-OPS-LIVE.ps1',
   'docs/operations/guardian-print-live.md'
 )
 
@@ -80,6 +81,14 @@ try {
 
   & (Join-Path $repo 'scripts\local\Instalar-OPS-Guardian.ps1')
   if (!$?) { throw 'El instalador Guardian devolvió error.' }
+  # El Guardian ya quedo instalado: una incidencia con la tarea de navegador
+  # no debe deshacer sus archivos ni desactivar su recuperacion de impresion.
+  try {
+    & (Join-Path $repo 'scripts\local\Corregir-Inicio-OPS-LIVE.ps1') -Apply
+    if (!$?) { throw 'La auditoria de inicio Windows devolvio error.' }
+  } catch {
+    Write-Warning ('Guardian instalado. El inicio de Chrome requiere revision: ' + $_.Exception.Message)
+  }
   Write-Host 'GUARDIAN: INSTALACION TERMINADA' -ForegroundColor Green
 } catch {
   # Solo se retiran archivos que este bootstrap acaba de crear.

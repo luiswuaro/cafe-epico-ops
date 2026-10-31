@@ -171,6 +171,14 @@ function Install-Guardian {
     throw 'No se encontraron los componentes LIVE de Guardian.'
   }
   $preflight = Read-Health 'preflight'
+  if ($preflight.config -eq $true -and $preflight.database -eq $true -and
+      $preflight.api -eq $true -and $preflight.bridges -ne $true) {
+    # Tras un reinicio, comprobar puentes que realmente estan caidos antes de
+    # iniciar sus tareas. Una tarea/puente sano nunca se vuelve a arrancar.
+    Start-PrinterBridgeTasks $preflight
+    Start-Sleep -Seconds 10
+    $preflight = Read-Health 'preflight'
+  }
   if ($preflight.config -ne $true -or $preflight.database -ne $true -or
       $preflight.api -ne $true -or $preflight.bridges -ne $true) {
     throw ('PRECHECK BLOQUEADO: ' + $preflight.reason + '. No se alteraron tareas.')

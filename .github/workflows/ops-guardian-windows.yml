@@ -29,7 +29,8 @@ jobs:
         run: |
           $files = @(
             'scripts/local/Instalar-OPS-Guardian.ps1',
-            'scripts/local/Aplicar-Guardian-DesdeZIP.ps1'
+            'scripts/local/Aplicar-Guardian-DesdeZIP.ps1',
+            'scripts/local/Corregir-Inicio-OPS-LIVE.ps1'
           )
           foreach ($path in $files) {
             $tokens = $null
