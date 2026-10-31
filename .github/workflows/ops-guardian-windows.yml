@@ -23,6 +23,7 @@ jobs:
         run: |
           node --check scripts/local/print-guardian-health.mjs
           node --test scripts/local/print-guardian-core.test.mjs
+          node --test scripts/local/guardian-package-layout.test.mjs
           node scripts/local/validate-live-guardian.mjs
       - name: Parse PowerShell 5.1 syntax without executing installer
         shell: powershell
